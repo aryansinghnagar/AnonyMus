@@ -24,17 +24,8 @@ env/
 *.db
 *.sqlite3
 
-# ---------------------- Android build artifacts --------------
-*.apk
-*.aab
-*.dex
-*.class
-privacy_chat_android/.gradle/
-privacy_chat_android/.kotlin/
-privacy_chat_android/build/
-privacy_chat_android/app/build/
-privacy_chat_android/local.properties
-privacy_chat_android/captures/
+# ---------------------- Android app ----------------------------
+privacy_chat_android/
 
 # ---------------------- IDE / Editor -------------------------
 .vscode/
