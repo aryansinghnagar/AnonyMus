@@ -1,0 +1,340 @@
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+  background: #f0f2f5;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 32px;
+  width: 320px;
+  text-align: center;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+.app-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 16px;
+  margin: 0 auto 16px;
+  display: block;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  border: 1px solid #eee;
+}
+
+h1 {
+  margin: 0 0 24px;
+  font-size: 22px;
+  color: #222;
+}
+
+input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1.5px solid #dfe3e6;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: #ffffff;
+  color: #1c2024;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #2d6cdf;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+button:hover {
+  background: #1f56b8;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+.toggle-link {
+  margin: 16px 0 0;
+  font-size: 13px;
+}
+
+.toggle-link a {
+  color: #2d6cdf;
+  text-decoration: none;
+}
+
+.toggle-link a:hover {
+  text-decoration: underline;
+}
+
+#message {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+#message.error { color: #c0392b; }
+#message.success { color: #2e7d32; }
+
+.hidden {
+  display: none;
+}
+
+/* =========================================================
+   Chat page — append this block to your existing style.css
+   ========================================================= */
+
+:root {
+  --chat-border: #dfe3e6;
+  --chat-bg: #ffffff;
+  --chat-sidebar-bg: #f6f7f8;
+  --chat-text: #1c2024;
+  --chat-muted: #6b7280;
+  --chat-accent: #2f6f5e;      /* quiet teal — "secure" without shouting it */
+  --chat-accent-soft: #e4efe9;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--chat-text);
+  background: var(--chat-bg);
+}
+
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--chat-border);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.topbar-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid var(--chat-border);
+}
+
+.topbar h1 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.btn-logout {
+  font-size: 0.85rem;
+  color: var(--chat-muted);
+  text-decoration: none;
+  border: 1px solid var(--chat-border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+}
+
+.btn-logout:hover {
+  border-color: var(--chat-accent);
+  color: var(--chat-accent);
+}
+
+/* ---------- two-column layout ---------- */
+
+.main {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0; /* allow children to scroll instead of overflowing the page */
+}
+
+.sidebar {
+  flex: 0 0 220px;
+  border-right: 1px solid var(--chat-border);
+  background: var(--chat-sidebar-bg);
+  overflow-y: auto;
+  padding: 1rem 0.75rem;
+}
+
+.sidebar-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--chat-muted);
+  margin: 0 0 0.75rem 0.25rem;
+}
+
+#user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+#user-list li {
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+#user-list li:hover {
+  background: var(--chat-border);
+}
+
+/* highlighted background on the currently selected user */
+#user-list li.active {
+  background: var(--chat-accent-soft);
+  color: var(--chat-accent);
+  font-weight: 600;
+}
+
+.chat-area {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-header {
+  flex: 0 0 auto;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--chat-border);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+/* ---------- scrollable message area ---------- */
+
+.messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.message {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.message-sender {
+  font-weight: 600;
+  margin-right: 0.15rem;
+}
+
+.message-own .message-sender {
+  color: var(--chat-accent);
+}
+
+.message-status {
+  font-size: 0.82rem;
+  color: var(--chat-muted);
+  font-style: italic;
+  text-align: center;
+  margin: 0.25rem 0;
+}
+
+/* ---------- input row ---------- */
+
+.message-form {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--chat-border);
+  background-color: var(--chat-bg);
+  align-items: center;
+}
+
+#message-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--chat-border);
+  border-radius: 12px;
+  font-size: 0.95rem;
+  background-color: #ffffff;
+  color: var(--chat-text);
+  margin-bottom: 0; /* override general input margin */
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#message-input:focus {
+  outline: none;
+  border-color: var(--chat-accent);
+  box-shadow: 0 0 0 3px var(--chat-accent-soft);
+}
+
+#message-input::placeholder {
+  color: var(--chat-muted);
+  opacity: 0.7;
+}
+
+#send-btn {
+  flex: 0 0 auto;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 12px;
+  background: var(--chat-accent);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+#send-btn:hover:not(:disabled) {
+  background: #235246;
+}
+
+#send-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+#send-btn:disabled,
+#message-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.warning-banner {
+  background-color: #fee2e2;
+  border-bottom: 1px solid #fca5a5;
+  color: #991b1b;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.88rem;
+  text-align: center;
+  font-weight: 500;
+  display: none; /* Hidden by default */
+}

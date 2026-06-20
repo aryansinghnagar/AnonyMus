@@ -1,0 +1,54 @@
+# ============================================================
+#  .gitignore — Custom Chat App
+# ============================================================
+
+# ---------------------- Secrets / Credentials ----------------
+.env
+*.pem
+
+# ---------------------- Python -------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# ---------------------- Database -----------------------------
+*.db
+*.sqlite3
+
+# ---------------------- Android build artifacts --------------
+*.apk
+*.aab
+*.dex
+*.class
+privacy_chat_android/.gradle/
+privacy_chat_android/.kotlin/
+privacy_chat_android/build/
+privacy_chat_android/app/build/
+privacy_chat_android/local.properties
+privacy_chat_android/captures/
+
+# ---------------------- IDE / Editor -------------------------
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# ---------------------- OS files -----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------- Planning docs (optional) -------------
+implementation_plan.md
+privacy-chat-plan.md
