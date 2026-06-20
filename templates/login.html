@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anonymouse</title>
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <div class="card">
+    <img src="/static/logo.png" alt="Anonymouse Logo" class="app-logo">
+    <h1>Anonymouse</h1>
+
+    <!-- Login state (default) -->
+    <div id="login-form">
+      <input type="text" id="login-username" placeholder="Username">
+      <input type="password" id="login-password" placeholder="Password">
+      <button onclick="loginUser()">Login</button>
+      <p class="toggle-link"><a href="#" onclick="showRegister(); return false;">No account? Register</a></p>
+    </div>
+
+    <!-- Register state (hidden by default) -->
+    <div id="register-form" class="hidden">
+      <input type="text" id="register-username" placeholder="Username">
+      <input type="password" id="register-password" placeholder="Password">
+      <button onclick="registerUser()">Register</button>
+      <p class="toggle-link"><a href="#" onclick="showLogin(); return false;">Already registered? Login</a></p>
+    </div>
+
+    <div id="message" class="hidden"></div>
+  </div>
+
+  <script>
+    function showRegister() {
+      document.getElementById('login-form').classList.add('hidden');
+      document.getElementById('register-form').classList.remove('hidden');
+      hideMessage();
+    }
+
+    function showLogin() {
+      document.getElementById('register-form').classList.add('hidden');
+      document.getElementById('login-form').classList.remove('hidden');
+      hideMessage();
+    }
+
+    function showMessage(text, isError) {
+      const messageEl = document.getElementById('message');
+      messageEl.textContent = text;
+      messageEl.classList.remove('hidden');
+      messageEl.classList.toggle('error', isError);
+      messageEl.classList.toggle('success', !isError);
+    }
+
+    function hideMessage() {
+      const messageEl = document.getElementById('message');
+      messageEl.classList.add('hidden');
+    }
+
+    function loginUser() {
+      const username = document.getElementById('login-username').value;
+      const password = document.getElementById('login-password').value;
+
+      fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            window.location.href = '/chat';
+          } else if (data.error) {
+            showMessage(data.error, true);
+          }
+        })
+        .catch(() => showMessage('Something went wrong. Please try again.', true));
+    }
+
+    function registerUser() {
+      const username = document.getElementById('register-username').value;
+      const password = document.getElementById('register-password').value;
+
+      fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showMessage('Registration successful — you can now log in', false);
+            showLogin();
+            document.getElementById('message').classList.remove('hidden');
+          } else if (data.error) {
+            showMessage(data.error, true);
+          }
+        })
+        .catch(() => showMessage('Something went wrong. Please try again.', true));
+    }
+  </script>
+
+</body>
+</html>
