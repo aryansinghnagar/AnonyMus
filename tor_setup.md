@@ -22,7 +22,7 @@ Running AnonyMus as a Tor Hidden Service (`.onion` address) ensures:
    HiddenServiceDir /var/lib/tor/anonymus_hidden_service/
    HiddenServicePort 80 127.0.0.1:5000
    ```
-   *(Note: Ensure you are running the AnonyMus Flask server on port 5000).*
+   *(Note: Ensure you are running the AnonyMus Flask server on port 5000 with HTTPS disabled. Set `DISABLE_SSL=True` in your `.env` file, as Tor handles encryption end-to-end and running HTTPS on top of it will cause connection errors).*
 
 3. **Restart Tor:**
    ```bash
@@ -53,7 +53,7 @@ Running AnonyMus as a Tor Hidden Service (`.onion` address) ensures:
    HiddenServiceDir C:/Users/Public/anonymus_hidden_service/
    HiddenServicePort 80 127.0.0.1:5000
    ```
-   *(Note: Using a path under `C:/Users/Public/` avoids folder permission errors on Windows. Ensure you use forward slashes `/` as shown above. The AnonyMus server must be running on port 5000).*
+   *(Note: Using a path under `C:/Users/Public/` avoids folder permission errors on Windows. Ensure you use forward slashes `/` as shown above. The AnonyMus server must be running on port 5000 with HTTPS disabled. Set `DISABLE_SSL=True` in your `.env` file, as Tor handles encryption end-to-end).*
 
 3. **Restart Tor:**
    Completely close and reopen the Tor Browser, or restart the Tor command prompt window/service.

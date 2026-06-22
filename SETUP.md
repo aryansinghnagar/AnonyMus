@@ -148,6 +148,16 @@ If you want people to connect to your server anonymously from outside your local
    ```
    *(Note: On Windows, using a path under `C:/Users/Public/` avoids folder permission errors. Ensure you use forward slashes `/` as shown above).*
 
+   > [!IMPORTANT]
+   > **Disable SSL/HTTPS in AnonyMus Config:**
+   > By default, the AnonyMus Flask server runs securely over HTTPS. However, Tor Hidden Services already provide end-to-end encryption by design. Running HTTPS on top of Tor is redundant and will cause SSL/TLS handshake errors when Tor forwards the connection.
+   > 
+   > Open the `.env` file in your `AnonyMus` folder and add or modify the following line:
+   > ```text
+   > DISABLE_SSL=True
+   > ```
+   > Save the file and restart the AnonyMus server (`python server.py`) for this to take effect. If you don't do this, the Tor Browser will be unable to connect.
+
 3. **Restart Tor:**
    - **Debian/Ubuntu:** Run `sudo systemctl restart tor`
    - **macOS:** Run `brew services restart tor`
