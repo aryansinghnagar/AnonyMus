@@ -2,105 +2,101 @@ import os
 import sqlite3
 import bcrypt
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(PROJECT_ROOT, "users.db")
- 
+DATABASE_URL = os.environ.get('DATABASE_URL')
+DB_FILE = 'users.db'
+
+# Pre-calculate dummy hash for timing attack mitigation
+DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode('utf-8')
+
+# Define integrity errors tuple dynamically
+db_integrity_errors = (sqlite3.IntegrityError,)
+if DATABASE_URL:
+    try:
+        import psycopg2
+        db_integrity_errors = (sqlite3.IntegrityError, psycopg2.IntegrityError)
+    except ImportError:
+        pass
+
+def get_connection():
+    if DATABASE_URL:
+        import psycopg2
+        return psycopg2.connect(DATABASE_URL)
+    else:
+        return sqlite3.connect(DB_FILE)
+
 def init_db():
-    # Check if the file exists
-    if not os.path.exists(DB_PATH):
-        print("Database not found. Creating a new one...")
-
-    # Opening the connection automatically creates the file
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # Set up your initial table structure
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password_hash TEXT NOT NULL
-    );
-    """)
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL
+        )
+    ''')
     conn.commit()
     conn.close()
 
-def user_exists(username: str) -> bool:
-    # Ensure the database and table exist before trying to query
-    init_db() 
-    
-    # Open a new connection for this specific transaction
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Use 'SELECT 1' for efficiency and '?' to prevent SQL injection
-    cursor.execute("""
-        SELECT 1 
-        FROM users 
-        WHERE username = ? 
-        LIMIT 1;
-    """, (username,))
-    
-    # fetchone() returns a tuple (e.g., (1,)) if a row is found, or None if not
-    result = cursor.fetchone()
-    
-    # Close the connection to free up the database lock
+def user_exists(username):
+    conn = get_connection()
+    c = conn.cursor()
+    placeholder = '%s' if DATABASE_URL else '?'
+    c.execute(f'SELECT 1 FROM users WHERE username = {placeholder}', (username.lower(),))
+    result = c.fetchone()
     conn.close()
-    
-    # Return True if result is not None, False otherwise
     return result is not None
 
-def register_user(username: str, password: str) -> str:
-    # Call `user_exists()` — if already taken, return an error string.
-    if user_exists(username):
-        return "Error: Username is already taken."
+def register_user(username, password):
+    if not username or not password:
+        return {"error": "Missing fields."}
+    
+    username_lower = username.lower()
+    if user_exists(username_lower):
+        return {"error": "Username already taken."}
         
-    # Hash the password. 
-    # bcrypt requires bytes, so we encode the password. We decode the result back 
-    # to a utf-8 string so it can be stored cleanly in SQLite's TEXT column.
-    hashed_bytes = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    password_hash = hashed_bytes.decode('utf-8')
+    pwd_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    # 3. Insert `username` and the hash into the database.
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        INSERT INTO users (username, password_hash)
-        VALUES (?, ?)
-    """, (username, password_hash))
-    
-    conn.commit()
-    conn.close()
-    
-    # 4. Return a success string.
-    return "Success: User registered."
+    conn = get_connection()
+    c = conn.cursor()
+    placeholder = '%s' if DATABASE_URL else '?'
+    try:
+        c.execute(f'INSERT INTO users (username, password_hash) VALUES ({placeholder}, {placeholder})',
+                  (username_lower, pwd_hash))
+        conn.commit()
+        success = True
+    except db_integrity_errors:
+        success = False
+        return {"error": "Failed to register (username already exists)."}
+    except Exception as e:
+        success = False
+        print(f"Registration DB error: {e}")
+    finally:
+        conn.close()
+        
+    if success:
+        return {"success": True}
+    else:
+        return {"error": "Failed to register."}
 
-def login_user(username: str, password: str) -> bool:  
-    # Ensure the database exists in case login is called before register
-    init_db()
-    
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # 1. Look up the stored hash for the given username. 
-    cursor.execute("""
-        SELECT password_hash 
-        FROM users 
-        WHERE username = ?
-    """, (username,))
-    
-    result = cursor.fetchone()
+def login_user(username, password):
+    if not username or not password:
+        return {"error": "Missing fields."}
+
+    username_lower = username.lower()
+    conn = get_connection()
+    c = conn.cursor()
+    placeholder = '%s' if DATABASE_URL else '?'
+    c.execute(f'SELECT password_hash FROM users WHERE username = {placeholder}', (username_lower,))
+    row = c.fetchone()
     conn.close()
     
-    # If not found, return False.
-    if result is None:
-        return False
+    if not row:
+        # Dummy check to prevent timing side-channel
+        bcrypt.checkpw(password.encode('utf-8'), DUMMY_HASH.encode('utf-8'))
+        return {"error": "Wrong credentials."}
         
-    stored_hash = result[0]
+    stored_hash = row[0]
     
-    # 2. Check the password
-    # bcrypt.checkpw requires both the password and the stored hash to be bytes.
-    is_valid = bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
-    
-    # 3. Return True or False.
-    return is_valid
+    if not bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+        return {"error": "Wrong credentials."}
+        
+    return {"success": True}
