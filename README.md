@@ -1,4 +1,4 @@
-# AnonyMus P2P (Decentralized Tor-Embedded Chat Node)
+# AnonyMus P2P (Decentralized Tor-Embedded Chat Node) (UNTESTED!!!)
 
 AnonyMus P2P is a serverless, zero-metadata, peer-to-peer (P2P) chat application that routes all communications directly over the Tor network. By utilizing Tor Onion Services, AnonyMus P2P eliminates the need for centralized message brokers, directories, or servers, providing ultimate metadata resistance, server anonymity, and client anonymity out of the box.
 
