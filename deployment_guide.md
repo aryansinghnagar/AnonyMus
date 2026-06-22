@@ -87,7 +87,7 @@ Once the web server is live at `https://yourdomain.com`:
 ### Step 4.1: Configure Server URL
 
 1. Open the Android project in Android Studio (or text editor).
-2. Open [ConfigScreen.kt](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/AnonyMus_android/app/src/main/java/com/example/privacychat/ui/config/ConfigScreen.kt).
+2. Open [ConfigScreen.kt](AnonyMus_android/app/src/main/java/com/example/privacychat/ui/config/ConfigScreen.kt).
 3. Set the default fallback host and port on lines 20-21:
 
 ```kotlin
