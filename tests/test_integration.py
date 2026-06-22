@@ -18,7 +18,7 @@ class TestIntegration(unittest.TestCase):
         server.app.config['TESTING'] = True
         cls.client = server.app.test_client()
         database.init_db()
-        database.register_user('testuser', 'password')
+        database.register_local_user('testuser', 'password')
         
     @classmethod
     def tearDownClass(cls):
@@ -35,19 +35,27 @@ class TestIntegration(unittest.TestCase):
         socket_client = server.socketio.test_client(server.app, flask_test_client=self.client)
         self.assertTrue(socket_client.is_connected())
         
-        # Create queue
-        socket_client.emit('create_queue')
-        received = socket_client.get_received()
-        self.assertEqual(len(received), 1)
-        self.assertEqual(received[0]['name'], 'queue_created')
-        queue_id = received[0]['args'][0]['queue_id']
+        # Add contact API check
+        contact_data = {
+            'onion_address': 'abcdefghijklmnop.onion',
+            'nickname': 'testfriend',
+            'my_public_key': 'mock_public_key'
+        }
+        res = self.client.post('/api/contacts/add', json=contact_data)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json()['success'])
         
-        # Push to queue
-        socket_client.emit('push_queue', {'queue_id': queue_id, 'payload': 'test_payload'})
-        received = socket_client.get_received()
-        self.assertEqual(len(received), 1)
-        self.assertEqual(received[0]['name'], 'queue_payload')
-        self.assertEqual(received[0]['args'][0]['payload'], 'test_payload')
+        # Check contact was added to DB
+        contact = database.get_contact('abcdefghijklmnop.onion')
+        self.assertIsNotNone(contact)
+        self.assertEqual(contact['nickname'], 'testfriend')
+        
+        # Fetch contacts list
+        res = self.client.get('/api/contacts')
+        self.assertEqual(res.status_code, 200)
+        contacts = res.get_json()
+        self.assertEqual(len(contacts), 1)
+        self.assertEqual(contacts[0]['onion_address'], 'abcdefghijklmnop.onion')
         
         socket_client.disconnect()
 
