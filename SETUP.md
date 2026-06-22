@@ -117,7 +117,7 @@ Copy `http://127.0.0.1:5000` and paste it into your browser to access the chat l
 
 ---
 
-## Step 8: (Optional) Host as a Tor Hidden Service (BROKEN!!!)
+## Step 8: (Optional) Host as a Tor Hidden Service
 
 If you want people to connect to your server anonymously from outside your local network without doing complex router setup (port forwarding):
 
