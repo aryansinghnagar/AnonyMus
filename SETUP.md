@@ -124,22 +124,38 @@ If you want people to connect to your server anonymously from outside your local
 1. **Install Tor on your computer:**
    - **Debian/Ubuntu:** `sudo apt install tor`
    - **macOS:** `brew install tor`
-   - **Windows:** Download and run the Tor Expert Bundle from [torproject.org](https://www.torproject.org/).
+   - **Windows:** Download the **Tor Expert Bundle** or the **Tor Browser** from [torproject.org](https://www.torproject.org/).
 
-2. **Configure Tor:**
-   Open the Tor configuration file (called `torrc`, usually found in `/etc/tor/` or your installation directory) and add the following two lines at the bottom:
+2. **Configure Tor (`torrc`):**
+   Open the Tor configuration file (called `torrc`) in a text editor:
+   - **Debian/Ubuntu:** Located at `/etc/tor/torrc`
+   - **macOS:** Located at `/usr/local/etc/tor/torrc` or `/opt/homebrew/etc/tor/torrc`
+   - **Windows (Tor Browser):** Located at `[Tor Browser Folder]\Browser\TorBrowser\Data\Tor\torrc`
+   - **Windows (Tor Expert Bundle):** Located at `[Installation Directory]\Data\Tor\torrc` (or create a file named `torrc` in your installation folder).
+
+   Append the configuration lines at the bottom of the file depending on your operating system:
+
+   **For Linux / macOS:**
    ```text
    HiddenServiceDir /var/lib/tor/anonymus_hidden_service/
    HiddenServicePort 80 127.0.0.1:5000
    ```
 
+   **For Windows:**
+   ```text
+   HiddenServiceDir C:/Users/Public/anonymus_hidden_service/
+   HiddenServicePort 80 127.0.0.1:5000
+   ```
+   *(Note: On Windows, using a path under `C:/Users/Public/` avoids folder permission errors. Ensure you use forward slashes `/` as shown above).*
+
 3. **Restart Tor:**
-   - **Linux:** `sudo systemctl restart tor`
-   - **macOS:** `brew services restart tor`
+   - **Debian/Ubuntu:** Run `sudo systemctl restart tor`
+   - **macOS:** Run `brew services restart tor`
+   - **Windows:** Completely close and reopen the Tor Browser, or restart the Tor command prompt window/service.
 
 4. **Find your address:**
-   Tor will generate a unique `.onion` address for your server. Read it by running:
-   ```bash
-   sudo cat /var/lib/tor/anonymus_hidden_service/hostname
-   ```
+   Tor will generate a unique `.onion` address for your server. Read the address inside the generated `hostname` file:
+   - **Linux / macOS:** Run `sudo cat /var/lib/tor/anonymus_hidden_service/hostname`
+   - **Windows:** Open the folder `C:\Users\Public\anonymus_hidden_service\` in File Explorer and open the `hostname` file with Notepad.
+
    Provide this `.onion` address to your friends. They can open it using the **Tor Browser** to access your chat server securely and anonymously!
