@@ -24,30 +24,30 @@ class TestDatabaseAuth(unittest.TestCase):
             os.remove(database.DB_FILE)
 
     def test_1_register_user(self):
-        res = database.register_user('Alice', 'password123')
+        res = database.register_local_user('Alice', 'password123')
         self.assertTrue(res.get('success'))
         
-        # Test duplicate (case-insensitive)
-        res = database.register_user('alice', 'different')
-        self.assertEqual(res.get('error'), 'Username already taken.')
+        # Test duplicate (since already initialized, should say already initialized)
+        res = database.register_local_user('bob', 'different')
+        self.assertEqual(res.get('error'), 'Local database is already initialized.')
 
     def test_2_login_user(self):
-        res = database.login_user('alice', 'password123')
+        res = database.login_local_user('alice', 'password123')
         self.assertTrue(res.get('success'))
         
-        res = database.login_user('ALICE', 'wrongpassword')
+        res = database.login_local_user('ALICE', 'wrongpassword')
         self.assertEqual(res.get('error'), 'Wrong credentials.')
 
     def test_3_login_oracle_timing(self):
         # Time a known user with wrong password
         t0 = time.time()
-        database.login_user('alice', 'wrongpassword')
+        database.login_local_user('alice', 'wrongpassword')
         t1 = time.time()
         time_known = t1 - t0
         
         # Time an unknown user
         t2 = time.time()
-        database.login_user('unknown_user', 'password')
+        database.login_local_user('unknown_user', 'password')
         t3 = time.time()
         time_unknown = t3 - t2
         
