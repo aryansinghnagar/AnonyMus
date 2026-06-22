@@ -97,20 +97,20 @@ To achieve true server anonymity and metadata resistance:
 1. **Install Tor:**
    - **Debian/Ubuntu:** `sudo apt install tor`
    - **macOS:** `brew install tor`
+   - **Windows:** Download the **Tor Expert Bundle** or **Tor Browser** from [torproject.org](https://www.torproject.org/).
 
 2. **Configure Tor Service (`torrc`):**
-   Append the following to your `torrc` file:
+   Append the configuration to your `torrc` file:
+
+   **For Linux / macOS:**
    ```text
    HiddenServiceDir /var/lib/tor/anonymus_hidden_service/
    HiddenServicePort 80 127.0.0.1:5000
    ```
 
-3. **Restart Tor Daemon:**
-   - **Linux:** `sudo systemctl restart tor`
-   - **macOS:** `brew services restart tor`
-
-4. **Retrieve Onion Address:**
-   Read the generated hostname:
-   ```bash
-   sudo cat /var/lib/tor/anonymus_hidden_service/hostname
+   **For Windows:**
+   ```text
+   HiddenServiceDir C:/Users/Public/anonymus_hidden_service/
+   HiddenServicePort 80 127.0.0.1:5000
    ```
+   *(Note: For step-by-step guidance on locating `torrc` and retrieving the generated `.onion` address, see [SETUP.md](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/SETUP.md) or [tor_setup.md](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/tor_setup.md)).*
