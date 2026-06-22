@@ -1,45 +1,47 @@
 const socket = io({ transports: ['websocket'] });
 
+// Local UI State
+let myOnionAddress = null;
+let myLocalUsername = null;
+let activeContact = null; // Currently selected contact object
+
+// Cryptographic keys and state mapped by contact onion address
 let myKeys = null;
 let myPublicKeyExported = null;
-let myQueueId = null;
-
-let theirQueueId = null;
-let theirPublicKeyExported = null;
-let writeKey = null;
-let readKey = null;
-let myRole = null; // 'A' or 'B'
-let theirRole = null; // 'B' or 'A'
-let sendSeq = 0;
-let recvSeq = 0;
+let writeKeys = {};
+let readKeys = {};
 
 // DOM Elements
-const viewSetup = document.getElementById('view-setup');
-const viewJoin = document.getElementById('view-join');
+const myOnionDisplay = document.getElementById('my-onion-display');
+const contactsListEl = document.getElementById('contacts-list');
+const contactNicknameInput = document.getElementById('contact-nickname');
+const contactOnionInput = document.getElementById('contact-onion');
+const btnAddContact = document.getElementById('btn-add-contact');
+
+const viewWelcome = document.getElementById('view-welcome');
+const viewPendingIncoming = document.getElementById('view-pending-incoming');
+const viewPendingOutgoing = document.getElementById('view-pending-outgoing');
 const viewChat = document.getElementById('view-chat');
 
-const inviteLinkDisplay = document.getElementById('invite-link-display');
-const btnAcceptInvite = document.getElementById('btn-accept-invite');
+const pendingRequestText = document.getElementById('pending-request-text');
+const btnAcceptIncoming = document.getElementById('btn-accept-incoming');
+const btnDenyIncoming = document.getElementById('btn-deny-incoming');
 
+const chattingWithName = document.getElementById('chatting-with-name');
 const messagesEl = document.getElementById('messages');
 const formEl = document.getElementById('message-form');
 const inputEl = document.getElementById('message-input');
 const uiSafetyNumber = document.getElementById('ui-safety-number');
 const disappearTimerSelect = document.getElementById('disappear-timer');
 
-const qrcodeEl = document.getElementById('qrcode');
-const pasteInviteInput = document.getElementById('paste-invite-input');
-const btnPasteConnect = document.getElementById('btn-paste-connect');
 const btnElvenCloak = document.getElementById('btn-elven-cloak');
 const viewElvenCloak = document.getElementById('view-elven-cloak');
 const btnElvenCloakExit = document.getElementById('btn-elven-cloak-exit');
 const btnInfinitySnap = document.getElementById('btn-infinity-snap');
 const btnObliviate = document.getElementById('btn-obliviate');
 
-let staticInterval = null;
-
 // -----------------------------------------------------------------
-// Screen Security & Panic Action
+// Visibility & Security Blur
 // -----------------------------------------------------------------
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -49,110 +51,204 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function triggerInfinitySnap() {
-  myKeys = null;
-  writeKey = null;
-  readKey = null;
-  myRole = null;
-  theirRole = null;
-  sendSeq = 0;
-  recvSeq = 0;
-  myPublicKeyExported = null;
-  myQueueId = null;
-  theirQueueId = null;
-  theirPublicKeyExported = null;
-  if (staticInterval) clearTimeout(staticInterval);
-  
-  socket.disconnect();
-  document.body.innerHTML = '';
-  window.location.replace("about:blank");
+// -----------------------------------------------------------------
+// Cryptographic Keys Initializer for Local P2P
+// -----------------------------------------------------------------
+async function initMyMasterKeys() {
+  // Try to load or generate local E2EE keys
+  if (!myKeys) {
+    myKeys = await generateKeyPair();
+    myPublicKeyExported = await exportPublicKey(myKeys.publicKey);
+  }
 }
 
-let escCount = 0;
-let escTimeout = null;
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    escCount++;
-    clearTimeout(escTimeout);
-    if (escCount >= 3) {
-      if (confirm('Are you sure you want to trigger Infinity Snap? All chat state will be lost immediately.')) {
-        triggerInfinitySnap();
-      } else {
-        escCount = 0;
+async function deriveAndStoreSessionKeys(contact) {
+  if (!contact.shared_secret || !contact.peer_public_key) return;
+  
+  try {
+    const sharedSecretBits = fromBase64(contact.shared_secret);
+    const hkdfKey = await crypto.subtle.importKey(
+      'raw',
+      sharedSecretBits,
+      { name: 'HKDF' },
+      false,
+      ['deriveKey']
+    );
+
+    const salt = new Uint8Array(32);
+    const labelClient = new TextEncoder().encode("AnonyMus-Client-To-Server-Key");
+    const labelServer = new TextEncoder().encode("AnonyMus-Server-To-Client-Key");
+
+    const clientKey = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: salt, info: labelClient },
+      hkdfKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    const serverKey = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: salt, info: labelServer },
+      hkdfKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    const isAlice = myPublicKeyExported < contact.peer_public_key;
+    writeKeys[contact.onion_address] = isAlice ? clientKey : serverKey;
+    readKeys[contact.onion_address] = isAlice ? serverKey : clientKey;
+  } catch (err) {
+    console.error("Failed to derive keys for contact:", contact.onion_address, err);
+  }
+}
+
+// -----------------------------------------------------------------
+// UI Control & Panel Management
+// -----------------------------------------------------------------
+function switchPanel(panelId) {
+  viewWelcome.style.display = 'none';
+  viewPendingIncoming.style.display = 'none';
+  viewPendingOutgoing.style.display = 'none';
+  viewChat.style.display = 'none';
+
+  if (panelId === 'welcome') viewWelcome.style.display = 'block';
+  else if (panelId === 'pending_incoming') viewPendingIncoming.style.display = 'block';
+  else if (panelId === 'pending_outgoing') viewPendingOutgoing.style.display = 'block';
+  else if (panelId === 'chat') viewChat.style.display = 'flex';
+}
+
+// -----------------------------------------------------------------
+// Contacts List Loader
+// -----------------------------------------------------------------
+async function loadContactsList() {
+  try {
+    const res = await fetch('/api/contacts');
+    const contacts = await res.json();
+    
+    contactsListEl.innerHTML = '';
+    
+    for (const contact of contacts) {
+      // Pre-derive keys if they are accepted and not in memory
+      if (contact.status === 'accepted' && !writeKeys[contact.onion_address]) {
+        await deriveAndStoreSessionKeys(contact);
+      }
+
+      const li = document.createElement('li');
+      li.dataset.onion = contact.onion_address;
+      if (activeContact && activeContact.onion_address === contact.onion_address) {
+        li.className = 'active';
+        // Keep active contact updated
+        activeContact = contact;
+      }
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'contact-name';
+      nameSpan.textContent = contact.nickname;
+      li.appendChild(nameSpan);
+
+      const addressSpan = document.createElement('span');
+      addressSpan.className = 'contact-address';
+      addressSpan.textContent = contact.onion_address;
+      li.appendChild(addressSpan);
+
+      const statusSpan = document.createElement('span');
+      statusSpan.className = `contact-status status-${contact.status}`;
+      
+      let statusText = contact.status;
+      if (contact.status === 'pending_outgoing') statusText = 'waiting...';
+      if (contact.status === 'pending_incoming') statusText = 'inbound request';
+      statusSpan.textContent = statusText;
+      li.appendChild(statusSpan);
+
+      li.addEventListener('click', () => selectContact(contact, li));
+      contactsListEl.appendChild(li);
+    }
+  } catch (err) {
+    console.error("Failed to load contacts list:", err);
+  }
+}
+
+async function selectContact(contact, element) {
+  // Clear active styling
+  document.querySelectorAll('#contacts-list li').forEach(el => el.classList.remove('active'));
+  if (element) element.classList.add('active');
+  
+  activeContact = contact;
+
+  if (contact.status === 'pending_incoming') {
+    pendingRequestText.textContent = `${contact.nickname} (${contact.onion_address}) is requesting to chat.`;
+    switchPanel('pending_incoming');
+  } else if (contact.status === 'pending_outgoing') {
+    switchPanel('pending_outgoing');
+  } else if (contact.status === 'accepted' || contact.status === 'offline') {
+    chattingWithName.textContent = `Chatting with: ${contact.nickname}`;
+    if (contact.peer_public_key) {
+      uiSafetyNumber.textContent = await computeSafetyNumber(myPublicKeyExported, contact.peer_public_key);
+    } else {
+      uiSafetyNumber.textContent = "Deriving...";
+    }
+    switchPanel('chat');
+    await loadMessages(contact.onion_address);
+  }
+}
+
+// -----------------------------------------------------------------
+// Message Loading & Rendering
+// -----------------------------------------------------------------
+async function loadMessages(onion) {
+  try {
+    const res = await fetch(`/api/messages?onion=${encodeURIComponent(onion)}`);
+    const messages = await res.json();
+    
+    messagesEl.innerHTML = '';
+    
+    const isAlice = myPublicKeyExported < activeContact.peer_public_key;
+    const myRole = isAlice ? 'A' : 'B';
+    const theirRole = isAlice ? 'B' : 'A';
+
+    for (const msg of messages) {
+      try {
+        const parsed = JSON.parse(msg.message);
+        let decrypted = null;
+        
+        if (msg.sender === 'me') {
+          decrypted = await decryptMessage(writeKeys[onion], parsed.iv, parsed.ciphertext, myRole, parsed.seq);
+        } else {
+          decrypted = await decryptMessage(readKeys[onion], parsed.iv, parsed.ciphertext, theirRole, parsed.seq);
+        }
+
+        if (decrypted !== null) {
+          const envelope = JSON.parse(decrypted);
+          if (envelope.type === 'text') {
+            addMessageLine(msg.sender === 'me' ? 'You' : activeContact.nickname, envelope.content, msg.timestamp);
+          }
+        } else {
+          addMessageLine(msg.sender === 'me' ? 'You' : activeContact.nickname, '[Decryption Failed - Session Desynced]', msg.timestamp);
+        }
+      } catch (err) {
+        console.error("Message decrypt/render error:", err);
       }
     }
-    escTimeout = setTimeout(() => { escCount = 0; }, 1000);
+  } catch (err) {
+    console.error("Failed to load messages:", err);
   }
-});
-
-btnInfinitySnap.addEventListener('click', () => {
-  if (confirm('Are you sure you want to trigger Infinity Snap? All chat state will be lost immediately.')) {
-    triggerInfinitySnap();
-  }
-});
-
-btnObliviate.addEventListener('click', () => {
-  if (confirm('Cast Obliviate? This will permanently erase the chat history for both you and your peer, and sever the connection instantly.')) {
-    if (writeKey && theirQueueId) {
-      const plaintext = JSON.stringify({ type: 'control', action: 'obliviate' });
-      encryptMessage(writeKey, plaintext, myRole, sendSeq).then(({iv, ciphertext}) => {
-        sendSeq++;
-        const payload = JSON.stringify({
-          type: 'message',
-          iv,
-          ciphertext
-        });
-        socket.emit('push_queue', { queue_id: theirQueueId, payload });
-        triggerInfinitySnap();
-      }).catch(err => console.error(err));
-    } else {
-      triggerInfinitySnap();
-    }
-  }
-});
-
-btnElvenCloak.addEventListener('click', () => {
-  viewElvenCloak.style.display = 'flex';
-});
-
-btnElvenCloakExit.addEventListener('click', () => {
-  viewElvenCloak.style.display = 'none';
-});
-
-function startPsychoHistoricalStatic() {
-  if (staticInterval) clearTimeout(staticInterval);
-  
-  function sendStatic() {
-    if (writeKey && theirQueueId) {
-      const plaintext = JSON.stringify({ type: 'control', action: 'static' });
-      encryptMessage(writeKey, plaintext, myRole, sendSeq).then(({iv, ciphertext}) => {
-        sendSeq++;
-        const payload = JSON.stringify({
-          type: 'message',
-          iv,
-          ciphertext
-        });
-        socket.emit('push_queue', { queue_id: theirQueueId, payload });
-      }).catch(err => console.error("Static error:", err));
-    }
-    staticInterval = setTimeout(sendStatic, Math.random() * 5000 + 2000);
-  }
-  
-  staticInterval = setTimeout(sendStatic, 2000);
 }
 
-function addMessageLine(sender, text) {
+function addMessageLine(sender, text, timestamp) {
   const row = document.createElement('div');
   row.className = 'message' + (sender === 'You' ? ' message-own' : '');
+  
   const senderSpan = document.createElement('span');
   senderSpan.className = 'message-sender';
   senderSpan.textContent = sender + ':';
   row.appendChild(senderSpan);
+  
   row.appendChild(document.createTextNode(' ' + text));
   messagesEl.appendChild(row);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
-  // Disappearing logic
+  // Disappearing messages support
   const timerVal = parseInt(disappearTimerSelect.value, 10);
   if (timerVal > 0) {
     setTimeout(() => {
@@ -170,271 +266,316 @@ function addStatusLine(text) {
 }
 
 // -----------------------------------------------------------------
-// Initialization & Routing
+// Handshake & P2P Event Triggers
 // -----------------------------------------------------------------
-socket.on('connect', async () => {
-  if (!window.crypto || !window.crypto.subtle) {
-    document.getElementById('warning-banner').innerHTML = 'Security Alert: Web Crypto API requires HTTPS or localhost.';
-    document.getElementById('warning-banner').style.display = 'block';
+async function addContactSubmit() {
+  const nickname = contactNicknameInput.value.trim();
+  const onion = contactOnionInput.value.trim().toLowerCase();
+
+  if (!nickname || !onion.endsWith('.onion')) {
+    alert("Please enter a valid nickname and .onion address.");
     return;
   }
 
-  if (!myKeys) {
-    myKeys = await generateKeyPair();
-    myPublicKeyExported = await exportPublicKey(myKeys.publicKey);
-  }
-  
-  socket.emit('create_queue');
-});
+  btnAddContact.disabled = true;
+  await initMyMasterKeys();
 
-socket.on('queue_created', ({ queue_id }) => {
-  myQueueId = queue_id;
-  
-  if (theirQueueId && writeKey) {
-    // We reconnected, inform peer of our new queue
-    addStatusLine('Reconnected. Updating secure channel...');
-    const payload = JSON.stringify({
-      type: 'queue_update',
-      new_queue: myQueueId
+  try {
+    const res = await fetch('/api/contacts/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        onion_address: onion,
+        nickname: nickname,
+        my_public_key: myPublicKeyExported
+      })
     });
-    socket.emit('push_queue', { queue_id: theirQueueId, payload });
-    return;
-  }
-
-  const hashParams = new URLSearchParams(window.location.hash.slice(1));
-  if (hashParams.has('q') && hashParams.has('k')) {
-    // We are the invitee
-    viewSetup.classList.remove('active');
-    viewJoin.classList.add('active');
-    theirQueueId = hashParams.get('q');
-    theirPublicKeyExported = decodeURIComponent(hashParams.get('k'));
-  } else {
-    // We are the host
-    viewSetup.classList.add('active');
-    viewJoin.classList.remove('active');
-    const inviteUrl = `${window.location.origin}/#q=${myQueueId}&k=${encodeURIComponent(myPublicKeyExported)}`;
-    inviteLinkDisplay.textContent = inviteUrl;
-    if (typeof QRCode !== 'undefined') {
-      qrcodeEl.innerHTML = '';
-      new QRCode(qrcodeEl, {
-        text: inviteUrl,
-        width: 200,
-        height: 200,
-        colorDark : "#000000",
-        colorLight : "#ffffff",
-        correctLevel : QRCode.CorrectLevel.L
-      });
+    const data = await res.json();
+    if (data.success) {
+      contactNicknameInput.value = '';
+      contactOnionInput.value = '';
+      await loadContactsList();
+      alert("Handshake request queued. Connecting via Tor...");
+    } else {
+      alert("Error: " + data.error);
     }
+  } catch (err) {
+    console.error("Failed to add contact:", err);
+  } finally {
+    btnAddContact.disabled = false;
   }
-});
-
-socket.on('disconnect', () => {
-  addStatusLine('Disconnected from server. Attempting to reconnect...');
-});
-
-socket.on('connect_error', (err) => {
-  if (err && err.message === "Connection rejected by server") {
-    addStatusLine('Session expired. Redirecting to login...');
-    setTimeout(() => {
-      logoutUser();
-    }, 2000);
-  }
-});
-
-function copyInviteLink() {
-  const inviteUrl = inviteLinkDisplay.textContent;
-  navigator.clipboard.writeText(inviteUrl).then(() => {
-    alert('Invite link copied!');
-    setTimeout(() => {
-      navigator.clipboard.writeText('');
-      console.log('Clipboard auto-cleared for security.');
-    }, 30000);
-  }).catch(err => console.error("Failed to copy invite link", err));
 }
 
-btnPasteConnect.addEventListener('click', () => {
-  const link = pasteInviteInput.value;
-  if (!link) return;
+async function acceptIncomingRequest() {
+  if (!activeContact) return;
   
-  btnPasteConnect.disabled = true;
-  try {
-    const normalized = link.replace("#q=", "?q=").replace("#", "?");
-    const url = new URL(normalized);
-    const q = url.searchParams.get('q');
-    const k = url.searchParams.get('k');
-    
-    if (q && k) {
-      window.location.hash = `#q=${q}&k=${k}`;
-      window.location.reload(); 
-    } else {
-      alert("Invalid invite link.");
-      btnPasteConnect.disabled = false;
-    }
-  } catch (e) {
-    alert("Invalid invite link format.");
-    btnPasteConnect.disabled = false;
-  }
-});
+  btnAcceptIncoming.disabled = true;
+  await initMyMasterKeys();
 
-// Invitee accepts the invite
-btnAcceptInvite.addEventListener('click', async () => {
-  btnAcceptInvite.disabled = true;
   try {
-    viewJoin.classList.remove('active');
-    viewChat.style.display = 'flex';
+    const peerPubKey = await importPublicKey(activeContact.peer_public_key);
     
-    // Compute Secret & Safety Number
-    const theirKey = await importPublicKey(theirPublicKeyExported);
+    // Derive raw shared secret bits
+    const sharedSecretBits = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: peerPubKey },
+      myKeys.privateKey,
+      256
+    );
+    const sharedSecretB64 = toBase64(sharedSecretBits);
     
-    const sessionKeys = await deriveSessionKeys(myKeys.privateKey, theirKey, myPublicKeyExported, theirPublicKeyExported);
-    writeKey = sessionKeys.writeKey;
-    readKey = sessionKeys.readKey;
-    
-    const isAlice = myPublicKeyExported < theirPublicKeyExported;
-    myRole = isAlice ? 'A' : 'B';
-    theirRole = isAlice ? 'B' : 'A';
-    sendSeq = 0;
-    recvSeq = 0;
-    
-    uiSafetyNumber.textContent = await computeSafetyNumber(myPublicKeyExported, theirPublicKeyExported);
-
-    // Send Handshake payload to their queue
-    const payload = JSON.stringify({
-      type: 'handshake',
-      reply_queue: myQueueId,
-      public_key: myPublicKeyExported
+    const res = await fetch('/api/contacts/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        onion_address: activeContact.onion_address,
+        my_public_key: myPublicKeyExported,
+        shared_secret: sharedSecretB64
+      })
     });
-    socket.emit('push_queue', { queue_id: theirQueueId, payload });
-    addStatusLine('Connected to peer. Awaiting their response...');
-    history.replaceState(null, null, ' ');
-    startPsychoHistoricalStatic();
-  } catch (err) {
-    console.error('Handshake failed:', err);
-    alert('Failed to securely connect to peer. Invalid link?');
-    btnAcceptInvite.disabled = false;
-    viewJoin.classList.add('active');
-    viewChat.style.display = 'none';
-  }
-});
-
-// -----------------------------------------------------------------
-// Message Handling
-// -----------------------------------------------------------------
-socket.on('queue_payload', async ({ queue_id, payload }) => {
-  try {
-    const data = JSON.parse(payload);
     
-    if (data.type === 'handshake') {
-      try {
-        theirQueueId = data.reply_queue;
-        theirPublicKeyExported = data.public_key;
-        
-        const theirKey = await importPublicKey(theirPublicKeyExported);
-        
-        const sessionKeys = await deriveSessionKeys(myKeys.privateKey, theirKey, myPublicKeyExported, theirPublicKeyExported);
-        writeKey = sessionKeys.writeKey;
-        readKey = sessionKeys.readKey;
-        
-        const isAlice = myPublicKeyExported < theirPublicKeyExported;
-        myRole = isAlice ? 'A' : 'B';
-        theirRole = isAlice ? 'B' : 'A';
-        sendSeq = 0;
-        recvSeq = 0;
-        
-        uiSafetyNumber.textContent = await computeSafetyNumber(myPublicKeyExported, theirPublicKeyExported);
-        
-        viewSetup.classList.remove('active');
-        viewChat.style.display = 'flex';
-        addStatusLine('Peer connected securely.');
-        startPsychoHistoricalStatic();
-      } catch(err) {
-        console.error('Handshake verification failed', err);
-        addStatusLine('Handshake verification failed!');
-      }
-      return;
-    }
-
-    if (data.type === 'queue_update') {
-       theirQueueId = data.new_queue;
-       addStatusLine('Peer updated secure channel.');
-       return;
-    }
-
-    if (data.type === 'message') {
-      if (!readKey) return;
-      const plaintext = await decryptMessage(readKey, data.iv, data.ciphertext, theirRole, recvSeq);
+    const data = await res.json();
+    if (data.success) {
+      // Force immediate derivation locally
+      await deriveAndStoreSessionKeys({
+        onion_address: activeContact.onion_address,
+        shared_secret: sharedSecretB64,
+        peer_public_key: activeContact.peer_public_key
+      });
       
-      if (plaintext !== null) {
-        recvSeq++;
-        try {
-          const msgObj = JSON.parse(plaintext);
-          if (msgObj.type === 'control') {
-            if (msgObj.action === 'static') return;
-            if (msgObj.action === 'obliviate') {
-              triggerInfinitySnap();
-              alert('Peer invoked Obliviate. Chat erased and disconnected.');
-              return;
-            }
-          } else if (msgObj.type === 'text') {
-            addMessageLine('Peer', msgObj.content);
-          }
-        } catch (jsonErr) {
-          console.error("Failed to parse decrypted message JSON:", jsonErr);
-          addMessageLine('Peer', '[Corrupted Message Envelope]');
-        }
-      } else {
-        addMessageLine('Peer', '[Decryption Failed - Session Desynced]');
-      }
+      await loadContactsList();
+      // Select the newly accepted contact to open the chat window
+      const updatedContact = await (await fetch(`/api/contacts`)).json();
+      const match = updatedContact.find(c => c.onion_address === activeContact.onion_address);
+      if (match) selectContact(match);
+    } else {
+      alert("Accept error: " + data.error);
     }
   } catch (err) {
-    console.error("Payload parsing error:", err);
+    console.error("Failed to accept request:", err);
+  } finally {
+    btnAcceptIncoming.disabled = false;
   }
-});
+}
 
-socket.on('push_queue_error', ({ queue_id, error }) => {
-  if (error === 'recipient_offline') {
-    addStatusLine('Message delivery failed: Peer is offline.');
+async function denyIncomingRequest() {
+  if (!activeContact) return;
+  if (!confirm("Are you sure you want to deny this request?")) return;
+
+  try {
+    await fetch('/api/contacts/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ onion_address: activeContact.onion_address })
+    });
+    activeContact = null;
+    switchPanel('welcome');
+    await loadContactsList();
+  } catch (err) {
+    console.error("Failed to deny request:", err);
   }
-});
+}
 
+// -----------------------------------------------------------------
+// Message Sending
+// -----------------------------------------------------------------
 formEl.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const text = inputEl.value; // intentionally not trimmed to allow spaces
-  if (!text || !writeKey || !theirQueueId) return;
+  const text = inputEl.value;
+  if (!text || !activeContact || !writeKeys[activeContact.onion_address]) return;
 
-  const plaintext = JSON.stringify({ type: 'text', content: text });
-  const { iv, ciphertext } = await encryptMessage(writeKey, plaintext, myRole, sendSeq);
-  sendSeq++;
-  const payload = JSON.stringify({
-    type: 'message',
-    iv,
-    ciphertext
-  });
-  socket.emit('push_queue', { queue_id: theirQueueId, payload });
+  const onion = activeContact.onion_address;
+  const isAlice = myPublicKeyExported < activeContact.peer_public_key;
+  const myRole = isAlice ? 'A' : 'B';
+  
+  // Load and increment sequence number safely
+  let sendSeq = parseInt(localStorage.getItem(`sendSeq_${onion}`) || '0', 10);
 
-  addMessageLine('You', text);
-  inputEl.value = '';
+  try {
+    const plaintext = JSON.stringify({ type: 'text', content: text });
+    const { iv, ciphertext } = await encryptMessage(writeKeys[onion], plaintext, myRole, sendSeq);
+    
+    // Save locally
+    const res = await fetch('/api/messages/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        onion_address: onion,
+        iv: iv,
+        ciphertext: ciphertext,
+        seq: sendSeq
+      })
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      addMessageLine('You', text, data.timestamp);
+      localStorage.setItem(`sendSeq_${onion}`, sendSeq + 1);
+      inputEl.value = '';
+    } else {
+      alert("Failed to send message: " + data.error);
+    }
+  } catch (err) {
+    console.error("Encryption or transmission failed:", err);
+  }
 });
 
 // -----------------------------------------------------------------
-// Clipboard Auto-Clearing
+// WebSockets Event Listeners (Push Notifications)
 // -----------------------------------------------------------------
-// -----------------------------------------------------------------
-// Logout Functionality
-// -----------------------------------------------------------------
-async function logoutUser() {
-  try {
-    await fetch('/logout', { method: 'POST' });
-    window.location.href = '/';
-  } catch (err) {
-    console.error(err);
+socket.on('incoming_contact_request', async (data) => {
+  await loadContactsList();
+  addStatusLine(`New incoming contact request from ${data.nickname}`);
+});
+
+socket.on('handshake_accepted', async (data) => {
+  // Alice receives Bob's public key response. Compute and save shared secret.
+  const peerPubKey = await importPublicKey(data.peer_public_key);
+  await initMyMasterKeys();
+
+  const sharedSecretBits = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: peerPubKey },
+    myKeys.privateKey,
+    256
+  );
+  const sharedSecretB64 = toBase64(sharedSecretBits);
+
+  // Send derived secret back to local python to persist in local node DB
+  await fetch('/api/contacts/save_secret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      onion_address: data.onion_address,
+      shared_secret: sharedSecretB64,
+      peer_public_key: data.peer_public_key
+    })
+  });
+
+  await loadContactsList();
+  if (activeContact && activeContact.onion_address === data.onion_address) {
+    const updated = await (await fetch(`/api/contacts`)).json();
+    const match = updated.find(c => c.onion_address === data.onion_address);
+    if (match) selectContact(match);
   }
+  addStatusLine(`Handshake accepted by peer.`);
+});
+
+socket.on('incoming_message', async (data) => {
+  await loadContactsList(); // Refresh list to get latest status
+  
+  if (activeContact && activeContact.onion_address === data.sender) {
+    const isAlice = myPublicKeyExported < activeContact.peer_public_key;
+    const theirRole = isAlice ? 'B' : 'A';
+    
+    const plaintext = await decryptMessage(readKeys[data.sender], data.iv, data.ciphertext, theirRole, data.seq);
+    if (plaintext !== null) {
+      const envelope = JSON.parse(plaintext);
+      if (envelope.type === 'text') {
+        addMessageLine(activeContact.nickname, envelope.content, data.timestamp);
+      }
+    } else {
+      addMessageLine(activeContact.nickname, '[Decryption Failed - Session Desynced]', data.timestamp);
+    }
+  }
+});
+
+socket.on('contact_status_change', (data) => {
+  loadContactsList();
+});
+
+socket.on('message_delivery_failed', (data) => {
+  addStatusLine(`Message to ${data.onion_address} failed. Node is currently offline. Retrying...`);
+});
+
+// -----------------------------------------------------------------
+// Obliviate & Panic Snapshot
+// -----------------------------------------------------------------
+function triggerInfinitySnap() {
+  myKeys = null;
+  writeKeys = {};
+  readKeys = {};
+  activeContact = null;
+  localStorage.clear();
+  socket.disconnect();
+  document.body.innerHTML = '';
+  window.location.replace("about:blank");
+}
+
+let escCount = 0;
+let escTimeout = null;
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    escCount++;
+    clearTimeout(escTimeout);
+    if (escCount >= 3) {
+      if (confirm('Trigger Infinity Snap? All local chat history and keys will be permanently deleted.')) {
+        fetch('/api/obliviate', { method: 'POST' }).then(() => {
+          triggerInfinitySnap();
+        });
+      } else {
+        escCount = 0;
+      }
+    }
+    escTimeout = setTimeout(() => { escCount = 0; }, 1000);
+  }
+});
+
+btnInfinitySnap.addEventListener('click', () => {
+  if (confirm('Trigger Infinity Snap? All local data will be instantly deleted.')) {
+    fetch('/api/obliviate', { method: 'POST' }).then(() => {
+      triggerInfinitySnap();
+    });
+  }
+});
+
+btnObliviate.addEventListener('click', () => {
+  if (confirm('Cast Obliviate? This permanently deletes contacts and local messages.')) {
+    fetch('/api/obliviate', { method: 'POST' }).then(() => {
+      loadContactsList();
+      switchPanel('welcome');
+      alert("Memory wiped. Local contacts and logs erased.");
+    });
+  }
+});
+
+// Calculator stealth cover
+btnElvenCloak.addEventListener('click', () => { viewElvenCloak.style.display = 'flex'; });
+btnElvenCloakExit.addEventListener('click', () => { viewElvenCloak.style.display = 'none'; });
+
+// -----------------------------------------------------------------
+// App Init & Startup
+// -----------------------------------------------------------------
+async function initApp() {
+  // 1. Fetch info
+  const infoRes = await fetch('/api/my_info');
+  const info = await infoRes.json();
+  
+  myOnionAddress = info.onion_address;
+  myLocalUsername = info.local_username;
+
+  myOnionDisplay.textContent = myOnionAddress || "Loading Tor...";
+  myOnionDisplay.addEventListener('click', () => {
+    if (myOnionAddress) {
+      navigator.clipboard.writeText(myOnionAddress);
+      alert("Onion address copied to clipboard!");
+    }
+  });
+
+  // 2. Generate/Load keypair
+  await initMyMasterKeys();
+
+  // 3. Load contacts
+  await loadContactsList();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const btnLogout = document.getElementById('btn-logout');
-  if (btnLogout) btnLogout.addEventListener('click', logoutUser);
-
-  const btnCopyInvite = document.getElementById('btn-copy-invite');
-  if (btnCopyInvite) btnCopyInvite.addEventListener('click', copyInviteLink);
+  initApp();
+  
+  btnAddContact.addEventListener('click', addContactSubmit);
+  btnAcceptIncoming.addEventListener('click', acceptIncomingRequest);
+  btnDenyIncoming.addEventListener('click', denyIncomingRequest);
+  
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await fetch('/logout', { method: 'POST' });
+    window.location.href = '/';
+  });
 });

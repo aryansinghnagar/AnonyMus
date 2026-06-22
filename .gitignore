@@ -25,7 +25,9 @@ env/
 *.sqlite3
 
 # ---------------------- Android app ----------------------------
-privacy_chat_android/
+AnonyMus_android/
+AnonyMus_android.zip
+AnonyMus.zip
 *.apk
 
 # ---------------------- IDE / Editor -------------------------
@@ -41,6 +43,11 @@ privacy_chat_android/
 Thumbs.db
 desktop.ini
 
+# ---------------------- Runtime / Temporary Tor files --------
+bin/
+test_run/
+
 # ---------------------- Planning docs (optional) -------------
 implementation_plan.md
 privacy-chat-plan.md
+anonymus_plan.md
