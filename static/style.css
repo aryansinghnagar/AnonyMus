@@ -97,7 +97,7 @@ button:active {
 }
 
 /* =========================================================
-   Chat page — append this block to your existing style.css
+   Chat page
    ========================================================= */
 
 :root {
@@ -106,7 +106,7 @@ button:active {
   --chat-sidebar-bg: #f6f7f8;
   --chat-text: #1c2024;
   --chat-muted: #6b7280;
-  --chat-accent: #2f6f5e;      /* quiet teal — "secure" without shouting it */
+  --chat-accent: #2f6f5e;
   --chat-accent-soft: #e4efe9;
 }
 
@@ -169,7 +169,7 @@ button:active {
 .main {
   flex: 1 1 auto;
   display: flex;
-  min-height: 0; /* allow children to scroll instead of overflowing the page */
+  min-height: 0;
 }
 
 .sidebar {
@@ -209,7 +209,6 @@ button:active {
   background: var(--chat-border);
 }
 
-/* highlighted background on the currently selected user */
 #user-list li.active {
   background: var(--chat-accent-soft);
   color: var(--chat-accent);
@@ -286,7 +285,7 @@ button:active {
   font-size: 0.95rem;
   background-color: #ffffff;
   color: var(--chat-text);
-  margin-bottom: 0; /* override general input margin */
+  margin-bottom: 0;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -336,5 +335,27 @@ button:active {
   font-size: 0.88rem;
   text-align: center;
   font-weight: 500;
-  display: none; /* Hidden by default */
+  display: none;
 }
+
+/* =========================================================
+   Newly extracted inline CSS
+   ========================================================= */
+
+/* Auth / Login Specifics */
+.auth-container { max-width: 400px; margin: 4rem auto; padding: 2rem; background: #1f2937; border-radius: 8px; text-align: center; border: 1px solid #374151;}
+.auth-container h2 { margin-bottom: 1.5rem; color: #f3f4f6; }
+.input-group { margin-bottom: 1rem; text-align: left; }
+.input-group label { display: block; margin-bottom: 0.5rem; color: #9ca3af; font-size: 0.9rem; }
+.input-group input { width: 100%; padding: 0.75rem; border: 1px solid #4b5563; border-radius: 4px; background: #374151; color: white; margin-bottom: 0; }
+.error-msg { color: #ef4444; margin-top: 1rem; font-size: 0.9rem; }
+.success-msg { color: #10b981; margin-top: 1rem; font-size: 0.9rem; }
+
+/* Chat Specifics (Phase 1 & 3 updates) */
+.view-container { display: none; padding: 2rem; max-width: 600px; margin: 0 auto; text-align: center; }
+.view-container.active { display: block; }
+.invite-link-box { background: #1f2937; padding: 1rem; border-radius: 8px; font-family: monospace; word-break: break-all; margin: 1rem 0; color: #10b981; border: 1px solid #374151;}
+.header-controls { display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 0.85rem; color: #9ca3af; padding: 0.5rem 1rem; background: #1f2937; border-bottom: 1px solid #374151;}
+.safety-number { font-family: monospace; color: #10b981; }
+.disappear-control select { background: #374151; color: white; border: none; padding: 0.25rem; border-radius: 4px; }
+body.blurred { filter: blur(20px); pointer-events: none; }
