@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Anonymouse</title>
+  <title>AnonyMus - Zero Knowledge Chat</title>
+  <meta name="robots" content="noindex, nosnippet">
   <link rel="icon" type="image/png" href="/static/logo.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -15,232 +13,81 @@
 
     <header class="topbar">
       <div class="logo-container">
-        <img src="/static/logo.png" alt="Anonymouse Logo" class="topbar-logo">
-        <h1>Anonymouse</h1>
+        <img src="/static/logo.png" alt="AnonyMus Logo" class="topbar-logo">
+        <h1>AnonyMus</h1>
       </div>
-      <a href="/logout" class="btn-logout">Logout</a>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button id="btn-elven-cloak" class="btn" aria-label="Elven Cloak" title="Elven Cloak" style="padding: 0.5rem; margin-top: 0; background: #4b5563; border: none; cursor: pointer; color: white;">👁️‍🗨️</button>
+        <button id="btn-obliviate" class="btn" aria-label="Obliviate" title="Obliviate" style="padding: 0.5rem; margin-top: 0; background: #8b5cf6; border: none; cursor: pointer; color: white;">⚡</button>
+        <button id="btn-infinity-snap" class="btn" aria-label="Infinity Snap" title="Infinity Snap" style="padding: 0.5rem; margin-top: 0; background: #f59e0b; border: none; cursor: pointer; color: white;">⚠️</button>
+        <button id="btn-logout" class="btn btn-logout" style="padding: 0.5rem 1rem; margin-top: 0; background: #ef4444; color: white; border: none;">Logout</button>
+      </div>
     </header>
 
     <div id="warning-banner" class="warning-banner"></div>
 
     <div class="main">
 
-      <aside class="sidebar">
-        <h2 class="sidebar-title">Online users</h2>
-        <ul id="user-list"></ul>
-      </aside>
+      <!-- VIEW: SETUP (No URL Hash) -->
+      <div id="view-setup" class="view-container">
+        <h2>Room of Requirement</h2>
+        <p>No accounts. No databases. Total privacy.</p>
+        <div id="qrcode" style="margin: 1rem auto; display: flex; justify-content: center;"></div>
+        <p>Share this link with someone to start a secure chat. This link will expire if you close this tab.</p>
+        <div class="invite-link-box" id="invite-link-display">Generating...</div>
+        <button id="btn-copy-invite" class="btn" aria-label="Copy Bifrost Portal">Copy Bifrost Portal Link</button>
 
-      <section class="chat-area">
-        <div class="chat-header" id="chat-header">Select a user to start chatting</div>
+        <hr style="margin: 2rem 0; border: 1px solid #374151;">
+        
+        <h3>Or Join Peer's Bifrost Portal</h3>
+        <input type="text" id="paste-invite-input" placeholder="Paste link (http://... or anonymus://...)" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border-radius: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6;">
+        <button class="btn" id="btn-paste-connect" style="width: 100%;">Connect to Peer</button>
+
+        <p style="margin-top: 2rem; color: #9ca3af;">Waiting for peer to connect...</p>
+      </div>
+
+      <!-- VIEW: JOIN (URL Hash Present) -->
+      <div id="view-join" class="view-container">
+        <h2>Secure Invitation</h2>
+        <p>You have been invited to a zero-knowledge private chat via Bifrost Portal.</p>
+        <button class="btn" id="btn-accept-invite">Accept & Connect</button>
+      </div>
+
+      <!-- VIEW: CHAT -->
+      <section id="view-chat" class="chat-area" style="display: none;">
+        <div class="header-controls">
+          <div>Three Laws Code: <span class="safety-number" id="ui-safety-number">...</span></div>
+          <div class="disappear-control">
+            Tears in Rain: 
+            <select id="disappear-timer">
+              <option value="0">Off (Session)</option>
+              <option value="15">15 Seconds</option>
+              <option value="60">1 Minute</option>
+            </select>
+          </div>
+        </div>
 
         <div class="messages" id="messages"></div>
 
         <form class="message-form" id="message-form">
-          <input
-            type="text"
-            id="message-input"
-            placeholder="Type a message…"
-            autocomplete="off"
-            disabled
-          >
-          <button type="submit" id="send-btn" disabled>Send</button>
+          <input type="text" id="message-input" placeholder="Type a message… (Triple-Esc for Infinity Snap)" autocomplete="off">
+          <button type="submit" id="send-btn">Send</button>
         </form>
       </section>
+
+      <!-- VIEW: ELVEN CLOAK -->
+      <div id="view-elven-cloak" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: white; color: black; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;">
+        <h2 style="margin-bottom: 24px; font-weight: normal; font-family: sans-serif;">Calculator</h2>
+        <input type="text" value="0" disabled style="width: 300px; text-align: right; font-size: 32px; padding: 12px; margin-bottom: 24px; border: 1px solid #ccc; background: white; color: black;">
+        <button id="btn-elven-cloak-exit" aria-label="Exit Elven Cloak" style="width: 300px; height: 80px; font-size: 32px; background: #d1d5db; color: black; border: none; cursor: pointer; border-radius: 8px;">=</button>
+      </div>
 
     </div>
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WU1yM05A/bfrt//B30PeoR2bO2sEkt2A5Q12ZkKGVFqOSwgy7s4A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="/static/crypto.js"></script>
-  <script>
-    // Username of the person currently logged in, passed in from Flask.
-    const CURRENT_USER = "{{ username }}";
-
-    const socket = io();
-
-    let myKeys = null;               // { publicKey, privateKey } from generateKeyPair()
-    let myPublicKeyExported = null;  // serialized form sent over the wire
-
-    const sharedSecrets = {};   // username -> derived AES key
-    const pendingMessages = {}; // username -> [{ iv, ciphertext }] received before the secret was ready
-    let currentChatTarget = null;
-
-    const userListEl = document.getElementById('user-list');
-    const chatHeaderEl = document.getElementById('chat-header');
-    const messagesEl = document.getElementById('messages');
-    const formEl = document.getElementById('message-form');
-    const inputEl = document.getElementById('message-input');
-    const sendBtn = document.getElementById('send-btn');
-
-    // ---------- rendering helpers ----------
-
-    function addMessageLine(sender, text) {
-      const row = document.createElement('div');
-      row.className = 'message' + (sender === 'You' ? ' message-own' : '');
-
-      const senderSpan = document.createElement('span');
-      senderSpan.className = 'message-sender';
-      senderSpan.textContent = sender + ':';
-
-      row.appendChild(senderSpan);
-      row.appendChild(document.createTextNode(' ' + text));
-      messagesEl.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    function addStatusLine(text) {
-      const row = document.createElement('div');
-      row.className = 'message-status';
-      row.textContent = text;
-      messagesEl.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    function renderUserList(users) {
-      userListEl.innerHTML = '';
-
-      users
-        .filter((name) => name !== CURRENT_USER)
-        .forEach((name) => {
-          const li = document.createElement('li');
-          li.textContent = name;
-          li.dataset.username = name;
-          if (name === currentChatTarget) li.classList.add('active');
-          li.addEventListener('click', () => selectUser(name));
-          userListEl.appendChild(li);
-        });
-    }
-
-    // ---------- chat target selection ----------
-
-    function selectUser(username) {
-      currentChatTarget = username;
-
-      Array.from(userListEl.children).forEach((li) => {
-        li.classList.toggle('active', li.dataset.username === username);
-      });
-
-      chatHeaderEl.textContent = 'Chatting with: ' + username;
-      messagesEl.innerHTML = '';
-      addStatusLine(`Now chatting with ${username}`);
-
-      inputEl.disabled = false;
-      sendBtn.disabled = false;
-      inputEl.focus();
-
-      socket.emit('request_key', { username });
-    }
-
-    // ---------- sending ----------
-
-    formEl.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const text = inputEl.value.trim();
-      if (!text || !currentChatTarget) return;
-
-      const secret = sharedSecrets[currentChatTarget];
-      if (!secret) {
-        addStatusLine('Still setting up encryption with this user — try again in a moment.');
-        return;
-      }
-
-      const { iv, ciphertext } = await encryptMessage(secret, text);
-      socket.emit('private_message', { to: currentChatTarget, iv, ciphertext });
-
-      addMessageLine('You', text);
-      inputEl.value = '';
-    });
-
-    // ---------- receiving a public key (response to request_key, or a broadcast) ----------
-
-    socket.on('public_key', async ({ username, public_key }) => {
-      if (!username || !public_key) return;
-
-      const theirKey = await importPublicKey(public_key);
-      const secret = await deriveSharedSecret(myKeys.privateKey, theirKey);
-      sharedSecrets[username] = secret;
-
-      // Flush anything that arrived while we were still deriving the secret.
-      const queued = pendingMessages[username];
-      if (queued && queued.length) {
-        for (const msg of queued) {
-          await handleIncoming(username, msg.iv, msg.ciphertext);
-        }
-        pendingMessages[username] = [];
-      }
-    });
-
-    // ---------- receiving a chat message ----------
-
-    async function handleIncoming(from, iv, ciphertext) {
-      const secret = sharedSecrets[from];
-      if (!secret) {
-        pendingMessages[from] = pendingMessages[from] || [];
-        pendingMessages[from].push({ iv, ciphertext });
-        return;
-      }
-
-      if (from !== currentChatTarget) return; // not viewing this conversation right now
-
-      const plaintext = await decryptMessage(secret, iv, ciphertext);
-      if (plaintext !== null) {
-        addMessageLine(from, plaintext);
-      } else {
-        addMessageLine(from, '[encrypted message — could not decrypt]');
-      }
-    }
-
-    socket.on('private_message', ({ from, iv, ciphertext }) => {
-      console.log(`DEBUG: Received private message from '${from}'`);
-      handleIncoming(from, iv, ciphertext);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('DEBUG: Socket.IO connection error:', err);
-      addStatusLine('Connection error: ' + err.message + '. Please ensure the server is running and accessible.');
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.warn('DEBUG: Socket.IO disconnected:', reason);
-      addStatusLine('Disconnected from chat server: ' + reason);
-    });
-
-    // ---------- online users list ----------
-
-    socket.on('user_list_update', (data) => {
-      console.log('DEBUG: Received user_list_update:', data);
-      const users = Array.isArray(data) ? data : (data && data.users) || [];
-      renderUserList(users);
-    });
-
-    // ---------- bootstrap ----------
-
-    socket.on('connect', async () => {
-      console.log('DEBUG: Socket.IO connected. Initializing...');
-      const bannerEl = document.getElementById('warning-banner');
-      
-      // Check for secure context (Web Crypto API requirement)
-      if (!window.crypto || !window.crypto.subtle) {
-        bannerEl.innerHTML = '<strong>Security Alert:</strong> End-to-End Encryption requires a secure context (HTTPS). Chat is disabled. Please configure SSL or access via HTTPS/localhost. (For testing, you can use browser flags to trust this origin).';
-        bannerEl.style.display = 'block';
-        addStatusLine('Web Crypto API is not available in insecure HTTP contexts. Connection halted.');
-        return;
-      }
-
-      try {
-        if (!myKeys) {
-          myKeys = await generateKeyPair();
-          myPublicKeyExported = await exportPublicKey(myKeys.publicKey);
-        }
-        socket.emit('authenticate', { username: CURRENT_USER });
-        socket.emit('public_key', { public_key: myPublicKeyExported });
-      } catch (err) {
-        console.error('Crypto initialization failed:', err);
-        bannerEl.innerHTML = '<strong>Error:</strong> Failed to initialize cryptography keys: ' + err.message;
-        bannerEl.style.display = 'block';
-        addStatusLine('Cryptographic initialization failed. Connection halted.');
-      }
-    });
-  </script>
+  <script src="/static/chat.js"></script>
 </body>
 </html>

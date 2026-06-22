@@ -1,39 +1,11 @@
 /**
- * crypto.js — End-to-end encryption for the chat app.
- *
- * Built entirely on the browser's native Web Crypto API. No external
- * JavaScript libraries.
- *
- * THE FLOW
- * --------
- *   1. On page load, each client calls generateKeyPair() once. The private
- *      key is kept only in memory in this client and is never sent anywhere.
- *   2. Each client exports its public key with exportPublicKey() and sends
- *      the resulting base64 string to the other party over SocketIO.
- *   3. Each client imports the other party's public key with
- *      importPublicKey(), then calls deriveSharedSecret(myPrivateKey,
- *      theirPublicKey). Both sides land on the exact same AES-GCM secret —
- *      the secret itself is never transmitted (this is the ECDH magic).
- *   4. Outgoing messages are run through encryptMessage(sharedSecret, text)
- *      before being sent. Incoming messages are run through
- *      decryptMessage(sharedSecret, iv, ciphertext) after being received.
- *
- * Everything here is async because every Web Crypto operation returns a
- * Promise — callers should `await` these functions.
+ * crypto.js — End-to-end encryption for the Zero-Knowledge Chat App.
  */
 
 // ---------------------------------------------------------------------------
 // Helpers — binary <-> base64 conversion
 // ---------------------------------------------------------------------------
-// SocketIO sends text, not raw bytes, so every ArrayBuffer that needs to
-// travel over the network (public keys, IVs, ciphertext) gets base64-encoded
-// first and decoded back to bytes on the other end.
 
-/**
- * Converts an ArrayBuffer (or typed array) into a base64 string.
- * @param {ArrayBuffer} arrayBuffer
- * @returns {string} base64-encoded string
- */
 function toBase64(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
   let binary = '';
@@ -43,11 +15,6 @@ function toBase64(arrayBuffer) {
   return btoa(binary);
 }
 
-/**
- * Converts a base64 string back into a Uint8Array of raw bytes.
- * @param {string} base64String
- * @returns {Uint8Array}
- */
 function fromBase64(base64String) {
   const binary = atob(base64String);
   const bytes = new Uint8Array(binary.length);
@@ -61,52 +28,32 @@ function fromBase64(base64String) {
 // 1. Key pair generation
 // ---------------------------------------------------------------------------
 
-/**
- * Generates a fresh ECDH key pair on the P-256 curve.
- * Call this once when the chat page loads. Keep the returned privateKey in
- * a variable that never leaves this client (e.g. don't log it, don't send
- * it, don't store it anywhere persistent).
- *
- * @returns {Promise<{publicKey: CryptoKey, privateKey: CryptoKey}>}
- */
 async function generateKeyPair() {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
-    true,              // extractable — the public key needs to be exportable
-    ['deriveKey']       // this key pair will only ever be used to derive a shared secret
+    true,
+    ['deriveKey', 'deriveBits']
   );
   return { publicKey: keyPair.publicKey, privateKey: keyPair.privateKey };
 }
 
 // ---------------------------------------------------------------------------
-// 2. Public key export / import (for sending over SocketIO as plain text)
+// 2. Public key export / import
 // ---------------------------------------------------------------------------
 
-/**
- * Exports a public CryptoKey to a base64 string so it can be sent as a
- * normal text field in a SocketIO event.
- * @param {CryptoKey} publicKey
- * @returns {Promise<string>} base64-encoded raw public key
- */
 async function exportPublicKey(publicKey) {
   const rawKey = await crypto.subtle.exportKey('raw', publicKey);
   return toBase64(rawKey);
 }
 
-/**
- * Imports a base64-encoded public key (received from the other party over
- * SocketIO) back into a usable CryptoKey object.
- * @param {string} base64String
- * @returns {Promise<CryptoKey>}
- */
 async function importPublicKey(base64String) {
   const rawKey = fromBase64(base64String);
   return await crypto.subtle.importKey(
     'raw',
     rawKey,
     { name: 'ECDH', namedCurve: 'P-256' },
-    true,   // extractable
-    []      // a public key isn't used to derive on its own — no usages needed
+    true,
+    []
   );
 }
 
@@ -114,47 +61,119 @@ async function importPublicKey(base64String) {
 // 3. ECDH — deriving the shared secret
 // ---------------------------------------------------------------------------
 
-/**
- * Combines my private key with their public key to derive the shared
- * AES-GCM secret. Run with the roles reversed on the other client and the
- * result is mathematically identical — without the secret ever crossing
- * the network.
- *
- * @param {CryptoKey} myPrivateKey   - my own private key (from generateKeyPair)
- * @param {CryptoKey} theirPublicKey - the other party's public key (from importPublicKey)
- * @returns {Promise<CryptoKey>} an AES-GCM CryptoKey, ready to encrypt/decrypt with
- */
-async function deriveSharedSecret(myPrivateKey, theirPublicKey) {
-  return await crypto.subtle.deriveKey(
+function constructAAD(role, seqNum) {
+  const aad = new Uint8Array(5);
+  aad[0] = role.charCodeAt(0);
+  const view = new DataView(aad.buffer);
+  view.setUint32(1, seqNum, false); // Length as 32-bit big-endian
+  return aad;
+}
+
+async function deriveSessionKeys(myPrivateKey, theirPublicKey, myPubKeyB64, theirPubKeyB64) {
+  const sharedSecretBits = await crypto.subtle.deriveBits(
     { name: 'ECDH', public: theirPublicKey },
     myPrivateKey,
+    256
+  );
+
+  const hkdfKey = await crypto.subtle.importKey(
+    'raw',
+    sharedSecretBits,
+    { name: 'HKDF' },
+    false,
+    ['deriveKey']
+  );
+
+  const salt = new Uint8Array(32); // 32 zero bytes
+  const labelClient = new TextEncoder().encode("AnonyMus-Client-To-Server-Key");
+  const labelServer = new TextEncoder().encode("AnonyMus-Server-To-Client-Key");
+
+  const clientKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: salt,
+      info: labelClient
+    },
+    hkdfKey,
     { name: 'AES-GCM', length: 256 },
-    false,                  // not extractable — the raw secret should never leave this CryptoKey
+    false,
     ['encrypt', 'decrypt']
   );
+
+  const serverKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: salt,
+      info: labelServer
+    },
+    hkdfKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  const isAlice = myPubKeyB64 < theirPubKeyB64;
+  return {
+    writeKey: isAlice ? clientKey : serverKey,
+    readKey: isAlice ? serverKey : clientKey
+  };
 }
 
 // ---------------------------------------------------------------------------
-// 4. AES-GCM — encrypting and decrypting messages
+// 4. Safety Number Derivation (Phase 2)
 // ---------------------------------------------------------------------------
 
-/**
- * Encrypts a plaintext chat message with the shared secret.
- * A fresh random IV is generated for every single message — this is
- * required for AES-GCM to stay secure (never reuse an IV with the same key).
- *
- * @param {CryptoKey} sharedSecret - AES-GCM key from deriveSharedSecret
- * @param {string} plaintext       - the chat message to encrypt
- * @returns {Promise<{iv: string, ciphertext: string}>} both fields base64-encoded, safe to send over SocketIO
- */
-async function encryptMessage(sharedSecret, plaintext) {
-  const iv = crypto.getRandomValues(new Uint8Array(12)); // 12 bytes is the standard AES-GCM IV length
-  const encodedText = new TextEncoder().encode(plaintext);
+async function computeSafetyNumber(myPubKeyB64, theirPubKeyB64) {
+  // Sort them to ensure both parties compute the exact same hash
+  const sorted = [myPubKeyB64, theirPubKeyB64].sort();
+  const data = new TextEncoder().encode(sorted[0] + sorted[1]);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  
+  // Use all 256 bits formatted as hex chunks
+  const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  let chunks = [];
+  for (let i = 0; i < hex.length; i += 8) {
+    chunks.push(hex.slice(i, i + 8));
+  }
+  return chunks.join('-');
+}
+
+// ---------------------------------------------------------------------------
+// 5. AES-GCM — encrypting and decrypting messages with Length-Prefixed Padding
+// ---------------------------------------------------------------------------
+
+const BLOCK_SIZE = 512;
+
+async function encryptMessage(key, plaintext, role, seqNum) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const textBytes = new TextEncoder().encode(plaintext);
+  const textLen = textBytes.length;
+  
+  // Padding logic: pad to nearest multiple of BLOCK_SIZE with random bytes
+  let paddedLength = Math.ceil((textLen + 4) / BLOCK_SIZE) * BLOCK_SIZE;
+  const paddedBuffer = new Uint8Array(paddedLength);
+  
+  const view = new DataView(paddedBuffer.buffer);
+  view.setUint32(0, textLen, false); // Length as 32-bit big-endian
+  
+  paddedBuffer.set(textBytes, 4);
+  
+  // Add random padding
+  if (paddedLength > textLen + 4) {
+    const paddingBytes = new Uint8Array(paddedLength - textLen - 4);
+    crypto.getRandomValues(paddingBytes);
+    paddedBuffer.set(paddingBytes, textLen + 4);
+  }
+
+  const aad = constructAAD(role, seqNum);
 
   const encryptedBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    sharedSecret,
-    encodedText
+    { name: 'AES-GCM', iv, additionalData: aad },
+    key,
+    paddedBuffer
   );
 
   return {
@@ -163,51 +182,30 @@ async function encryptMessage(sharedSecret, plaintext) {
   };
 }
 
-/**
- * Decrypts a message that was encrypted with encryptMessage(), using the
- * same shared secret.
- *
- * Never throws — if decryption fails for any reason (wrong key, tampered
- * ciphertext, corrupted data), it returns null so the chat page never
- * crashes on a bad message.
- *
- * @param {CryptoKey} sharedSecret    - AES-GCM key from deriveSharedSecret
- * @param {string} ivBase64           - the IV that was sent alongside the ciphertext
- * @param {string} ciphertextBase64   - the encrypted message
- * @returns {Promise<string|null>} the original plaintext, or null on failure
- */
-async function decryptMessage(sharedSecret, ivBase64, ciphertextBase64) {
+async function decryptMessage(key, ivBase64, ciphertextBase64, role, seqNum) {
   try {
     const iv = fromBase64(ivBase64);
     const ciphertext = fromBase64(ciphertextBase64);
+    const aad = constructAAD(role, seqNum);
 
     const decryptedBuffer = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      sharedSecret,
+      { name: 'AES-GCM', iv, additionalData: aad },
+      key,
       ciphertext
     );
 
-    return new TextDecoder().decode(decryptedBuffer);
+    const view = new DataView(decryptedBuffer);
+    const textLen = view.getUint32(0, false);
+    
+    // Safety check to prevent out-of-bounds error
+    if (textLen > decryptedBuffer.byteLength - 4) {
+      return null;
+    }
+    
+    const textBytes = new Uint8Array(decryptedBuffer, 4, textLen);
+    return new TextDecoder().decode(textBytes);
   } catch (err) {
     console.error('decryptMessage: decryption failed', err);
     return null;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Optional CommonJS export — only activates under Node (e.g. for testing).
-// In the browser, `module` is undefined, this block is skipped, and all the
-// functions above simply live as globals on the page, as intended.
-// ---------------------------------------------------------------------------
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    toBase64,
-    fromBase64,
-    generateKeyPair,
-    exportPublicKey,
-    importPublicKey,
-    deriveSharedSecret,
-    encryptMessage,
-    decryptMessage
-  };
 }
