@@ -50,5 +50,14 @@
   </div>
 
   <script src="/static/login.js"></script>
+  <script>
+    {% if register_only %}
+    document.addEventListener('DOMContentLoaded', () => {
+      toggleView('register-view');
+      const toLogin = document.getElementById('link-to-login');
+      if (toLogin) toLogin.style.display = 'none';
+    });
+    {% endif %}
+  </script>
 </body>
 </html>

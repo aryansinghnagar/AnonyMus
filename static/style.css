@@ -359,3 +359,46 @@ button:active {
 .safety-number { font-family: monospace; color: #10b981; }
 .disappear-control select { background: #374151; color: white; border: none; padding: 0.25rem; border-radius: 4px; }
 body.blurred { filter: blur(20px); pointer-events: none; }
+
+/* =========================================================
+   P2P Contacts List & Badges
+   ========================================================= */
+#contacts-list li {
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: #111827;
+  border: 1px solid #374151;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  transition: all 0.2s ease;
+}
+#contacts-list li:hover {
+  background: #1c2533;
+  border-color: #4b5563;
+}
+#contacts-list li.active {
+  background: #1c2533;
+  border-color: #10b981;
+}
+.contact-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: #f3f4f6;
+}
+.contact-address {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  font-family: monospace;
+  word-break: break-all;
+}
+.contact-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.status-accepted { color: #10b981; }
+.status-pending_incoming { color: #f59e0b; }
+.status-pending_outgoing { color: #60a5fa; }
+.status-offline { color: #ef4444; }
