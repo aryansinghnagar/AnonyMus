@@ -49,11 +49,11 @@ const disappearTimerSelect = document.getElementById('disappear-timer');
 const qrcodeEl = document.getElementById('qrcode');
 const pasteInviteInput = document.getElementById('paste-invite-input');
 const btnPasteConnect = document.getElementById('btn-paste-connect');
-const btnElvenCloak = document.getElementById('btn-elven-cloak');
-const viewElvenCloak = document.getElementById('view-elven-cloak');
-const btnElvenCloakExit = document.getElementById('btn-elven-cloak-exit');
-const btnInfinitySnap = document.getElementById('btn-infinity-snap');
-const btnObliviate = document.getElementById('btn-obliviate');
+const btnCalculator = document.getElementById('btn-calculator');
+const viewCalculator = document.getElementById('view-calculator');
+const btnCalculatorExit = document.getElementById('btn-calculator-exit');
+const btnCloseChat = document.getElementById('btn-close-chat');
+const btnClearCache = document.getElementById('btn-clear-cache');
 
 let staticInterval = null;
 
@@ -68,7 +68,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function triggerInfinitySnap() {
+function resetSession() {
   chatSession.reset();
   if (staticInterval) clearTimeout(staticInterval);
   
@@ -84,8 +84,8 @@ document.addEventListener('keydown', (e) => {
     escCount++;
     clearTimeout(escTimeout);
     if (escCount >= 3) {
-      if (confirm('Are you sure you want to trigger Infinity Snap? All chat state will be lost immediately.')) {
-        triggerInfinitySnap();
+      if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
+        resetSession();
       } else {
         escCount = 0;
       }
@@ -94,16 +94,16 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-btnInfinitySnap.addEventListener('click', () => {
-  if (confirm('Are you sure you want to trigger Infinity Snap? All chat state will be lost immediately.')) {
-    triggerInfinitySnap();
+btnCloseChat.addEventListener('click', () => {
+  if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
+    resetSession();
   }
 });
 
-btnObliviate.addEventListener('click', () => {
-  if (confirm('Cast Obliviate? This will permanently erase the chat history for both you and your peer, and sever the connection instantly.')) {
+btnClearCache.addEventListener('click', () => {
+  if (confirm('Clear connection cache? This will permanently delete the chat history for both you and your peer, and close the session.')) {
     if (chatSession.writeKey && chatSession.theirQueueId) {
-      const plaintext = JSON.stringify({ type: 'control', action: 'obliviate' });
+      const plaintext = JSON.stringify({ type: 'control', action: 'clear' });
       encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq).then(({iv, ciphertext}) => {
         chatSession.sendSeq++;
         const payload = JSON.stringify({
@@ -112,28 +112,28 @@ btnObliviate.addEventListener('click', () => {
           ciphertext
         });
         socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
-        triggerInfinitySnap();
+        resetSession();
       }).catch(err => console.error(err));
     } else {
-      triggerInfinitySnap();
+      resetSession();
     }
   }
 });
 
-btnElvenCloak.addEventListener('click', () => {
-  viewElvenCloak.style.display = 'flex';
+btnCalculator.addEventListener('click', () => {
+  viewCalculator.style.display = 'flex';
 });
 
-btnElvenCloakExit.addEventListener('click', () => {
-  viewElvenCloak.style.display = 'none';
+btnCalculatorExit.addEventListener('click', () => {
+  viewCalculator.style.display = 'none';
 });
 
-function startPsychoHistoricalStatic() {
+function startKeepAlive() {
   if (staticInterval) clearTimeout(staticInterval);
   
-  function sendStatic() {
+  function sendKeepAlive() {
     if (chatSession.writeKey && chatSession.theirQueueId) {
-      const plaintext = JSON.stringify({ type: 'control', action: 'static' });
+      const plaintext = JSON.stringify({ type: 'control', action: 'heartbeat' });
       encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq).then(({iv, ciphertext}) => {
         chatSession.sendSeq++;
         const payload = JSON.stringify({
@@ -142,12 +142,12 @@ function startPsychoHistoricalStatic() {
           ciphertext
         });
         socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
-      }).catch(err => console.error("Static error:", err));
+      }).catch(err => console.error("KeepAlive error:", err));
     }
-    staticInterval = setTimeout(sendStatic, Math.random() * 5000 + 2000);
+    staticInterval = setTimeout(sendKeepAlive, Math.random() * 5000 + 2000);
   }
   
-  staticInterval = setTimeout(sendStatic, 2000);
+  staticInterval = setTimeout(sendKeepAlive, 2000);
 }
 
 function addMessageLine(sender, text) {
@@ -324,7 +324,7 @@ btnAcceptInvite.addEventListener('click', async () => {
     socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
     addStatusLine('Connected to peer. Awaiting their response...');
     history.replaceState(null, null, ' ');
-    startPsychoHistoricalStatic();
+    startKeepAlive();
   } catch (err) {
     console.error('Handshake failed:', err);
     alert('Failed to securely connect to peer. Invalid link?');
@@ -363,7 +363,7 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
         viewSetup.classList.remove('active');
         viewChat.style.display = 'flex';
         addStatusLine('Peer connected securely.');
-        startPsychoHistoricalStatic();
+        startKeepAlive();
       } catch(err) {
         console.error('Handshake verification failed', err);
         addStatusLine('Handshake verification failed!');
@@ -386,10 +386,10 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
         try {
           const msgObj = JSON.parse(plaintext);
           if (msgObj.type === 'control') {
-            if (msgObj.action === 'static') return;
-            if (msgObj.action === 'obliviate') {
-              triggerInfinitySnap();
-              alert('Peer invoked Obliviate. Chat erased and disconnected.');
+            if (msgObj.action === 'heartbeat' || msgObj.action === 'static') return;
+            if (msgObj.action === 'clear' || msgObj.action === 'obliviate') {
+              resetSession();
+              alert('Connection closed by peer. Chat history cleared.');
               return;
             }
           } else if (msgObj.type === 'text') {

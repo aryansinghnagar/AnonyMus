@@ -47,7 +47,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("Room of Requirement") },
+                title = { Text("Start Session") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
@@ -80,7 +80,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
 
             val inviteUrl = "${BuildConfig.URL_SCHEME}://${BuildConfig.URL_HOST_JOIN}?q=${ChatManager.myQueueId}&k=${android.net.Uri.encode(ChatManager.myPublicKeyExported)}"
             
-            Text("Your secure Bifrost Portal link:", style = MaterialTheme.typography.titleMedium)
+            Text("Your secure invite link:", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             SelectionContainer {
                 Text(
@@ -97,12 +97,12 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
             Button(
                 onClick = {
                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Bifrost Portal Link", inviteUrl))
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Invite Link", inviteUrl))
                     android.widget.Toast.makeText(context, "Link copied!", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Copy Bifrost Portal Link")
+                Text("Copy Invite Link")
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -125,7 +125,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text("Or Join Peer's Bifrost Portal", style = MaterialTheme.typography.titleMedium)
+            Text("Or Enter Invite Link", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
@@ -134,7 +134,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
                     pastedLink = it
                     pasteError = null
                 },
-                label = { Text("Paste Peer's Bifrost Portal Link") },
+                label = { Text("Paste Peer's Invite Link") },
                 placeholder = { Text("${BuildConfig.URL_SCHEME}://${BuildConfig.URL_HOST_JOIN}?q=... or https://...") },
                 modifier = Modifier.fillMaxWidth(),
                 isError = pasteError != null,
