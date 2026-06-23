@@ -16,11 +16,11 @@
         <img src="/static/logo.png" alt="AnonyMus Logo" class="topbar-logo">
         <h1>AnonyMus P2P</h1>
       </div>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <button id="btn-elven-cloak" class="btn" aria-label="Elven Cloak" title="Elven Cloak" style="padding: 0.5rem; margin-top: 0; background: #4b5563; border: none; cursor: pointer; color: white; width: auto;">👁️‍🗨️</button>
-        <button id="btn-obliviate" class="btn" aria-label="Obliviate" title="Obliviate" style="padding: 0.5rem; margin-top: 0; background: #8b5cf6; border: none; cursor: pointer; color: white; width: auto;">⚡</button>
-        <button id="btn-infinity-snap" class="btn" aria-label="Infinity Snap" title="Infinity Snap" style="padding: 0.5rem; margin-top: 0; background: #f59e0b; border: none; cursor: pointer; color: white; width: auto;">⚠️</button>
-        <button id="btn-logout" class="btn btn-logout" style="padding: 0.5rem 1rem; margin-top: 0; background: #ef4444; color: white; border: none; width: auto; cursor: pointer;">Logout</button>
+      <div class="topbar-actions">
+        <button id="btn-elven-cloak" class="btn" aria-label="Elven Cloak" title="Elven Cloak">👁️‍🗨️</button>
+        <button id="btn-obliviate" class="btn" aria-label="Obliviate" title="Obliviate">⚡</button>
+        <button id="btn-infinity-snap" class="btn" aria-label="Infinity Snap" title="Infinity Snap">⚠️</button>
+        <button id="btn-logout" class="btn btn-logout">Logout</button>
       </div>
     </header>
 
@@ -29,62 +29,62 @@
     <div class="main">
       
       <!-- SIDEBAR: Contact List & Profile -->
-      <aside class="sidebar" style="flex: 0 0 250px; background: #1f2937; border-right: 1px solid #374151; padding: 1rem; display: flex; flex-direction: column; gap: 1.5rem; color: #f3f4f6; box-sizing: border-box;">
+      <aside class="sidebar sidebar-p2p">
         
         <div class="sidebar-section">
-          <h3 class="sidebar-title" style="font-size: 0.8rem; text-transform: uppercase; color: #9ca3af; margin: 0 0 0.5rem 0; letter-spacing: 0.05em;">My Onion Address</h3>
-          <div id="my-onion-display" style="font-size: 0.8rem; font-family: monospace; word-break: break-all; background: #111827; padding: 0.6rem; border-radius: 6px; color: #10b981; border: 1px solid #374151; cursor: pointer;" title="Click to copy">Loading...</div>
+          <h3 class="sidebar-title sidebar-title-p2p">My Onion Address</h3>
+          <div id="my-onion-display" class="onion-display-box" title="Click to copy">Loading...</div>
         </div>
 
-        <div class="sidebar-section" style="border-top: 1px solid #374151; padding-top: 1rem;">
-          <h3 class="sidebar-title" style="font-size: 0.8rem; text-transform: uppercase; color: #9ca3af; margin: 0 0 0.5rem 0; letter-spacing: 0.05em;">Add Contact</h3>
-          <input type="text" id="contact-nickname" placeholder="Nickname" autocomplete="off" style="width: 100%; padding: 0.5rem; font-size: 0.85rem; margin-bottom: 0.5rem; background: #111827; color: white; border: 1px solid #374151; border-radius: 6px;">
-          <input type="text" id="contact-onion" placeholder="xxxx.onion" autocomplete="off" style="width: 100%; padding: 0.5rem; font-size: 0.85rem; margin-bottom: 0.5rem; background: #111827; color: white; border: 1px solid #374151; border-radius: 6px;">
-          <button id="btn-add-contact" style="width: 100%; padding: 0.5rem; font-size: 0.85rem; background: #2f6f5e; color: white; border-radius: 6px; font-weight: 600; cursor: pointer;">Add Peer</button>
+        <div class="sidebar-section sidebar-section-divider">
+          <h3 class="sidebar-title sidebar-title-p2p">Add Contact</h3>
+          <input type="text" id="contact-nickname" class="input-p2p" placeholder="Nickname" autocomplete="off">
+          <input type="text" id="contact-onion" class="input-p2p" placeholder="xxxx.onion" autocomplete="off">
+          <button id="btn-add-contact" class="btn-p2p">Add Peer</button>
         </div>
 
-        <div class="sidebar-section" style="flex: 1 1 auto; border-top: 1px solid #374151; padding-top: 1rem; overflow-y: auto;">
-          <h3 class="sidebar-title" style="font-size: 0.8rem; text-transform: uppercase; color: #9ca3af; margin: 0 0 0.5rem 0; letter-spacing: 0.05em;">Contacts</h3>
-          <ul id="contacts-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.35rem;">
+        <div class="sidebar-section sidebar-section-divider sidebar-section-contacts">
+          <h3 class="sidebar-title sidebar-title-p2p">Contacts</h3>
+          <ul id="contacts-list" class="contacts-list-p2p">
             <!-- Dynamically populated contacts -->
           </ul>
         </div>
       </aside>
 
       <!-- CHAT INTERFACE AREA -->
-      <div class="chat-container" style="flex: 1 1 auto; display: flex; flex-direction: column; background: #111827; color: #f3f4f6; position: relative;">
+      <div class="chat-container chat-container-p2p">
         
         <!-- Welcome Screen (Default) -->
-        <div id="view-welcome" class="view-container active" style="margin: auto; text-align: center; padding: 2rem;">
-          <h2 style="font-weight: 500; color: #f3f4f6;">Zero-Knowledge P2P Portal</h2>
-          <p style="color: #9ca3af; max-width: 400px; margin: 0.5rem auto 1.5rem;">No central server logs your conversations. Add a friend by their Tor Onion address to initiate a secure, end-to-end encrypted direct session.</p>
+        <div id="view-welcome" class="view-container active welcome-p2p">
+          <h2>Zero-Knowledge P2P Portal</h2>
+          <p>No central server logs your conversations. Add a friend by their Tor Onion address to initiate a secure, end-to-end encrypted direct session.</p>
         </div>
 
         <!-- Pending Incoming Acceptance Screen -->
-        <div id="view-pending-incoming" class="view-container" style="margin: auto; text-align: center; padding: 2rem; display: none;">
-          <h2 style="font-weight: 500; color: #f3f4f6; margin-bottom: 0.5rem;">Inbound Contact Request</h2>
-          <p id="pending-request-text" style="color: #9ca3af; margin-bottom: 1.5rem;"></p>
-          <div style="display: flex; gap: 1rem; justify-content: center; max-width: 300px; margin: 0 auto;">
-            <button id="btn-accept-incoming" style="background: #10b981; color: white;">Accept</button>
-            <button id="btn-deny-incoming" style="background: #ef4444; color: white;">Deny</button>
+        <div id="view-pending-incoming" class="view-container pending-p2p">
+          <h2>Inbound Contact Request</h2>
+          <p id="pending-request-text"></p>
+          <div class="pending-actions-p2p">
+            <button id="btn-accept-incoming">Accept</button>
+            <button id="btn-deny-incoming">Deny</button>
           </div>
         </div>
 
         <!-- Pending Outgoing Screen -->
-        <div id="view-pending-outgoing" class="view-container" style="margin: auto; text-align: center; padding: 2rem; display: none;">
-          <h2 style="font-weight: 500; color: #f3f4f6; margin-bottom: 0.5rem;">Handshake Sent</h2>
-          <p style="color: #9ca3af; max-width: 400px; margin: 0 auto 1rem;">Waiting for the peer to accept your request. Make sure both nodes are online over the Tor network.</p>
-          <div style="font-size: 0.85rem; color: #f59e0b; font-style: italic;">Status: Awaiting acceptance...</div>
+        <div id="view-pending-outgoing" class="view-container pending-p2p">
+          <h2>Handshake Sent</h2>
+          <p>Waiting for the peer to accept your request. Make sure both nodes are online over the Tor network.</p>
+          <div class="pending-status-p2p">Status: Awaiting acceptance...</div>
         </div>
 
         <!-- Active Chat Pane -->
-        <section id="view-chat" class="chat-area" style="display: none; height: 100%; width: 100%; flex-direction: column;">
-          <div class="header-controls" style="background: #1f2937; border-bottom: 1px solid #374151; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
-            <div style="color: #f3f4f6; font-weight: 600;" id="chatting-with-name">Chatting with: ...</div>
-            <div style="font-size: 0.8rem; color: #9ca3af;">Three Laws Code: <span class="safety-number" id="ui-safety-number" style="font-family: monospace; color: #10b981;">...</span></div>
-            <div class="disappear-control" style="font-size: 0.8rem; color: #9ca3af;">
+        <section id="view-chat" class="chat-area chat-area-p2p">
+          <div class="header-controls header-controls-p2p">
+            <div id="chatting-with-name">Chatting with: ...</div>
+            <div class="safety-number-info">Three Laws Code: <span class="safety-number" id="ui-safety-number">...</span></div>
+            <div class="disappear-control">
               Tears in Rain: 
-              <select id="disappear-timer" style="background: #111827; color: white; border: 1px solid #374151; padding: 0.2rem; border-radius: 4px; outline: none;">
+              <select id="disappear-timer">
                 <option value="0">Off (Session)</option>
                 <option value="15">15 Seconds</option>
                 <option value="60">1 Minute</option>
@@ -92,19 +92,19 @@
             </div>
           </div>
 
-          <div class="messages" id="messages" style="flex: 1 1 auto; overflow-y: auto; padding: 1.5rem; background: #111827; display: flex; flex-direction: column; gap: 0.75rem;"></div>
+          <div class="messages messages-p2p" id="messages"></div>
 
-          <form class="message-form" id="message-form" style="background: #1f2937; border-top: 1px solid #374151; padding: 1rem; display: flex; gap: 0.75rem;">
-            <input type="text" id="message-input" placeholder="Type a message… (Triple-Esc for Infinity Snap)" autocomplete="off" style="flex: 1 1 auto; padding: 0.75rem; border-radius: 8px; border: 1px solid #374151; background: #111827; color: white; outline: none; margin-bottom: 0;">
-            <button type="submit" id="send-btn" style="width: auto; padding: 0.75rem 1.5rem; background: #10b981; color: white; border-radius: 8px; font-weight: 600; cursor: pointer;">Send</button>
+          <form class="message-form message-form-p2p" id="message-form">
+            <input type="text" id="message-input" class="message-input-p2p" placeholder="Type a message… (Triple-Esc for Infinity Snap)" autocomplete="off">
+            <button type="submit" id="send-btn" class="send-btn-p2p">Send</button>
           </form>
         </section>
 
         <!-- VIEW: ELVEN CLOAK (Calculator stealth cover) -->
-        <div id="view-elven-cloak" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: white; color: black; position: absolute; top: 0; left: 0; width: 100%; z-index: 9999;">
-          <h2 style="margin-bottom: 24px; font-weight: normal; font-family: sans-serif; color: black;">Calculator</h2>
-          <input type="text" value="0" disabled style="width: 300px; text-align: right; font-size: 32px; padding: 12px; margin-bottom: 24px; border: 1px solid #ccc; background: white; color: black;">
-          <button id="btn-elven-cloak-exit" aria-label="Exit Elven Cloak" style="width: 300px; height: 80px; font-size: 32px; background: #d1d5db; color: black; border: none; cursor: pointer; border-radius: 8px;">=</button>
+        <div id="view-elven-cloak">
+          <h2 class="elven-cloak-title">Calculator</h2>
+          <input type="text" class="elven-cloak-input" value="0" disabled>
+          <button id="btn-elven-cloak-exit" aria-label="Exit Elven Cloak">=</button>
         </div>
 
       </div>
