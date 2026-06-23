@@ -1,17 +1,36 @@
 const socket = io({ transports: ['websocket'] });
 
-let myKeys = null;
-let myPublicKeyExported = null;
-let myQueueId = null;
+const socket = io({ transports: ['websocket'] });
 
-let theirQueueId = null;
-let theirPublicKeyExported = null;
-let writeKey = null;
-let readKey = null;
-let myRole = null; // 'A' or 'B'
-let theirRole = null; // 'B' or 'A'
-let sendSeq = 0;
-let recvSeq = 0;
+const chatSession = {
+  myKeys: null,
+  myPublicKeyExported: null,
+  myQueueId: null,
+  theirQueueId: null,
+  theirPublicKeyExported: null,
+  writeKey: null,
+  readKey: null,
+  myRole: null, // 'A' or 'B'
+  theirRole: null, // 'B' or 'A'
+  sendSeq: 0,
+  recvSeq: 0,
+  lastCopiedInviteUrl: null,
+  
+  reset() {
+    this.myKeys = null;
+    this.myPublicKeyExported = null;
+    this.myQueueId = null;
+    this.theirQueueId = null;
+    this.theirPublicKeyExported = null;
+    this.writeKey = null;
+    this.readKey = null;
+    this.myRole = null;
+    this.theirRole = null;
+    this.sendSeq = 0;
+    this.recvSeq = 0;
+    this.lastCopiedInviteUrl = null;
+  }
+};
 
 // DOM Elements
 const viewSetup = document.getElementById('view-setup');
@@ -50,17 +69,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function triggerInfinitySnap() {
-  myKeys = null;
-  writeKey = null;
-  readKey = null;
-  myRole = null;
-  theirRole = null;
-  sendSeq = 0;
-  recvSeq = 0;
-  myPublicKeyExported = null;
-  myQueueId = null;
-  theirQueueId = null;
-  theirPublicKeyExported = null;
+  chatSession.reset();
   if (staticInterval) clearTimeout(staticInterval);
   
   socket.disconnect();
@@ -93,16 +102,16 @@ btnInfinitySnap.addEventListener('click', () => {
 
 btnObliviate.addEventListener('click', () => {
   if (confirm('Cast Obliviate? This will permanently erase the chat history for both you and your peer, and sever the connection instantly.')) {
-    if (writeKey && theirQueueId) {
+    if (chatSession.writeKey && chatSession.theirQueueId) {
       const plaintext = JSON.stringify({ type: 'control', action: 'obliviate' });
-      encryptMessage(writeKey, plaintext, myRole, sendSeq).then(({iv, ciphertext}) => {
-        sendSeq++;
+      encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq).then(({iv, ciphertext}) => {
+        chatSession.sendSeq++;
         const payload = JSON.stringify({
           type: 'message',
           iv,
           ciphertext
         });
-        socket.emit('push_queue', { queue_id: theirQueueId, payload });
+        socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
         triggerInfinitySnap();
       }).catch(err => console.error(err));
     } else {
@@ -123,16 +132,16 @@ function startPsychoHistoricalStatic() {
   if (staticInterval) clearTimeout(staticInterval);
   
   function sendStatic() {
-    if (writeKey && theirQueueId) {
+    if (chatSession.writeKey && chatSession.theirQueueId) {
       const plaintext = JSON.stringify({ type: 'control', action: 'static' });
-      encryptMessage(writeKey, plaintext, myRole, sendSeq).then(({iv, ciphertext}) => {
-        sendSeq++;
+      encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq).then(({iv, ciphertext}) => {
+        chatSession.sendSeq++;
         const payload = JSON.stringify({
           type: 'message',
           iv,
           ciphertext
         });
-        socket.emit('push_queue', { queue_id: theirQueueId, payload });
+        socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
       }).catch(err => console.error("Static error:", err));
     }
     staticInterval = setTimeout(sendStatic, Math.random() * 5000 + 2000);
@@ -179,25 +188,25 @@ socket.on('connect', async () => {
     return;
   }
 
-  if (!myKeys) {
-    myKeys = await generateKeyPair();
-    myPublicKeyExported = await exportPublicKey(myKeys.publicKey);
+  if (!chatSession.myKeys) {
+    chatSession.myKeys = await generateKeyPair();
+    chatSession.myPublicKeyExported = await exportPublicKey(chatSession.myKeys.publicKey);
   }
   
   socket.emit('create_queue');
 });
 
 socket.on('queue_created', ({ queue_id }) => {
-  myQueueId = queue_id;
+  chatSession.myQueueId = queue_id;
   
-  if (theirQueueId && writeKey) {
+  if (chatSession.theirQueueId && chatSession.writeKey) {
     // We reconnected, inform peer of our new queue
     addStatusLine('Reconnected. Updating secure channel...');
     const payload = JSON.stringify({
       type: 'queue_update',
-      new_queue: myQueueId
+      new_queue: chatSession.myQueueId
     });
-    socket.emit('push_queue', { queue_id: theirQueueId, payload });
+    socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
     return;
   }
 
@@ -206,13 +215,13 @@ socket.on('queue_created', ({ queue_id }) => {
     // We are the invitee
     viewSetup.classList.remove('active');
     viewJoin.classList.add('active');
-    theirQueueId = hashParams.get('q');
-    theirPublicKeyExported = decodeURIComponent(hashParams.get('k'));
+    chatSession.theirQueueId = hashParams.get('q');
+    chatSession.theirPublicKeyExported = decodeURIComponent(hashParams.get('k'));
   } else {
     // We are the host
     viewSetup.classList.add('active');
     viewJoin.classList.remove('active');
-    const inviteUrl = `${window.location.origin}/#q=${myQueueId}&k=${encodeURIComponent(myPublicKeyExported)}`;
+    const inviteUrl = `${window.location.origin}/#q=${chatSession.myQueueId}&k=${encodeURIComponent(chatSession.myPublicKeyExported)}`;
     inviteLinkDisplay.textContent = inviteUrl;
     if (typeof QRCode !== 'undefined') {
       qrcodeEl.innerHTML = '';
@@ -243,11 +252,19 @@ socket.on('connect_error', (err) => {
 
 function copyInviteLink() {
   const inviteUrl = inviteLinkDisplay.textContent;
+  chatSession.lastCopiedInviteUrl = inviteUrl;
   navigator.clipboard.writeText(inviteUrl).then(() => {
     alert('Invite link copied!');
-    setTimeout(() => {
-      navigator.clipboard.writeText('');
-      console.log('Clipboard auto-cleared for security.');
+    setTimeout(async () => {
+      try {
+        const currentText = await navigator.clipboard.readText();
+        if (currentText === chatSession.lastCopiedInviteUrl) {
+          await navigator.clipboard.writeText('');
+          console.log('Clipboard auto-cleared for security.');
+        }
+      } catch (err) {
+        console.warn('Could not auto-clear clipboard:', err);
+      }
     }, 30000);
   }).catch(err => console.error("Failed to copy invite link", err));
 }
@@ -284,27 +301,27 @@ btnAcceptInvite.addEventListener('click', async () => {
     viewChat.style.display = 'flex';
     
     // Compute Secret & Safety Number
-    const theirKey = await importPublicKey(theirPublicKeyExported);
+    const theirKey = await importPublicKey(chatSession.theirPublicKeyExported);
     
-    const sessionKeys = await deriveSessionKeys(myKeys.privateKey, theirKey, myPublicKeyExported, theirPublicKeyExported);
-    writeKey = sessionKeys.writeKey;
-    readKey = sessionKeys.readKey;
+    const sessionKeys = await deriveSessionKeys(chatSession.myKeys.privateKey, theirKey, chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
+    chatSession.writeKey = sessionKeys.writeKey;
+    chatSession.readKey = sessionKeys.readKey;
     
-    const isAlice = myPublicKeyExported < theirPublicKeyExported;
-    myRole = isAlice ? 'A' : 'B';
-    theirRole = isAlice ? 'B' : 'A';
-    sendSeq = 0;
-    recvSeq = 0;
+    const isAlice = chatSession.myPublicKeyExported < chatSession.theirPublicKeyExported;
+    chatSession.myRole = isAlice ? 'A' : 'B';
+    chatSession.theirRole = isAlice ? 'B' : 'A';
+    chatSession.sendSeq = 0;
+    chatSession.recvSeq = 0;
     
-    uiSafetyNumber.textContent = await computeSafetyNumber(myPublicKeyExported, theirPublicKeyExported);
+    uiSafetyNumber.textContent = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
 
     // Send Handshake payload to their queue
     const payload = JSON.stringify({
       type: 'handshake',
-      reply_queue: myQueueId,
-      public_key: myPublicKeyExported
+      reply_queue: chatSession.myQueueId,
+      public_key: chatSession.myPublicKeyExported
     });
-    socket.emit('push_queue', { queue_id: theirQueueId, payload });
+    socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
     addStatusLine('Connected to peer. Awaiting their response...');
     history.replaceState(null, null, ' ');
     startPsychoHistoricalStatic();
@@ -326,22 +343,22 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
     
     if (data.type === 'handshake') {
       try {
-        theirQueueId = data.reply_queue;
-        theirPublicKeyExported = data.public_key;
+        chatSession.theirQueueId = data.reply_queue;
+        chatSession.theirPublicKeyExported = data.public_key;
         
-        const theirKey = await importPublicKey(theirPublicKeyExported);
+        const theirKey = await importPublicKey(chatSession.theirPublicKeyExported);
         
-        const sessionKeys = await deriveSessionKeys(myKeys.privateKey, theirKey, myPublicKeyExported, theirPublicKeyExported);
-        writeKey = sessionKeys.writeKey;
-        readKey = sessionKeys.readKey;
+        const sessionKeys = await deriveSessionKeys(chatSession.myKeys.privateKey, theirKey, chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
+        chatSession.writeKey = sessionKeys.writeKey;
+        chatSession.readKey = sessionKeys.readKey;
         
-        const isAlice = myPublicKeyExported < theirPublicKeyExported;
-        myRole = isAlice ? 'A' : 'B';
-        theirRole = isAlice ? 'B' : 'A';
-        sendSeq = 0;
-        recvSeq = 0;
+        const isAlice = chatSession.myPublicKeyExported < chatSession.theirPublicKeyExported;
+        chatSession.myRole = isAlice ? 'A' : 'B';
+        chatSession.theirRole = isAlice ? 'B' : 'A';
+        chatSession.sendSeq = 0;
+        chatSession.recvSeq = 0;
         
-        uiSafetyNumber.textContent = await computeSafetyNumber(myPublicKeyExported, theirPublicKeyExported);
+        uiSafetyNumber.textContent = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
         
         viewSetup.classList.remove('active');
         viewChat.style.display = 'flex';
@@ -355,17 +372,17 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
     }
 
     if (data.type === 'queue_update') {
-       theirQueueId = data.new_queue;
+       chatSession.theirQueueId = data.new_queue;
        addStatusLine('Peer updated secure channel.');
        return;
     }
 
     if (data.type === 'message') {
-      if (!readKey) return;
-      const plaintext = await decryptMessage(readKey, data.iv, data.ciphertext, theirRole, recvSeq);
+      if (!chatSession.readKey) return;
+      const plaintext = await decryptMessage(chatSession.readKey, data.iv, data.ciphertext, chatSession.theirRole, chatSession.recvSeq);
       
       if (plaintext !== null) {
-        recvSeq++;
+        chatSession.recvSeq++;
         try {
           const msgObj = JSON.parse(plaintext);
           if (msgObj.type === 'control') {
@@ -399,18 +416,19 @@ socket.on('push_queue_error', ({ queue_id, error }) => {
 
 formEl.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const text = inputEl.value; // intentionally not trimmed to allow spaces
-  if (!text || !writeKey || !theirQueueId) return;
+  const text = inputEl.value;
+  // Ensure message is not empty or whitespace-only
+  if (!text.trim() || !chatSession.writeKey || !chatSession.theirQueueId) return;
 
   const plaintext = JSON.stringify({ type: 'text', content: text });
-  const { iv, ciphertext } = await encryptMessage(writeKey, plaintext, myRole, sendSeq);
-  sendSeq++;
+  const { iv, ciphertext } = await encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq);
+  chatSession.sendSeq++;
   const payload = JSON.stringify({
     type: 'message',
     iv,
     ciphertext
   });
-  socket.emit('push_queue', { queue_id: theirQueueId, payload });
+  socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
 
   addMessageLine('You', text);
   inputEl.value = '';
