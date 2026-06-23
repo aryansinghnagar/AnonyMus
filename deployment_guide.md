@@ -52,7 +52,7 @@ Render's free tier uses an ephemeral file system, meaning the default local SQLi
    * **Start Command:** `gunicorn --worker-class eventlet -w 1 server:app`
 6. Click **Advanced** and add the following **Environment Variables**:
 
-   * `SECRET\_KEY`: Generate a secure random string (e.g., `openssl rand -hex 32`).
+    * `FLASK_SECRET_KEY`: Generate a secure random string (e.g., `openssl rand -hex 32`).
    * `DATABASE\_URL`: Paste the PostgreSQL connection string from Step 1.
    * `FLASK\_DEBUG`: `False` (forces secure production headers and logging).
 7. Click **Create Web Service**.
@@ -87,7 +87,7 @@ Once the web server is live at `https://yourdomain.com`:
 ### Step 4.1: Configure Server URL
 
 1. Open the Android project in Android Studio (or text editor).
-2. Open [ConfigScreen.kt](AnonyMus_android/app/src/main/java/com/example/privacychat/ui/config/ConfigScreen.kt).
+2. Open [config_screen.kt](AnonyMus_android/app/src/main/java/com/anonymus/app/ui/config/config_screen.kt).
 3. Set the default fallback host and port on lines 20-21:
 
 ```kotlin

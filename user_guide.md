@@ -68,7 +68,7 @@ Once both sides connect, the screen will switch to the **Private Chat** screen, 
 AnonyMus includes several layers of advanced anti-forensics to protect your device and chat.
 
 ### Feature 4.1: Safety Numbers
-At the top of your chat screen, you will see a 12-digit **Safety Number** (e.g., `0452-9843-1250`).
+At the top of your chat screen, you will see a **Safety Number** formatted as chunks of 8 hex digits (e.g., `abcdef12-34567890-...`).
 *   Verify this safety number with your peer out-of-band (e.g., in person or via voice call).
 *   If the numbers match exactly on both devices, it guarantees that no Man-in-the-Middle (MITM) attack is occurring.
 

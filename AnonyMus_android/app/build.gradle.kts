@@ -1,0 +1,104 @@
+plugins {
+  alias(libs.plugins.android.application)
+  alias(libs.plugins.compose.compiler)
+  alias(libs.plugins.kotlin.serialization)
+}
+
+android {
+    namespace = "com.anonymus.app"
+    compileSdk = 36
+    defaultConfig {
+        applicationId = "com.anonymus.app"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0"
+        
+        val appName = project.findProperty("GLOBAL_APP_NAME") as? String ?: "AnonyMus"
+        val urlScheme = project.findProperty("GLOBAL_URL_SCHEME") as? String ?: "anonymus"
+        val urlHostJoin = project.findProperty("GLOBAL_URL_HOST_JOIN") as? String ?: "join"
+        val prefsName = project.findProperty("GLOBAL_PREFS_NAME") as? String ?: "anonymus_prefs"
+
+        manifestPlaceholders["appScheme"] = urlScheme
+        manifestPlaceholders["appHostJoin"] = urlHostJoin
+        resValue("string", "app_name", appName)
+
+        buildConfigField("String", "APP_NAME", "\"$appName\"")
+        buildConfigField("String", "URL_SCHEME", "\"$urlScheme\"")
+        buildConfigField("String", "URL_HOST_JOIN", "\"$urlHostJoin\"")
+        buildConfigField("String", "PREFS_NAME", "\"$prefsName\"")
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildFeatures {
+      compose = true
+      aidl = false
+      buildConfig = true
+      shaders = false
+      resValues = true
+    }
+
+    packaging {
+      resources {
+        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+      }
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+dependencies {
+  val composeBom = platform(libs.androidx.compose.bom)
+  implementation(composeBom)
+  androidTestImplementation(composeBom)
+
+  // Core Android dependencies
+  implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.lifecycle.runtime.ktx)
+  implementation(libs.androidx.activity.compose)
+
+  // Arch Components
+  implementation(libs.androidx.lifecycle.runtime.compose)
+  implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+  // Compose
+  implementation(libs.androidx.compose.ui)
+  implementation(libs.androidx.compose.ui.tooling.preview)
+  implementation(libs.androidx.compose.material3)
+  implementation("androidx.compose.material:material-icons-core")
+  implementation("androidx.compose.material:material-icons-extended")
+  // Tooling
+  debugImplementation(libs.androidx.compose.ui.tooling)
+  // Instrumented tests
+  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+  debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+  // Local tests: jUnit, coroutines, Android runner
+  testImplementation(libs.junit)
+  testImplementation(libs.kotlinx.coroutines.test)
+
+  // Instrumented tests: jUnit rules and runners
+  androidTestImplementation(libs.androidx.test.core)
+  androidTestImplementation(libs.androidx.test.ext.junit)
+  androidTestImplementation(libs.androidx.test.runner)
+  androidTestImplementation(libs.androidx.test.espresso.core)
+
+  // Navigation
+  implementation("androidx.navigation:navigation-compose:2.7.7")
+  implementation(libs.socketio.client)
+  
+  // QR Code generation
+  implementation("com.google.zxing:core:3.5.3")
+  implementation(libs.androidx.security.crypto)
+}

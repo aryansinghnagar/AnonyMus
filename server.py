@@ -25,7 +25,10 @@ load_dotenv()
 
 app = Flask(__name__)
 secret_key = os.environ.get('FLASK_SECRET_KEY')
+debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 if not secret_key:
+    if not debug_mode:
+        raise RuntimeError("FLASK_SECRET_KEY environment variable is required in production mode!")
     app.logger.warning("=" * 80)
     app.logger.warning("WARNING: FLASK_SECRET_KEY environment variable is missing!")
     app.logger.warning("Using ephemeral key. Sessions will NOT persist across restarts/workers!")
@@ -44,7 +47,7 @@ limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
+    storage_uri=os.environ.get('REDIS_URL', 'memory://')
 )
 
 # Security Headers
@@ -105,11 +108,15 @@ def is_rate_limited(username, limit=5, window=1):
         # Clean up old timestamps
         socket_rate_limits[username] = [t for t in socket_rate_limits[username] if now - t < window]
         
-        if len(socket_rate_limits[username]) >= limit:
-            return True
+        is_limited = len(socket_rate_limits[username]) >= limit
+        if not is_limited:
+            socket_rate_limits[username].append(now)
             
-        socket_rate_limits[username].append(now)
-        return False
+        # Clean up empty dictionary keys to prevent memory leak
+        if not socket_rate_limits[username]:
+            del socket_rate_limits[username]
+            
+        return is_limited
 
 # ==========================================
 # 1. HTTP ROUTES
@@ -177,7 +184,10 @@ def handle_connect():
     if 'username' not in session:
         return False
     app.logger.debug(f"Client connected. SID={request.sid}, User={session['username']}")
-    socket_rate_limits[request.sid] = []
+    # Do not clear rate limits on reconnect, only initialize if not present
+    with socket_rate_limits_lock:
+        if request.sid not in socket_rate_limits:
+            socket_rate_limits[request.sid] = []
 
 @socketio.on('create_queue')
 def handle_create_queue():
@@ -218,6 +228,9 @@ def handle_push_queue(data):
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
+    # Clean up rate limit data associated with request.sid
+    with socket_rate_limits_lock:
+        socket_rate_limits.pop(sid, None)
     app.logger.debug(f"Client disconnected. SID={sid}")
 
 # ==========================================
