@@ -8,14 +8,27 @@ from flask import Flask, request, jsonify, render_template, session, redirect, u
 from flask_socketio import SocketIO, emit
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from dotenv import load_dotenv
 
 import database
 import tor_manager
 
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
 
 # Initialize secret key
-secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(32).hex()
+secret_key = os.environ.get('FLASK_SECRET_KEY')
+debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+if not secret_key:
+    if not debug_mode:
+        raise RuntimeError("FLASK_SECRET_KEY environment variable is required in production mode!")
+    app.logger.warning("=" * 80)
+    app.logger.warning("WARNING: FLASK_SECRET_KEY environment variable is missing!")
+    app.logger.warning("Using ephemeral key. Sessions will NOT persist across restarts!")
+    app.logger.warning("=" * 80)
+    secret_key = os.urandom(32).hex()
 app.secret_key = secret_key
 
 app.config.update(
@@ -24,6 +37,39 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Strict',
     MAX_CONTENT_LENGTH=1 * 1024 * 1024  # 1MB limit
 )
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Security Headers
+@app.after_request
+def set_security_headers(response):
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '0'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.socket.io; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "connect-src 'self' ws: wss:;"
+    )
+    
+    if request.path in ['/login', '/register', '/chat']:
+        response.headers['Cache-Control'] = 'no-store, max-age=0'
+        
+    return response
 
 # SocketIO setup (only allows connections from localhost)
 socketio = SocketIO(app, cors_allowed_origins="*", transports=['websocket'])
@@ -86,6 +132,7 @@ def chat():
     return render_template('chat.html')
 
 @app.route('/register', methods=['POST'])
+@limiter.limit("5 per minute")
 def register():
     data = request.get_json()
     if not data:
@@ -97,6 +144,7 @@ def register():
     return jsonify(res)
 
 @app.route('/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def login():
     data = request.get_json()
     if not data:
@@ -283,6 +331,7 @@ def handle_obliviate():
 # 3. PUBLIC TOR P2P ROUTES (Tor Network only)
 # ==========================================
 @app.route('/p2p/handshake', methods=['POST'])
+@limiter.limit("20 per minute")
 def p2p_handshake():
     """Receives contact requests from remote Tor peers."""
     data = request.get_json()
@@ -317,6 +366,7 @@ def p2p_handshake():
     return jsonify({"status": "pending"})
 
 @app.route('/p2p/accept', methods=['POST'])
+@limiter.limit("20 per minute")
 def p2p_accept():
     """Receives handshake acceptance from a peer."""
     data = request.get_json()
@@ -343,6 +393,7 @@ def p2p_accept():
     return jsonify({"status": "accepted"})
 
 @app.route('/p2p/message', methods=['POST'])
+@limiter.limit("30 per minute")
 def p2p_message():
     """Receives encrypted messages from accepted remote peers."""
     data = request.get_json()

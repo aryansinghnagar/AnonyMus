@@ -1,3 +1,4 @@
+(() => {
 const socket = io({ transports: ['websocket'] });
 
 // Local UI State
@@ -381,7 +382,7 @@ async function denyIncomingRequest() {
 formEl.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = inputEl.value;
-  if (!text || !activeContact || !writeKeys[activeContact.onion_address]) return;
+  if (!text.trim() || !activeContact || !writeKeys[activeContact.onion_address]) return;
 
   const onion = activeContact.onion_address;
   const isAlice = myPublicKeyExported < activeContact.peer_public_key;
@@ -552,11 +553,25 @@ async function initApp() {
   myOnionAddress = info.onion_address;
   myLocalUsername = info.local_username;
 
+  let lastCopiedOnion = null;
   myOnionDisplay.textContent = myOnionAddress || "Loading Tor...";
   myOnionDisplay.addEventListener('click', () => {
     if (myOnionAddress) {
-      navigator.clipboard.writeText(myOnionAddress);
-      alert("Onion address copied to clipboard!");
+      lastCopiedOnion = myOnionAddress;
+      navigator.clipboard.writeText(myOnionAddress).then(() => {
+        alert("Onion address copied to clipboard!");
+        setTimeout(async () => {
+          try {
+            const currentText = await navigator.clipboard.readText();
+            if (currentText === lastCopiedOnion) {
+              await navigator.clipboard.writeText('');
+              console.log("Clipboard auto-cleared for security.");
+            }
+          } catch (err) {
+            console.warn("Clipboard auto-clear failed:", err);
+          }
+        }, 30000);
+      }).catch(err => console.error("Failed to copy onion address:", err));
     }
   });
 
@@ -579,3 +594,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = '/';
   });
 });
+})();
