@@ -359,3 +359,92 @@ button:active {
 .safety-number { font-family: monospace; color: #10b981; }
 .disappear-control select { background: #374151; color: white; border: none; padding: 0.25rem; border-radius: 4px; }
 body.blurred { filter: blur(20px); pointer-events: none; }
+
+/* Header Actions */
+.topbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-icon {
+  padding: 0.5rem;
+  margin-top: 0;
+  border: none;
+  cursor: pointer;
+  color: white;
+  width: auto;
+}
+
+.btn-cloak { background: #4b5563; }
+.btn-cloak:hover { background: #374151; }
+
+.btn-obliviate { background: #8b5cf6; }
+.btn-obliviate:hover { background: #7c3aed; }
+
+.btn-snap { background: #f59e0b; }
+.btn-snap:hover { background: #d97706; }
+
+.btn-logout-action {
+  padding: 0.5rem 1rem;
+  margin-top: 0;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  width: auto;
+}
+.btn-logout-action:hover {
+  background: #dc2626;
+}
+
+/* Elven Cloak Calculator Overlay */
+.view-cloak-overlay {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: white;
+  color: black;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 9999;
+}
+
+.cloak-title {
+  margin-bottom: 24px;
+  font-weight: normal;
+  font-family: sans-serif;
+  color: black;
+}
+
+.cloak-input {
+  width: 300px;
+  text-align: right;
+  font-size: 32px;
+  padding: 12px;
+  margin-bottom: 24px;
+  border: 1px solid #ccc;
+  background: white;
+  color: black;
+}
+
+.cloak-btn-exit {
+  width: 300px;
+  height: 80px;
+  font-size: 32px;
+  background: #d1d5db;
+  color: black;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.cloak-btn-exit:hover {
+  background: #9ca3af;
+}
