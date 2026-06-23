@@ -267,6 +267,6 @@ def nuke_database():
     conn.commit()
     conn.close()
 
-def obliviate():
+def reset_app_data():
     """Wipes all traces of the node except the password config (nuke messages and contacts)."""
     nuke_database()
