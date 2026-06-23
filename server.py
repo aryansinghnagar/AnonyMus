@@ -320,11 +320,11 @@ def send_message():
     
     return jsonify({"success": True, "timestamp": timestamp})
 
-@app.route('/api/obliviate', methods=['POST'])
-def handle_obliviate():
+@app.route('/api/reset-data', methods=['POST'])
+def handle_reset_data():
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
-    database.obliviate()
+    database.reset_app_data()
     return jsonify({"success": True})
 
 # ==========================================

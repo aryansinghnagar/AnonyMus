@@ -424,9 +424,9 @@ button:active {
 }
 
 /* =========================================================
-   Elven Cloak (Windows Calculator Mimic)
+   Calculator Cover (Windows Calculator Mimic)
    ========================================================= */
-#view-elven-cloak {
+#view-calculator {
   display: none;
   position: fixed;
   top: 0;
