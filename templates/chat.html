@@ -13,13 +13,14 @@
 
     <header class="topbar">
       <div class="logo-container">
-        <img src="/static/logo.png" alt="AnonyMus Logo" class="topbar-logo">
-        <h1>AnonyMus P2P</h1>
+        <!-- Minimal icon -->
+        <span style="font-size: 16px;">✉️</span>
+        <h1>Workspace Mail</h1>
       </div>
       <div class="topbar-actions">
-        <button id="btn-elven-cloak" class="btn" aria-label="Elven Cloak" title="Elven Cloak">👁️‍🗨️</button>
-        <button id="btn-obliviate" class="btn" aria-label="Obliviate" title="Obliviate">⚡</button>
-        <button id="btn-infinity-snap" class="btn" aria-label="Infinity Snap" title="Infinity Snap">⚠️</button>
+        <button id="btn-elven-cloak" class="btn" aria-label="Calculator" title="Calculator">Calc</button>
+        <button id="btn-obliviate" class="btn" aria-label="Clear View" title="Clear View">Clear</button>
+        <button id="btn-infinity-snap" class="btn" aria-label="Close" title="Close">Close</button>
         <button id="btn-logout" class="btn btn-logout">Logout</button>
       </div>
     </header>
@@ -32,7 +33,7 @@
       <aside class="sidebar sidebar-p2p">
         
         <div class="sidebar-section">
-          <h3 class="sidebar-title sidebar-title-p2p">My Onion Address</h3>
+          <h3 class="sidebar-title sidebar-title-p2p">User ID</h3>
           <div id="my-onion-display" class="onion-display-box" title="Click to copy">Loading...</div>
         </div>
 
@@ -44,7 +45,7 @@
         </div>
 
         <div class="sidebar-section sidebar-section-divider sidebar-section-contacts">
-          <h3 class="sidebar-title sidebar-title-p2p">Contacts</h3>
+          <h3 class="sidebar-title sidebar-title-p2p">Directory</h3>
           <ul id="contacts-list" class="contacts-list-p2p">
             <!-- Dynamically populated contacts -->
           </ul>
@@ -56,8 +57,8 @@
         
         <!-- Welcome Screen (Default) -->
         <div id="view-welcome" class="view-container active welcome-p2p">
-          <h2>Zero-Knowledge P2P Portal</h2>
-          <p>No central server logs your conversations. Add a friend by their Tor Onion address to initiate a secure, end-to-end encrypted direct session.</p>
+          <h2>Workspace Messaging</h2>
+          <p>Select a contact from the directory to begin messaging.</p>
         </div>
 
         <!-- Pending Incoming Acceptance Screen -->
@@ -72,8 +73,8 @@
 
         <!-- Pending Outgoing Screen -->
         <div id="view-pending-outgoing" class="view-container pending-p2p">
-          <h2>Handshake Sent</h2>
-          <p>Waiting for the peer to accept your request. Make sure both nodes are online over the Tor network.</p>
+          <h2>Connecting...</h2>
+          <p>Waiting for network response to establish session.</p>
           <div class="pending-status-p2p">Status: Awaiting acceptance...</div>
         </div>
 
@@ -81,11 +82,11 @@
         <section id="view-chat" class="chat-area chat-area-p2p">
           <div class="header-controls header-controls-p2p">
             <div id="chatting-with-name">Chatting with: ...</div>
-            <div class="safety-number-info">Three Laws Code: <span class="safety-number" id="ui-safety-number">...</span></div>
+            <div class="safety-number-info">Session ID: <span class="safety-number" id="ui-safety-number">...</span></div>
             <div class="disappear-control">
-              Tears in Rain: 
+              Retention: 
               <select id="disappear-timer">
-                <option value="0">Off (Session)</option>
+                <option value="0">Default</option>
                 <option value="15">15 Seconds</option>
                 <option value="60">1 Minute</option>
               </select>
@@ -95,16 +96,52 @@
           <div class="messages messages-p2p" id="messages"></div>
 
           <form class="message-form message-form-p2p" id="message-form">
-            <input type="text" id="message-input" class="message-input-p2p" placeholder="Type a message… (Triple-Esc for Infinity Snap)" autocomplete="off">
+            <input type="text" id="message-input" class="message-input-p2p" placeholder="Type a message..." autocomplete="off">
             <button type="submit" id="send-btn" class="send-btn-p2p">Send</button>
           </form>
         </section>
 
         <!-- VIEW: ELVEN CLOAK (Calculator stealth cover) -->
         <div id="view-elven-cloak">
-          <h2 class="elven-cloak-title">Calculator</h2>
-          <input type="text" class="elven-cloak-input" value="0" disabled>
-          <button id="btn-elven-cloak-exit" aria-label="Exit Elven Cloak">=</button>
+          <div class="calc-container">
+            <div class="calc-header">
+              <span>Calculator</span>
+              <span>Standard</span>
+            </div>
+            <div class="calc-display-history"></div>
+            <input type="text" class="calc-display" value="0" disabled>
+            <div class="calc-keypad">
+              <button class="calc-btn calc-btn-op">%</button>
+              <button class="calc-btn calc-btn-op">CE</button>
+              <button class="calc-btn calc-btn-op">C</button>
+              <button class="calc-btn calc-btn-op">⌫</button>
+
+              <button class="calc-btn calc-btn-op">1/x</button>
+              <button class="calc-btn calc-btn-op">x²</button>
+              <button class="calc-btn calc-btn-op">√x</button>
+              <button class="calc-btn calc-btn-op">÷</button>
+
+              <button class="calc-btn">7</button>
+              <button class="calc-btn">8</button>
+              <button class="calc-btn">9</button>
+              <button class="calc-btn calc-btn-op">×</button>
+
+              <button class="calc-btn">4</button>
+              <button class="calc-btn">5</button>
+              <button class="calc-btn">6</button>
+              <button class="calc-btn calc-btn-op">−</button>
+
+              <button class="calc-btn">1</button>
+              <button class="calc-btn">2</button>
+              <button class="calc-btn">3</button>
+              <button class="calc-btn calc-btn-op">+</button>
+
+              <button class="calc-btn">+/-</button>
+              <button class="calc-btn">0</button>
+              <button class="calc-btn">.</button>
+              <button id="btn-elven-cloak-exit" class="calc-btn calc-btn-eq" aria-label="Exit Elven Cloak">=</button>
+            </div>
+          </div>
         </div>
 
       </div>
