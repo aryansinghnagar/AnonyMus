@@ -253,8 +253,8 @@ def generate_self_signed_cert(cert_path, key_path):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     
     subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "AnonyMus"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "anonymus.local"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Workspace"),
+        x509.NameAttribute(NameOID.COMMON_NAME, "workspace.local"),
     ])
     
     cert = x509.CertificateBuilder().subject_name(
@@ -272,7 +272,7 @@ def generate_self_signed_cert(cert_path, key_path):
     ).add_extension(
         x509.SubjectAlternativeName([
             x509.DNSName("localhost"),
-            x509.DNSName("anonymus.local"),
+            x509.DNSName("workspace.local"),
             x509.IPAddress(socket.inet_aton('127.0.0.1')),
             x509.IPAddress(socket.inet_aton(get_local_ip())),
         ]),
@@ -306,7 +306,7 @@ if __name__ == '__main__':
     bind_host = '127.0.0.1' if debug_mode else '0.0.0.0'
     
     if disable_ssl:
-        print(f"Starting AnonyMus Server on HTTP port {port}...")
+        print(f"Starting Messages Server on HTTP port {port}...")
         socketio.run(app, host=bind_host, port=port, debug=debug_mode)
     else:
         project_root = os.path.dirname(os.path.abspath(__file__))
@@ -316,7 +316,7 @@ if __name__ == '__main__':
         if not (os.path.exists(cert_path) and os.path.exists(key_path)):
             generate_self_signed_cert(cert_path, key_path)
         
-        print(f"Starting AnonyMus Server securely on HTTPS port {port}...")
+        print(f"Starting Messages Server securely on HTTPS port {port}...")
         
         if socketio.server.eio.async_mode == 'threading':
             socketio.run(app, host=bind_host, port=port, debug=debug_mode, ssl_context=(cert_path, key_path), allow_unsafe_werkzeug=debug_mode)

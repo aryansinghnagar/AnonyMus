@@ -74,9 +74,9 @@ fun ChatScreen() {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Room of Requirement", style = MaterialTheme.typography.titleMedium)
+                        Text("Chat", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Three Laws Code: ${ChatManager.safetyNumber ?: "Unknown"}",
+                            "Verification Code: ${ChatManager.safetyNumber ?: "Unknown"}",
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.tertiary
@@ -91,12 +91,12 @@ fun ChatScreen() {
                 actions = {
                     // Elven Cloak Button
                     IconButton(onClick = { covertMode = true }) {
-                        Icon(Icons.Default.VisibilityOff, contentDescription = "Elven Cloak", tint = MaterialTheme.colorScheme.onPrimary)
+                        Icon(Icons.Default.VisibilityOff, contentDescription = "Calculator", tint = MaterialTheme.colorScheme.onPrimary)
                     }
 
                     // Obliviate Button
                     IconButton(onClick = { ChatManager.obliviate() }) {
-                        Icon(Icons.Default.FlashOn, contentDescription = "Obliviate", tint = Color(0xFF8B5CF6))
+                        Icon(Icons.Default.FlashOn, contentDescription = "Clear Chat Data", tint = Color(0xFF8B5CF6))
                     }
 
                     // Tears in Rain (Disappearing Messages)
@@ -119,7 +119,7 @@ fun ChatScreen() {
 
                     // Infinity Snap (Panic Button)
                     IconButton(onClick = { ChatManager.infinitySnap() }) {
-                        Icon(Icons.Default.Warning, contentDescription = "Infinity Snap", tint = Color(0xFFF59E0B))
+                        Icon(Icons.Default.Warning, contentDescription = "Close Chat", tint = Color(0xFFF59E0B))
                     }
                 }
             )
