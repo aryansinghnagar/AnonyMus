@@ -1,126 +1,100 @@
-# Setup Guide — AnonyMus Centralized Server & Clients
+# Setup & Deployment Guide (Centralized Architecture)
 
-This guide details how to install, configure, and launch the AnonyMus zero-knowledge relay server and connect using the Web or Android clients.
-
----
-
-## 1. Relay Server Installation
-
-### Prerequisites
-- **Python 3.11+**
-- **Git**
-- **Docker & Docker Compose** (Optional, for containerized run)
-
-### Local Virtualenv Setup
-
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/aryansinghnagar/AnonyMus.git
-   cd AnonyMus
-   ```
-
-2. **Create and Activate a Virtual Environment:**
-   - **Windows (PowerShell):**
-     ```powershell
-     python -m venv venv
-     .\venv\Scripts\Activate.ps1
-     ```
-     *(Note: If you receive an execution policy error, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process` first, then run the activation script again).*
-   - **macOS / Linux:**
-     ```bash
-     python3 -m venv venv
-     source venv/bin/activate
-     ```
-
-3. **Install Dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Environment Configuration:**
-   - Copy the `.env.example` file and rename it to `.env`.
-   - Open `.env` in a text editor and customize the parameters:
-     ```text
-     FLASK_SECRET_KEY=your-secure-random-key-here
-     FLASK_DEBUG=False
-     DISABLE_SSL=False
-     ```
-     *(Note: Keep `DISABLE_SSL=False` to automatically generate self-signed SSL/TLS certificates and serve the web client securely over HTTPS).*
-
-5. **Start the Relay Server:**
-   ```bash
-   python server.py
-   ```
-   The server will start and output the local HTTPS URL (default: `https://127.0.0.1:5000`). Navigate to this address in your web browser to access the chat web client.
+This document provides technical instructions to set up, configure, and execute the centralized server relay and compile the Android client.
 
 ---
 
-## 2. Docker Deployment
+## 1. System Requirements
 
-To launch the server along with dedicated PostgreSQL and Redis instances in isolated Docker containers:
+### Backend Relay
+- **Python**: Version 3.11 or newer
+- **Operating System**: Linux, macOS, or Windows (10/11)
+- **Containerization (Optional)**: Docker Engine & Docker Compose
 
-1. **Build and start the container group:**
+### Android Client
+- **JDK**: Version 17
+- **Android SDK**: API level 34 (Android 14) compile SDK, API level 26 (Android 8.0) minimum SDK
+
+---
+
+## 2. Server Deployment (Virtual Environment)
+
+### A. Clone and Setup Environment
+Clone the repository:
+```bash
+git clone https://github.com/aryansinghnagar/AnonyMus.git
+cd AnonyMus
+```
+
+Create a Python virtual environment and activate it:
+```bash
+# Windows
+python -m venv venv
+.\venv\Scripts\activate
+
+# Linux / macOS
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Install application dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+### B. Configuration
+Create a `.env` file from the template:
+```bash
+cp .env.example .env
+```
+
+Configure the environment variables:
+- `FLASK_SECRET_KEY`: High-entropy key used to secure Flask sessions.
+- `DISABLE_SSL`: Set to `True` only when running behind a local reverse proxy or Tor Hidden Service where SSL is terminated externally. Set to `False` in production.
+- `DATABASE_URL`: Set to a PostgreSQL connection URI (e.g., `postgresql://user:pass@host:5432/db`) to switch from SQLite to PostgreSQL. Leave empty to use SQLite (`users.db`).
+- `REDIS_URL`: Connection string for Redis session/limiter caching (e.g., `redis://localhost:6379`). Leave empty to use in-memory caching.
+- `CORS_ORIGINS`: Comma-separated list of allowed client origins.
+
+### C. Run the Relay Server
+To run the server locally:
+```bash
+python server.py
+```
+By default, the server runs on `http://127.0.0.1:8080`.
+
+---
+
+## 3. Server Deployment (Docker Containerization)
+
+To spin up the centralized relay using Docker Compose (which configures the Flask server, PostgreSQL database, and Redis cache):
+```bash
+docker-compose up --build -d
+```
+The Flask relay will expose port `8080` to the host machine.
+
+---
+
+## 4. Running Automated Tests
+
+A comprehensive suite of unit and integration tests is included. To execute backend unit tests:
+```bash
+python -m unittest discover tests
+```
+
+---
+
+## 5. Android Client Compilation
+
+The Android client is built using Gradle.
+
+1. Open the `AnonyMus_android/` directory in Android Studio.
+2. Ensure you have JDK 17 configured as the Gradle JDK.
+3. Build the project or execute tests via the command line:
    ```bash
-   docker-compose up --build
+   cd AnonyMus_android
+   # Linux / macOS
+   ./gradlew test assembleDebug
+   # Windows
+   .\gradlew.bat test assembleDebug
    ```
-2. **Accessing the server:**
-   The Flask app container is exposed on port `5000` on your host machine.
-
----
-
-## 3. Hosting as a Tor Hidden Service
-
-Hosting your server as a Tor Hidden Service (`.onion`) hides the server's IP address, protects client metadata, and bypasses router NAT firewalls without port forwarding.
-
-1. **Install Tor:**
-   - **Debian/Ubuntu:** `sudo apt install tor`
-   - **macOS:** `brew install tor`
-   - **Windows:** Download the **Tor Expert Bundle** or **Tor Browser** from [torproject.org](https://www.torproject.org/).
-
-2. **Configure Tor Service (`torrc`):**
-   Append the configuration to your `torrc` file:
-   - **Linux / macOS (`/etc/tor/torrc`):**
-     ```text
-     HiddenServiceDir /var/lib/tor/anonymus_hidden_service/
-     HiddenServicePort 80 127.0.0.1:5000
-     ```
-   - **Windows:**
-     ```text
-     HiddenServiceDir C:/Users/Public/anonymus_hidden_service/
-     HiddenServicePort 80 127.0.0.1:5000
-     ```
-
-3. **Configure AnonyMus for Tor:**
-   Since Tor Hidden Services provide E2E encryption out of the box, you must disable the application's internal TLS to prevent handshake conflicts. Set this env var in your `.env` file:
-   ```text
-   DISABLE_SSL=True
-   ```
-   Restart the Flask server (`python server.py`) for this to take effect.
-
-4. **Restart Tor:**
-   - **Linux:** `sudo systemctl restart tor`
-   - **macOS:** `brew services restart tor`
-   - **Windows:** Restart the Tor process or browser.
-
-5. **Get your Address:**
-   Read the hostname generated by Tor:
-   - **Linux/macOS:** `sudo cat /var/lib/tor/anonymus_hidden_service/hostname`
-   - **Windows:** Open `C:\Users\Public\anonymus_hidden_service\hostname` in Notepad.
-   Share this `.onion` address with your chat peer.
-
----
-
-## 4. Android Client Setup
-
-The Android client is built with Kotlin and Jetpack Compose and is located inside the `/AnonyMus_android` directory.
-
-### Build and Install
-1. Open the `/AnonyMus_android` folder in **Android Studio**.
-2. Sync the project with Gradle.
-3. Build and run the app on a physical device or emulator.
-
-### Configuration
-1. **Server Host / IP**: Enter the IP address of the running Flask relay server.
-2. **mDNS Auto-Discovery**: If you are on the same local Wi-Fi network, click **Auto-Detect Local Server** to scan and resolve the server IP using multicast DNS (or subnet scanning).
-3. **Biometric Security**: Toggle **Enable Biometric App Lock** to restrict local access to the application using strong biometric authentication (or PIN/Pattern backup).
-4. **Certificate Verification**: When connecting over HTTPS with a self-signed certificate, the app pins the certificate on first use (TOFU). If the certificate changes, you will receive a security error. You can manually reset or clear the pinned cert hash on this screen.
+4. The generated APK will be available under `app/build/outputs/apk/debug/`.
