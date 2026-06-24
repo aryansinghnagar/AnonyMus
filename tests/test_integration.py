@@ -18,7 +18,7 @@ class TestIntegration(unittest.TestCase):
         server.app.config['TESTING'] = True
         cls.client = server.app.test_client()
         database.init_db()
-        database.register_user('testuser', 'password')
+        database.register_user('testuser', 'TestPass123!')
         
     @classmethod
     def tearDownClass(cls):
@@ -27,7 +27,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_auth_flow_and_socket(self):
         # Test login
-        res = self.client.post('/login', json={'username': 'testuser', 'password': 'password'})
+        res = self.client.post('/login', json={'username': 'testuser', 'password': 'TestPass123!'})
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()['success'])
         

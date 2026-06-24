@@ -24,7 +24,7 @@ class TestDatabaseAuth(unittest.TestCase):
             os.remove(database.DB_FILE)
 
     def test_1_register_user(self):
-        res = database.register_user('Alice', 'password123')
+        res = database.register_user('Alice', 'Password123!')
         self.assertTrue(res.get('success'))
         
         # Test duplicate (case-insensitive)
@@ -32,7 +32,7 @@ class TestDatabaseAuth(unittest.TestCase):
         self.assertEqual(res.get('error'), 'Username already taken.')
 
     def test_2_login_user(self):
-        res = database.login_user('alice', 'password123')
+        res = database.login_user('alice', 'Password123!')
         self.assertTrue(res.get('success'))
         
         res = database.login_user('ALICE', 'wrongpassword')

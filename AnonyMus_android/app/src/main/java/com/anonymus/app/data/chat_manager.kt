@@ -86,6 +86,8 @@ class ChatManager(
     // Socket.IO
     private var socket: Socket? = null
     private var okHttpClient: OkHttpClient? = null
+    private var cachedOkHttpClient: OkHttpClient? = null
+    private val chainKeyLock = Any()
 
     // Compose state
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
@@ -105,83 +107,84 @@ class ChatManager(
         val host = prefs.host
         val trustSelfSigned = prefs.trustSelfSigned
 
-        if (okHttpClient == null) {
-            val builder = OkHttpClient.Builder()
-            if (trustSelfSigned) {
-                try {
-                    val trustManager = object : X509TrustManager {
-                        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+        cachedOkHttpClient?.let { return it }
+
+        val builder = OkHttpClient.Builder()
+        if (trustSelfSigned) {
+            try {
+                val trustManager = object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    
+                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                        if (chain.isNullOrEmpty()) {
+                            throw java.security.cert.CertificateException("Server presented an empty certificate chain")
+                        }
+                        val cert = chain[0]
+                        val spkiBytes = cert.publicKey.encoded
+                        val digest = java.security.MessageDigest.getInstance("SHA-256")
+                        val hash = digest.digest(spkiBytes)
+                        val base64Hash = java.util.Base64.getEncoder().encodeToString(hash)
                         
-                        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                            if (chain.isNullOrEmpty()) {
-                                throw java.security.cert.CertificateException("Server presented an empty certificate chain")
-                            }
-                            val cert = chain[0]
-                            val spkiBytes = cert.publicKey.encoded
-                            val digest = java.security.MessageDigest.getInstance("SHA-256")
-                            val hash = digest.digest(spkiBytes)
-                            val base64Hash = java.util.Base64.getEncoder().encodeToString(hash)
-                            
-                            val pinnedFingerprint = prefs.serverCertFingerprint
-                            if (pinnedFingerprint == null) {
-                                prefs.serverCertFingerprint = base64Hash
-                                Log.i(TAG, "TOFU: Pinned new server public key SPKI hash: $base64Hash")
-                            } else {
-                                if (pinnedFingerprint != base64Hash) {
-                                    throw java.security.cert.CertificateException(
-                                        "Certificate public key fingerprint mismatch! Expected: $pinnedFingerprint, Got: $base64Hash. Possible Man-in-the-Middle attack!"
-                                    )
-                                }
+                        val pinnedFingerprint = prefs.serverCertFingerprint
+                        if (pinnedFingerprint == null) {
+                            prefs.serverCertFingerprint = base64Hash
+                            Log.i(TAG, "TOFU: Pinned new server public key SPKI hash: $base64Hash")
+                        } else {
+                            if (pinnedFingerprint != base64Hash) {
+                                throw java.security.cert.CertificateException(
+                                    "Certificate public key fingerprint mismatch! Expected: $pinnedFingerprint, Got: $base64Hash. Possible Man-in-the-Middle attack!"
+                                )
                             }
                         }
-                        
-                        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                     }
-
-                    val sslContext = SSLContext.getInstance("TLS")
-                    sslContext.init(null, arrayOf<TrustManager>(trustManager), java.security.SecureRandom())
-                    builder.sslSocketFactory(sslContext.socketFactory, trustManager)
                     
-                    builder.hostnameVerifier { hostname, _ ->
-                        hostname == host || hostname == "localhost" || hostname == "127.0.0.1"
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to build TOFU SSLSocketFactory", e)
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                }
+
+                val sslContext = SSLContext.getInstance("TLS")
+                sslContext.init(null, arrayOf<TrustManager>(trustManager), java.security.SecureRandom())
+                builder.sslSocketFactory(sslContext.socketFactory, trustManager)
+                
+                builder.hostnameVerifier { hostname, _ ->
+                    hostname == host || hostname == "localhost" || hostname == "127.0.0.1"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to build TOFU SSLSocketFactory", e)
+            }
+        }
+        
+        builder.cookieJar(object : CookieJar {
+            private val cookieStore = HashMap<String, MutableList<Cookie>>()
+            
+            init {
+                val savedCookie = prefs.sessionCookie
+                if (savedCookie != null) {
+                    val cookie = Cookie.Builder()
+                        .domain(host ?: "localhost")
+                        .path("/")
+                        .name("session")
+                        .value(savedCookie)
+                        .build()
+                    cookieStore[host ?: "localhost"] = mutableListOf(cookie)
+                }
+            }
+
+            override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+                cookieStore[url.host()] = cookies.toMutableList()
+                val sessionCookie = cookies.find { it.name() == "session" }
+                if (sessionCookie != null) {
+                    prefs.sessionCookie = sessionCookie.value()
                 }
             }
             
-            builder.cookieJar(object : CookieJar {
-                private val cookieStore = HashMap<String, MutableList<Cookie>>()
-                
-                init {
-                    val savedCookie = prefs.sessionCookie
-                    if (savedCookie != null) {
-                        val cookie = Cookie.Builder()
-                            .domain(host ?: "localhost")
-                            .path("/")
-                            .name("session")
-                            .value(savedCookie)
-                            .build()
-                        cookieStore[host ?: "localhost"] = mutableListOf(cookie)
-                    }
-                }
-
-                override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                    cookieStore[url.host()] = cookies.toMutableList()
-                    val sessionCookie = cookies.find { it.name() == "session" }
-                    if (sessionCookie != null) {
-                        prefs.sessionCookie = sessionCookie.value()
-                    }
-                }
-                
-                override fun loadForRequest(url: HttpUrl): List<Cookie> {
-                    return cookieStore[url.host()] ?: ArrayList()
-                }
-            })
-            
-            okHttpClient = builder.build()
-        }
-        return okHttpClient!!
+            override fun loadForRequest(url: HttpUrl): List<Cookie> {
+                return cookieStore[url.host()] ?: ArrayList()
+            }
+        })
+        
+        val client = builder.build()
+        cachedOkHttpClient = client
+        return client
     }
 
     fun isLoggedIn(): Boolean {
@@ -198,10 +201,12 @@ class ChatManager(
         theirPublicKeyExported = null
         
         // RAM Sterilization
-        sendChainKey?.fill(0)
-        recvChainKey?.fill(0)
-        sendChainKey = null
-        recvChainKey = null
+        synchronized(chainKeyLock) {
+            sendChainKey?.fill(0)
+            recvChainKey?.fill(0)
+            sendChainKey = null
+            recvChainKey = null
+        }
         myRole = null
         theirRole = null
         sendSeq = 0
@@ -233,28 +238,30 @@ class ChatManager(
     }
     
     fun obliviate() {
-        if (sendChainKey != null && theirQueueId != null) {
-            try {
-                val payloadObj = JSONObject().apply {
-                    put("type", "control")
-                    put("action", "obliviate")
-                }
-                val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
-                val msgKey = derived.first
-                sendChainKey = derived.second
+        synchronized(chainKeyLock) {
+            if (sendChainKey != null && theirQueueId != null) {
+                try {
+                    val payloadObj = JSONObject().apply {
+                        put("type", "control")
+                        put("action", "obliviate")
+                    }
+                    val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
+                    val msgKey = derived.first
+                    sendChainKey = derived.second
 
-                val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
-                sendSeq++
-                val payload = JSONObject().apply {
-                    put("type", "message")
-                    put("iv", encrypted.iv)
-                    put("ciphertext", encrypted.ciphertext)
-                }
-                socket?.emit("push_queue", JSONObject().apply {
-                    put("queue_id", theirQueueId)
-                    put("payload", payload.toString())
-                })
-            } catch (e: Exception) {}
+                    val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
+                    sendSeq++
+                    val payload = JSONObject().apply {
+                        put("type", "message")
+                        put("iv", encrypted.iv)
+                        put("ciphertext", encrypted.ciphertext)
+                    }
+                    socket?.emit("push_queue", JSONObject().apply {
+                        put("queue_id", theirQueueId)
+                        put("payload", payload.toString())
+                    })
+                } catch (e: Exception) {}
+            }
         }
         infinitySnap()
     }
@@ -310,30 +317,32 @@ class ChatManager(
     private fun startAdaptiveKeepAlive() {
         mainHandler.post(object : Runnable {
             override fun run() {
-                if (sendChainKey != null && theirQueueId != null) {
-                    try {
-                        val payloadObj = JSONObject().apply {
-                            put("type", "control")
-                            put("action", "heartbeat")
+                synchronized(chainKeyLock) {
+                    if (sendChainKey != null && theirQueueId != null) {
+                        try {
+                            val payloadObj = JSONObject().apply {
+                                put("type", "control")
+                                put("action", "heartbeat")
+                            }
+                            val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
+                            val msgKey = derived.first
+                            sendChainKey = derived.second
+                            
+                            val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
+                            sendSeq++
+                            
+                            val payload = JSONObject().apply {
+                                put("type", "message")
+                                put("iv", encrypted.iv)
+                                put("ciphertext", encrypted.ciphertext)
+                            }
+                            socket?.emit("push_queue", JSONObject().apply {
+                                put("queue_id", theirQueueId)
+                                put("payload", payload.toString())
+                            })
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Keep-alive error", e)
                         }
-                        val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
-                        val msgKey = derived.first
-                        sendChainKey = derived.second
-                        
-                        val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
-                        sendSeq++
-                        
-                        val payload = JSONObject().apply {
-                            put("type", "message")
-                            put("iv", encrypted.iv)
-                            put("ciphertext", encrypted.ciphertext)
-                        }
-                        socket?.emit("push_queue", JSONObject().apply {
-                            put("queue_id", theirQueueId)
-                            put("payload", payload.toString())
-                        })
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Keep-alive error", e)
                     }
                 }
                 
@@ -356,7 +365,10 @@ class ChatManager(
             return
         }
 
-        if (socket != null) return
+        if (socket != null && socket?.connected() == true) return
+        socket?.disconnect()
+        socket?.off()
+        socket = null
 
         _connectionStatus.value = ConnectionStatus.CONNECTING
 
@@ -428,7 +440,7 @@ class ChatManager(
                 val data = args.firstOrNull() as? JSONObject ?: return@on
                 val error = data.optString("error")
                 if (error == "recipient_offline") {
-                    appendMessage("Peer", ChatMessage("System", "[Message delivery failed: Peer is offline]"))
+                    appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Message delivery failed: Peer is offline]"))
                 }
             }
             
@@ -451,8 +463,10 @@ class ChatManager(
                             myPublicKeyExported!!,
                             theirPublicKeyExported!!
                         )
-                        sendChainKey = sessionKeys.writeKey
-                        recvChainKey = sessionKeys.readKey
+                        synchronized(chainKeyLock) {
+                            sendChainKey = sessionKeys.writeKey
+                            recvChainKey = sessionKeys.readKey
+                        }
                         
                         val isAlice = myPublicKeyExported!! < theirPublicKeyExported!!
                         myRole = if (isAlice) "A" else "B"
@@ -475,27 +489,33 @@ class ChatManager(
                         socket?.emit("create_queue")
 
                         _isSessionActive.value = true
-                        appendMessage("Peer", ChatMessage("Peer", "[Connected Securely]"))
+                        appendMessage(theirQueueId ?: "Peer", ChatMessage("Peer", "[Connected Securely]"))
                         startAdaptiveKeepAlive()
                         
                     } else if (type == "queue_update") {
                         theirQueueId = payload.optString("new_queue")
-                        appendMessage("Peer", ChatMessage("System", "[Peer updated secure channel]"))
+                        appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Peer updated secure channel]"))
                         
                     } else if (type == "message") {
-                        if (recvChainKey == null) return@on
+                        val hasRecvKey = synchronized(chainKeyLock) { recvChainKey != null }
+                        if (!hasRecvKey) return@on
                         val iv = payload.optString("iv")
                         val ciphertext = payload.optString("ciphertext")
                         
                         // Derive message decryption key from chain
-                        val derived = cryptoProvider.deriveChainKeys(recvChainKey!!)
-                        val msgKey = derived.first
-                        
-                        val decrypted = cryptoProvider.decryptMessage(msgKey, iv, ciphertext, theirRole!!, recvSeq, sessionId)
-                        if (decrypted != null) {
-                            recvChainKey = derived.second
-                            recvSeq++
+                        var decrypted: String? = null
+                        synchronized(chainKeyLock) {
+                            val derived = cryptoProvider.deriveChainKeys(recvChainKey!!)
+                            val msgKey = derived.first
                             
+                            decrypted = cryptoProvider.decryptMessage(msgKey, iv, ciphertext, theirRole!!, recvSeq, sessionId)
+                            if (decrypted != null) {
+                                recvChainKey = derived.second
+                                recvSeq++
+                            }
+                        }
+                        
+                        if (decrypted != null) {
                             val msgObj = JSONObject(decrypted)
                             val msgType = msgObj.optString("type")
                             if (msgType == "control") {
@@ -508,49 +528,51 @@ class ChatManager(
                                 if (action == "timer_set") {
                                     val duration = msgObj.optInt("duration_seconds")
                                     _disappearTimerSeconds.value = duration
-                                    appendMessage("Peer", ChatMessage("System", "[Peer set disappearing messages to ${if (duration > 0) "$duration seconds" else "Off"}]"))
+                                    appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Peer set disappearing messages to ${if (duration > 0) "$duration seconds" else "Off"}]"))
                                     
                                     // Reply with timer_ack
-                                    if (sendChainKey != null && theirQueueId != null) {
-                                        try {
-                                            val payloadObj = JSONObject().apply {
-                                                put("type", "control")
-                                                put("action", "timer_ack")
-                                                put("duration_seconds", duration)
-                                                put("mode", "session")
-                                            }
-                                            val derivedSend = cryptoProvider.deriveChainKeys(sendChainKey!!)
-                                            val sendMsgKey = derivedSend.first
-                                            sendChainKey = derivedSend.second
-                                            
-                                            val encrypted = cryptoProvider.encryptMessage(sendMsgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
-                                            sendSeq++
-                                            
-                                            val payloadAck = JSONObject().apply {
-                                                put("type", "message")
-                                                put("iv", encrypted.iv)
-                                                put("ciphertext", encrypted.ciphertext)
-                                            }
-                                            socket?.emit("push_queue", JSONObject().apply {
-                                                put("queue_id", theirQueueId)
-                                                put("payload", payloadAck.toString())
-                                            })
-                                        } catch (e: Exception) {}
+                                    synchronized(chainKeyLock) {
+                                        if (sendChainKey != null && theirQueueId != null) {
+                                            try {
+                                                val payloadObj = JSONObject().apply {
+                                                    put("type", "control")
+                                                    put("action", "timer_ack")
+                                                    put("duration_seconds", duration)
+                                                    put("mode", "session")
+                                                }
+                                                val derivedSend = cryptoProvider.deriveChainKeys(sendChainKey!!)
+                                                val sendMsgKey = derivedSend.first
+                                                sendChainKey = derivedSend.second
+                                                
+                                                val encrypted = cryptoProvider.encryptMessage(sendMsgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
+                                                sendSeq++
+                                                
+                                                val payloadAck = JSONObject().apply {
+                                                    put("type", "message")
+                                                    put("iv", encrypted.iv)
+                                                    put("ciphertext", encrypted.ciphertext)
+                                                }
+                                                socket?.emit("push_queue", JSONObject().apply {
+                                                    put("queue_id", theirQueueId)
+                                                    put("payload", payloadAck.toString())
+                                                })
+                                            } catch (e: Exception) {}
+                                        }
                                     }
                                     return@on
                                 }
                                 if (action == "timer_ack") {
                                     val duration = msgObj.optInt("duration_seconds")
                                     _disappearTimerSeconds.value = duration
-                                    appendMessage("Peer", ChatMessage("System", "[Peer confirmed disappearing messages timer: ${if (duration > 0) "$duration seconds" else "Off"}]"))
+                                    appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Peer confirmed disappearing messages timer: ${if (duration > 0) "$duration seconds" else "Off"}]"))
                                     return@on
                                 }
                             } else if (msgType == "text") {
                                 val content = msgObj.optString("content")
-                                appendMessage("Peer", ChatMessage("Peer", content, isDecryptedSuccessfully = true))
+                                appendMessage(theirQueueId ?: "Peer", ChatMessage("Peer", content, isDecryptedSuccessfully = true))
                             }
                         } else {
-                            appendMessage("Peer", ChatMessage("Peer", "[encrypted message — could not decrypt]", isDecryptedSuccessfully = false))
+                            appendMessage(theirQueueId ?: "Peer", ChatMessage("Peer", "[encrypted message — could not decrypt]", isDecryptedSuccessfully = false))
                         }
                     }
                 } catch (e: Exception) {
@@ -596,8 +618,10 @@ class ChatManager(
                 myPublicKeyExported!!,
                 theirPublicKeyExported!!
             )
-            sendChainKey = sessionKeys.writeKey
-            recvChainKey = sessionKeys.readKey
+            synchronized(chainKeyLock) {
+                sendChainKey = sessionKeys.writeKey
+                recvChainKey = sessionKeys.readKey
+            }
             
             val isAlice = myPublicKeyExported!! < theirPublicKeyExported!!
             myRole = if (isAlice) "A" else "B"
@@ -626,7 +650,7 @@ class ChatManager(
                 put("peer_queue", theirQueueId)
             })
             
-            appendMessage("Peer", ChatMessage("Peer", "[Sent handshake to Peer]"))
+            appendMessage(theirQueueId ?: "Peer", ChatMessage("Peer", "[Sent handshake to Peer]"))
             startAdaptiveKeepAlive()
             _isSessionActive.value = true
         } catch(e: Exception) {
@@ -635,57 +659,21 @@ class ChatManager(
     }
 
     fun sendPrivateMessage(text: String): Boolean {
-        if (sendChainKey == null || theirQueueId == null) {
-            Log.w(TAG, "Cannot send: no write key or target queue")
-            return false
-        }
-
-        try {
-            val payloadObj = JSONObject().apply {
-                put("type", "text")
-                put("content", text)
+        synchronized(chainKeyLock) {
+            if (sendChainKey == null || theirQueueId == null) {
+                Log.w(TAG, "Cannot send: no write key or target queue")
+                return false
             }
-            val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
-            val msgKey = derived.first
-            sendChainKey = derived.second
 
-            val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
-            sendSeq++
-            
-            val payload = JSONObject().apply {
-                put("type", "message")
-                put("iv", encrypted.iv)
-                put("ciphertext", encrypted.ciphertext)
-            }
-            
-            socket?.emit("push_queue", JSONObject().apply {
-                put("queue_id", theirQueueId)
-                put("payload", payload.toString())
-            })
-
-            val chatMsg = ChatMessage(sender = "You", text = text)
-            appendMessage("Peer", chatMsg)
-            return true
-        } catch (e: Exception) {
-            Log.e(TAG, "Encryption/Transmission failure", e)
-            return false
-        }
-    }
-
-    fun setDisappearingTimer(seconds: Int) {
-        _disappearTimerSeconds.value = seconds
-        if (sendChainKey != null && theirQueueId != null) {
             try {
                 val payloadObj = JSONObject().apply {
-                    put("type", "control")
-                    put("action", "timer_set")
-                    put("duration_seconds", seconds)
-                    put("mode", "session")
+                    put("type", "text")
+                    put("content", text)
                 }
                 val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
                 val msgKey = derived.first
                 sendChainKey = derived.second
-                
+
                 val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
                 sendSeq++
                 
@@ -694,12 +682,52 @@ class ChatManager(
                     put("iv", encrypted.iv)
                     put("ciphertext", encrypted.ciphertext)
                 }
+                
                 socket?.emit("push_queue", JSONObject().apply {
                     put("queue_id", theirQueueId)
                     put("payload", payload.toString())
                 })
+
+                val chatMsg = ChatMessage(sender = "You", text = text)
+                appendMessage(theirQueueId ?: "Peer", chatMsg)
+                return true
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to negotiate timer", e)
+                Log.e(TAG, "Encryption/Transmission failure", e)
+                return false
+            }
+        }
+    }
+
+    fun setDisappearingTimer(seconds: Int) {
+        _disappearTimerSeconds.value = seconds
+        synchronized(chainKeyLock) {
+            if (sendChainKey != null && theirQueueId != null) {
+                try {
+                    val payloadObj = JSONObject().apply {
+                        put("type", "control")
+                        put("action", "timer_set")
+                        put("duration_seconds", seconds)
+                        put("mode", "session")
+                    }
+                    val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
+                    val msgKey = derived.first
+                    sendChainKey = derived.second
+                    
+                    val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
+                    sendSeq++
+                    
+                    val payload = JSONObject().apply {
+                        put("type", "message")
+                        put("iv", encrypted.iv)
+                        put("ciphertext", encrypted.ciphertext)
+                    }
+                    socket?.emit("push_queue", JSONObject().apply {
+                        put("queue_id", theirQueueId)
+                        put("payload", payload.toString())
+                    })
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to negotiate timer", e)
+                }
             }
         }
     }
