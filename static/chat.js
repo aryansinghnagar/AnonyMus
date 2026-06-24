@@ -222,10 +222,10 @@ async function loadMessages(onion) {
         if (decrypted !== null) {
           const envelope = JSON.parse(decrypted);
           if (envelope.type === 'text') {
-            addMessageLine(msg.sender === 'me' ? 'You' : activeContact.nickname, envelope.content, msg.timestamp);
+            addMessageLine(msg.sender === 'me' ? 'You' : activeContact.nickname, envelope.content, msg.timestamp, true);
           }
         } else {
-          addMessageLine(msg.sender === 'me' ? 'You' : activeContact.nickname, '[Decryption Failed - Session Desynced]', msg.timestamp);
+          addMessageLine(msg.sender === 'me' ? 'You' : activeContact.nickname, '[Decryption Failed - Session Desynced]', msg.timestamp, true);
         }
       } catch (err) {
         console.error("Message decrypt/render error:", err);
@@ -236,7 +236,7 @@ async function loadMessages(onion) {
   }
 }
 
-function addMessageLine(sender, text, timestamp) {
+function addMessageLine(sender, text, timestamp, isHistorical = false) {
   const row = document.createElement('div');
   row.className = 'message' + (sender === 'You' ? ' message-own' : '');
   
@@ -250,11 +250,13 @@ function addMessageLine(sender, text, timestamp) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
   // Disappearing messages support
-  const timerVal = parseInt(disappearTimerSelect.value, 10);
-  if (timerVal > 0) {
-    setTimeout(() => {
-      if (row.parentNode) row.parentNode.removeChild(row);
-    }, timerVal * 1000);
+  if (!isHistorical) {
+    const timerVal = parseInt(disappearTimerSelect.value, 10);
+    if (timerVal > 0) {
+      setTimeout(() => {
+        if (row.parentNode) row.parentNode.removeChild(row);
+      }, timerVal * 1000);
+    }
   }
 }
 
@@ -461,13 +463,21 @@ socket.on('handshake_accepted', async (data) => {
 });
 
 socket.on('incoming_message', async (data) => {
-  await loadContactsList(); // Refresh list to get latest status
+  const sender = data.sender;
+  const seq = data.seq;
   
-  if (activeContact && activeContact.onion_address === data.sender) {
+  const expectedSeq = parseInt(localStorage.getItem(`recvSeq_${sender}`) || '1', 10);
+  if (seq < expectedSeq) {
+    console.warn(`Dropped replayed or out-of-order message from ${sender}. Expected seq >= ${expectedSeq}, got ${seq}`);
+    return;
+  }
+  localStorage.setItem(`recvSeq_${sender}`, seq + 1);
+  
+  if (activeContact && activeContact.onion_address === sender) {
     const isAlice = myPublicKeyExported < activeContact.peer_public_key;
     const theirRole = isAlice ? 'B' : 'A';
     
-    const plaintext = await decryptMessage(readKeys[data.sender], data.iv, data.ciphertext, theirRole, data.seq);
+    const plaintext = await decryptMessage(readKeys[sender], data.iv, data.ciphertext, theirRole, seq);
     if (plaintext !== null) {
       const envelope = JSON.parse(plaintext);
       if (envelope.type === 'text') {
@@ -484,7 +494,7 @@ socket.on('contact_status_change', (data) => {
 });
 
 socket.on('message_delivery_failed', (data) => {
-  addStatusLine(`Message to ${data.onion_address} failed. Node is currently offline. Retrying...`);
+  addStatusLine(`Message failed. Peer may be offline.`);
 });
 
 // -----------------------------------------------------------------

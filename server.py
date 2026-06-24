@@ -4,11 +4,21 @@ import uuid
 import time
 import requests
 import threading
+import json
+import re
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 from flask_socketio import SocketIO, emit
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
+
+ONION_RE = re.compile(r'^[a-z2-7]{16,56}\.onion$')
+
+def validate_onion(addr):
+    addr = (addr or '').strip().lower()
+    if not ONION_RE.match(addr):
+        return None
+    return addr
 
 import database
 import tor_manager
@@ -48,7 +58,8 @@ limiter = Limiter(
 # Security Headers
 @app.after_request
 def set_security_headers(response):
-    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '0'
@@ -80,6 +91,9 @@ database.init_db()
 # Outbound Tor SOCKS proxy config
 SOCKS_PORT = 9050
 
+from concurrent.futures import ThreadPoolExecutor
+executor = ThreadPoolExecutor(max_workers=20)
+
 # Helper to send requests over Tor
 def send_onion_post(onion_address, endpoint, payload):
     proxies = {
@@ -104,10 +118,10 @@ def restrict_access():
     Local UI endpoints and APIs must ONLY be accessed from localhost.
     P2P endpoints (/p2p/*) can be accessed via Tor (which carries the .onion Host header).
     """
-    host = request.headers.get('Host', '').lower()
+    host = request.headers.get('Host', '').split(':')[0].strip().lower()
     path = request.path
     
-    is_local_host = '127.0.0.1' in host or 'localhost' in host
+    is_local_host = host in ('127.0.0.1', 'localhost', '[::1]')
     is_p2p_route = path.startswith('/p2p/')
     
     if not is_local_host and not is_p2p_route:
@@ -140,6 +154,11 @@ def register():
     username = data.get('username')
     password = data.get('password')
     
+    if not username or not password:
+        return jsonify({"error": "Missing fields."}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+        
     res = database.register_local_user(username, password)
     return jsonify(res)
 
@@ -156,6 +175,11 @@ def login():
     if res.get('success'):
         session.clear()
         session['username'] = username
+        
+        # Derive secure database encryption key
+        import hashlib
+        db_key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), b'salt_for_db_key_anonymus', 10000)
+        session['db_key'] = db_key.hex()
     return jsonify(res)
 
 @app.route('/logout', methods=['POST'])
@@ -179,7 +203,8 @@ def my_info():
 def get_contacts():
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
-    return jsonify(database.get_contacts())
+    db_key = session.get('db_key')
+    return jsonify(database.get_contacts(db_key=db_key))
 
 @app.route('/api/contacts/add', methods=['POST'])
 def add_contact():
@@ -188,10 +213,11 @@ def add_contact():
         
     data = request.get_json()
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
     nickname = data.get('nickname', '').strip()
     my_public_key = data.get('my_public_key')
     
-    if not onion.endswith('.onion') or not nickname or not my_public_key:
+    if not onion or not nickname or not my_public_key:
         return jsonify({"error": "Invalid onion address or nickname."}), 400
         
     # Save contact locally as pending_outgoing
@@ -202,11 +228,12 @@ def add_contact():
     
     # Async handshake over Tor
     my_onion = database.get_config('my_onion_address')
+    nickname_to_send = session.get('username', 'Anonymous')
     
     def do_handshake():
         payload = {
             "onion_address": my_onion,
-            "nickname": session.get('username', 'Anonymous'),
+            "nickname": nickname_to_send,
             "public_key": my_public_key
         }
         res = send_onion_post(onion, "/p2p/handshake", payload)
@@ -214,7 +241,7 @@ def add_contact():
             # Let UI know peer is currently offline
             socketio.emit('contact_status_change', {"onion_address": onion, "status": "offline"})
             
-    threading.Thread(target=do_handshake, daemon=True).start()
+    executor.submit(do_handshake)
     
     return jsonify({"success": True})
 
@@ -225,15 +252,20 @@ def accept_contact():
         
     data = request.get_json()
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
+    if not onion:
+        return jsonify({"error": "Invalid onion address"}), 400
+        
     my_public_key = data.get('my_public_key')
     shared_secret = data.get('shared_secret')
     
-    contact = database.get_contact(onion)
+    db_key = session.get('db_key')
+    contact = database.get_contact(onion, db_key=db_key)
     if not contact:
         return jsonify({"error": "Contact not found."}), 404
         
     # Save the derived secret locally
-    database.update_contact_secret(onion, shared_secret, contact['peer_public_key'])
+    database.update_contact_secret(onion, shared_secret, contact['peer_public_key'], db_key=db_key)
     
     # Notify peer over Tor that we accepted
     my_onion = database.get_config('my_onion_address')
@@ -245,7 +277,7 @@ def accept_contact():
         }
         send_onion_post(onion, "/p2p/accept", payload)
         
-    threading.Thread(target=do_accept, daemon=True).start()
+    executor.submit(do_accept)
     
     return jsonify({"success": True})
 
@@ -256,10 +288,15 @@ def save_secret():
         
     data = request.get_json()
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
+    if not onion:
+        return jsonify({"error": "Invalid onion address"}), 400
+        
     shared_secret = data.get('shared_secret')
     peer_public_key = data.get('peer_public_key')
     
-    database.update_contact_secret(onion, shared_secret, peer_public_key)
+    db_key = session.get('db_key')
+    database.update_contact_secret(onion, shared_secret, peer_public_key, db_key=db_key)
     return jsonify({"success": True})
 
 @app.route('/api/contacts/delete', methods=['POST'])
@@ -268,6 +305,9 @@ def delete_contact():
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json()
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
+    if not onion:
+        return jsonify({"error": "Invalid onion address"}), 400
     database.delete_contact(onion)
     return jsonify({"success": True})
 
@@ -276,6 +316,9 @@ def get_messages():
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     onion = request.args.get('onion', '').strip().lower()
+    onion = validate_onion(onion)
+    if not onion:
+        return jsonify({"error": "Invalid onion address"}), 400
     return jsonify(database.get_messages(onion))
 
 @app.route('/api/messages/send', methods=['POST'])
@@ -285,11 +328,16 @@ def send_message():
         
     data = request.get_json()
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
+    if not onion:
+        return jsonify({"error": "Invalid onion address"}), 400
+        
     iv = data.get('iv')
     ciphertext = data.get('ciphertext')
     seq = data.get('seq')
     
-    contact = database.get_contact(onion)
+    db_key = session.get('db_key')
+    contact = database.get_contact(onion, db_key=db_key)
     if not contact or contact['status'] != 'accepted':
         return jsonify({"error": "Contact not accepted or not found."}), 400
         
@@ -297,7 +345,6 @@ def send_message():
     
     # Save locally first
     message_payload = {"iv": iv, "ciphertext": ciphertext, "seq": seq}
-    import json
     database.save_message(onion, 'me', json.dumps(message_payload), timestamp)
     
     # Send over Tor
@@ -316,7 +363,7 @@ def send_message():
             # Let UI know it failed (peer offline)
             socketio.emit('message_delivery_failed', {"onion_address": onion, "timestamp": timestamp})
             
-    threading.Thread(target=transmit, daemon=True).start()
+    executor.submit(transmit)
     
     return jsonify({"success": True, "timestamp": timestamp})
 
@@ -339,11 +386,12 @@ def p2p_handshake():
         return jsonify({"error": "Invalid payload"}), 400
         
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
     nickname = data.get('nickname', '').strip()
     public_key = data.get('public_key', '').strip()
     
     if not onion or not nickname or not public_key:
-        return jsonify({"error": "Missing payload fields"}), 400
+        return jsonify({"error": "Missing or invalid payload fields"}), 400
         
     # Check if already blocked or accepted
     existing = database.get_contact(onion)
@@ -374,6 +422,10 @@ def p2p_accept():
         return jsonify({"error": "Invalid payload"}), 400
         
     onion = data.get('onion_address', '').strip().lower()
+    onion = validate_onion(onion)
+    if not onion:
+        return jsonify({"error": "Invalid onion address"}), 400
+        
     public_key = data.get('public_key', '').strip()
     
     contact = database.get_contact(onion)
@@ -401,6 +453,10 @@ def p2p_message():
         return jsonify({"error": "Invalid payload"}), 400
         
     sender = data.get('sender', '').strip().lower()
+    sender = validate_onion(sender)
+    if not sender:
+        return jsonify({"error": "Invalid onion address"}), 400
+        
     iv = data.get('iv')
     ciphertext = data.get('ciphertext')
     seq = data.get('seq')
@@ -411,7 +467,6 @@ def p2p_message():
         return jsonify({"error": "Unauthorized contact."}), 403
         
     # Store message locally (encrypted)
-    import json
     message_payload = {"iv": iv, "ciphertext": ciphertext, "seq": seq}
     database.save_message(sender, sender, json.dumps(message_payload), timestamp)
     

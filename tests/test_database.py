@@ -6,8 +6,6 @@ import sys
 # Ensure parent directory is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Set up test database
-os.environ['DATABASE_URL'] = ''
 import database
 database.DB_FILE = 'test_users.db'
 

@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import bcrypt
+import base64
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 DB_FILE = 'local_node.db'
 
@@ -8,7 +10,40 @@ DB_FILE = 'local_node.db'
 DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode('utf-8')
 
 def get_connection():
-    return sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
+    conn.execute('PRAGMA foreign_keys = ON')
+    return conn
+
+def encrypt_secret(plaintext_b64, db_key_hex):
+    if not plaintext_b64 or not db_key_hex:
+        return plaintext_b64
+    try:
+        key = bytes.fromhex(db_key_hex)
+        aesgcm = AESGCM(key)
+        nonce = os.urandom(12)
+        ct = aesgcm.encrypt(nonce, plaintext_b64.encode('utf-8'), None)
+        return base64.b64encode(nonce + ct).decode('utf-8')
+    except Exception as e:
+        print(f"Encryption error: {e}")
+        return plaintext_b64
+
+def decrypt_secret(ciphertext_b64, db_key_hex):
+    if not ciphertext_b64 or not db_key_hex:
+        return ciphertext_b64
+    try:
+        data = base64.b64decode(ciphertext_b64)
+        if len(data) < 12:
+            return ciphertext_b64
+        nonce = data[:12]
+        ct = data[12:]
+        key = bytes.fromhex(db_key_hex)
+        aesgcm = AESGCM(key)
+        pt = aesgcm.decrypt(nonce, ct, None)
+        return pt.decode('utf-8')
+    except Exception as e:
+        return ciphertext_b64
 
 def init_db():
     conn = get_connection()
@@ -61,6 +96,10 @@ def register_local_user(username, password):
     """Creates the local database user credentials on first boot."""
     if is_initialized():
         return {"error": "Local database is already initialized."}
+    if not username or len(username) < 3 or len(username) > 50:
+        return {"error": "Username must be between 3 and 50 characters."}
+    if len(password) < 8:
+        return {"error": "Password must be at least 8 characters."}
         
     pwd_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
@@ -137,7 +176,7 @@ def add_contact(onion_address, nickname, status='pending_outgoing'):
     c = conn.cursor()
     try:
         c.execute('''
-            INSERT OR REPLACE INTO contacts (onion_address, nickname, status)
+            INSERT OR IGNORE INTO contacts (onion_address, nickname, status)
             VALUES (?, ?, ?)
         ''', (onion_address, nickname, status))
         conn.commit()
@@ -149,7 +188,7 @@ def add_contact(onion_address, nickname, status='pending_outgoing'):
         conn.close()
     return success
 
-def get_contact(onion_address):
+def get_contact(onion_address, db_key=None):
     """Retrieves a contact from the database."""
     onion_address = onion_address.strip().lower()
     conn = get_connection()
@@ -158,16 +197,19 @@ def get_contact(onion_address):
     row = c.fetchone()
     conn.close()
     if row:
+        secret = row[2]
+        if secret and db_key:
+            secret = decrypt_secret(secret, db_key)
         return {
             'onion_address': row[0],
             'nickname': row[1],
-            'shared_secret': row[2],
+            'shared_secret': secret,
             'peer_public_key': row[3],
             'status': row[4]
         }
     return None
 
-def get_contacts():
+def get_contacts(db_key=None):
     """Gets all contacts stored locally."""
     conn = get_connection()
     c = conn.cursor()
@@ -177,10 +219,13 @@ def get_contacts():
     
     contacts = []
     for row in rows:
+        secret = row[2]
+        if secret and db_key:
+            secret = decrypt_secret(secret, db_key)
         contacts.append({
             'onion_address': row[0],
             'nickname': row[1],
-            'shared_secret': row[2],
+            'shared_secret': secret,
             'peer_public_key': row[3],
             'status': row[4]
         })
@@ -195,16 +240,19 @@ def update_contact_status(onion_address, status):
     conn.commit()
     conn.close()
 
-def update_contact_secret(onion_address, shared_secret, peer_public_key):
+def update_contact_secret(onion_address, shared_secret, peer_public_key, db_key=None):
     """Saves the E2EE keys negotiated with a contact."""
     onion_address = onion_address.strip().lower()
+    encrypted_secret = shared_secret
+    if shared_secret and db_key:
+        encrypted_secret = encrypt_secret(shared_secret, db_key)
     conn = get_connection()
     c = conn.cursor()
     c.execute('''
         UPDATE contacts 
         SET shared_secret = ?, peer_public_key = ?, status = 'accepted'
         WHERE onion_address = ?
-    ''', (shared_secret, peer_public_key, onion_address))
+    ''', (encrypted_secret, peer_public_key, onion_address))
     conn.commit()
     conn.close()
 

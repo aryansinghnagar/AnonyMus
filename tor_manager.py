@@ -35,13 +35,15 @@ else:
     TOR_URL = f"https://dist.torproject.org/torbrowser/{TOR_VERSION}/tor-expert-bundle-linux-x86_64-{TOR_VERSION}.tar.gz"
     EXE_NAME = "tor"
 
-# Dynamic port checking to avoid collisions
 def find_free_port(start_port):
     port = start_port
     while port < 65535:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', port)) != 0:
+            try:
+                s.bind(('127.0.0.1', port))
                 return port
+            except socket.error:
+                pass
         port += 1
     raise RuntimeError("No free ports available!")
 
@@ -108,11 +110,13 @@ def download_and_extract_tor():
         
         # Safe extraction (guarding against directory traversal)
         with tarfile.open(temp_archive, "r:gz") as tar:
+            real_tor_dir = os.path.realpath(TOR_DIR)
             for member in tar.getmembers():
                 # Prevent path traversal vulnerabilities
-                if member.name.startswith("/") or ".." in member.name:
+                member_path = os.path.realpath(os.path.join(real_tor_dir, member.name))
+                if not member_path.startswith(real_tor_dir + os.sep) and member_path != real_tor_dir:
                     continue
-                tar.extract(member, path=TOR_DIR)
+                tar.extract(member, path=real_tor_dir)
                 
         print("Extraction complete.")
         
