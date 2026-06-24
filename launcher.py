@@ -24,7 +24,6 @@ else:
     RESOURCE_DIR = BASE_DIR
 
 sys.path.insert(0, RESOURCE_DIR)
-sys.path.insert(0, os.path.join(RESOURCE_DIR, 'app_main'))
 sys.path.insert(0, os.path.join(RESOURCE_DIR, 'app_p2p'))
 
 # Thread-safe log queue
@@ -115,29 +114,13 @@ class NetworkDiagnosticsApp:
         self.update_daemon_status()
         
     def load_settings(self):
-        """Load settings from configuration file or set defaults."""
-        defaults = {
+        """Set default static configuration settings."""
+        self.settings = {
             "mode": "p2p",
             "port": 8080,
             "use_tor": True,
-            "main_server_url": "http://localhost:5000"
+            "main_server_url": ""
         }
-        if os.path.exists(self.config_file):
-            try:
-                with open(self.config_file, "r") as f:
-                    self.settings = json.load(f)
-            except Exception:
-                self.settings = defaults
-        else:
-            self.settings = defaults
-            
-    def save_settings(self):
-        """Save current UI selections to configuration file."""
-        try:
-            with open(self.config_file, "w") as f:
-                json.dump(self.settings, f)
-        except Exception as e:
-            print(f"Error saving settings: {e}")
 
     def create_widgets(self):
         # Header banner (very official looking)
@@ -205,50 +188,46 @@ class NetworkDiagnosticsApp:
         btn_run.pack(padx=10, pady=5, side=tk.RIGHT)
 
     def setup_config_tab(self):
-        # Section 1: Mode Selection
-        grp_mode = ttk.LabelFrame(self.tab_config, text="Network Mode Profile")
-        grp_mode.pack(fill=tk.X, padx=10, pady=5)
+        # Info Panel
+        grp_info = ttk.LabelFrame(self.tab_config, text="Active Network Profile")
+        grp_info.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        self.mode_var = tk.StringVar(value=self.settings["mode"])
-        r1 = ttk.Radiobutton(grp_mode, text="Shared Gateway Interface (Client-Server / Main Branch)", 
-                             variable=self.mode_var, value="main", command=self.on_mode_change)
-        r1.pack(anchor=tk.W, padx=10, pady=4)
+        lbl_intro = tk.Label(
+            grp_info,
+            text="This build is configured exclusively for decentralized peer-to-peer operations.",
+            font=("Segoe UI", 9, "bold"),
+            anchor=tk.W,
+            justify=tk.LEFT
+        )
+        lbl_intro.pack(anchor=tk.W, padx=15, pady=(15, 10))
+
+        details = (
+            "• Mode: Isolated Peer-to-Peer Tunneling (P2P)\n"
+            "• Routing: Mandatory Tor Onion Security Wrapper\n"
+            "• Encryption: End-to-End ECDH & local AES-256-GCM\n"
+            "• Port Management: Automatically allocated by the Tor client\n"
+            "• Host Binding: Restricted to local loopback (127.0.0.1)"
+        )
         
-        r2 = ttk.Radiobutton(grp_mode, text="Isolated Peer-to-Peer Tunneling (P2P Branch / Default)", 
-                             variable=self.mode_var, value="p2p", command=self.on_mode_change)
-        r2.pack(anchor=tk.W, padx=10, pady=4)
-
-        # Section 2: Tor / Proxy Configuration
-        self.grp_security = ttk.LabelFrame(self.tab_config, text="Routing & Privacy Settings")
-        self.grp_security.pack(fill=tk.X, padx=10, pady=5)
+        lbl_details = tk.Label(
+            grp_info,
+            text=details,
+            font=("Segoe UI", 9),
+            anchor=tk.W,
+            justify=tk.LEFT,
+            wraplength=450
+        )
+        lbl_details.pack(anchor=tk.W, padx=25, pady=10)
         
-        self.tor_var = tk.BooleanVar(value=self.settings["use_tor"])
-        self.chk_tor = ttk.Checkbutton(self.grp_security, text="Onion Security Wrapper (Route traffic through Tor network)", 
-                                       variable=self.tor_var, command=self.on_tor_toggle)
-        self.chk_tor.pack(anchor=tk.W, padx=10, pady=5)
-
-        # Section 3: Ports and Parameters
-        grp_ports = ttk.LabelFrame(self.tab_config, text="Port Configuration")
-        grp_ports.pack(fill=tk.X, padx=10, pady=5)
-        
-        tk.Label(grp_ports, text="Local Service Port:").grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
-        self.port_entry = ttk.Entry(grp_ports, width=10)
-        self.port_entry.insert(0, str(self.settings["port"]))
-        self.port_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-
-        # Main Server URL (Disabled by default unless client-server mode is active)
-        self.lbl_server = tk.Label(grp_ports, text="Central Gateway URL:")
-        self.lbl_server.grid(row=1, column=0, padx=10, pady=5, sticky=tk.W)
-        self.server_entry = ttk.Entry(grp_ports, width=35)
-        self.server_entry.insert(0, self.settings["main_server_url"])
-        self.server_entry.grid(row=1, column=1, padx=5, pady=5, columnspan=2, sticky=tk.W)
-
-        # Apply settings button
-        btn_apply = ttk.Button(self.tab_config, text="Save Settings Profile", command=self.apply_config_settings)
-        btn_apply.pack(padx=10, pady=10, side=tk.RIGHT)
-
-        # Initial state update based on mode
-        self.on_mode_change()
+        lbl_note = tk.Label(
+            grp_info,
+            text="Note: Gateway and proxy settings are hardcoded for security.",
+            font=("Segoe UI", 9, "italic"),
+            fg="#555555",
+            anchor=tk.W,
+            justify=tk.LEFT
+        )
+        lbl_note.pack(anchor=tk.W, padx=15, pady=(10, 15))
 
     def setup_logs_tab(self):
         lbl = tk.Label(self.tab_logs, text="Diagnostic Server Output Log:", font=("Segoe UI", 9, "bold"))
@@ -299,42 +278,7 @@ class NetworkDiagnosticsApp:
         self.btn_stop = ttk.Button(btn_frame, text="Shutdown Daemon", command=self.stop_daemon, state=tk.DISABLED)
         self.btn_stop.pack(side=tk.LEFT, padx=5)
 
-    def on_mode_change(self):
-        mode = self.mode_var.get()
-        if mode == "p2p":
-            # Tor routing is required for P2P mode
-            self.tor_var.set(True)
-            self.chk_tor.state(['disabled'])
-            # Disable gateway URL
-            self.server_entry.config(state=tk.DISABLED)
-            self.lbl_server.config(state=tk.DISABLED)
-        else:
-            # Client-server allows optional Tor SOCKS proxying
-            self.chk_tor.state(['!disabled'])
-            # Enable gateway URL
-            self.server_entry.config(state=tk.NORMAL)
-            self.lbl_server.config(state=tk.NORMAL)
 
-    def on_tor_toggle(self):
-        # P2P forces Tor, so toggle is only meaningful in Client-Server (Main) mode
-        pass
-
-    def apply_config_settings(self):
-        try:
-            port = int(self.port_entry.get().strip())
-            if not (1024 <= port <= 65535):
-                raise ValueError("Port must be between 1024 and 65535")
-        except ValueError as e:
-            messagebox.showerror("Configuration Error", f"Invalid Port: {e}")
-            return
-            
-        self.settings["mode"] = self.mode_var.get()
-        self.settings["port"] = port
-        self.settings["use_tor"] = self.tor_var.get()
-        self.settings["main_server_url"] = self.server_entry.get().strip()
-        
-        self.save_settings()
-        messagebox.showinfo("Configuration Saved", "Network configuration settings saved successfully.")
 
     def run_diagnostic_tests(self):
         """Simulates network checks and probes the actual daemon state."""
@@ -418,116 +362,65 @@ class NetworkDiagnosticsApp:
         self.root.after(100, self.poll_logs)
 
     def start_daemon(self):
-        """Starts the respective branch's Flask server & Tor in background thread."""
+        """Starts the Flask server & Tor in background thread."""
         global server_thread, daemon_active, active_mode, active_port, start_time
         
         if daemon_active:
             messagebox.showwarning("Daemon Running", "The diagnostic daemon is already active.")
             return
 
-        # Read config settings
-        mode = self.settings["mode"]
-        port = self.settings["port"]
-        use_tor = self.settings["use_tor"]
-        
-        active_port = port
-        active_mode = mode
+        # Settings are hardcoded to P2P mode
+        active_port = 8080
+        active_mode = "p2p"
         daemon_active = True
         start_time = time.time()
 
-        self.log_text.insert(tk.END, f"[NetDiag] Launching diagnostic daemon profile: {mode.upper()}...\n")
+        self.log_text.insert(tk.END, "[NetDiag] Launching diagnostic daemon profile: P2P...\n")
         
         # Configure env variables dynamically
         os.environ['FLASK_SECRET_KEY'] = 'diagnostics_ephemeral_control_key_2026'
         os.environ['FLASK_DEBUG'] = 'False'
         
-        if mode == "p2p":
-            self.btn_start.config(state=tk.DISABLED)
-            # Run P2P startup in thread
-            def launch_p2p_wrapper():
-                global tor_socks_port, onion_address
-                try:
-                    # Delay import until needed to avoid circular import issues or early errors
-                    import app_p2p.database as database_p2p
-                    import app_p2p.tor_manager as tor_manager_p2p
-                    from app_p2p.server import app as p2p_app, socketio as p2p_socketio
-                    
-                    # 1. Initialize P2P local DB
-                    print("[Daemon] Initializing database engine...")
-                    database_p2p.init_db()
-                    
-                    # 2. Boot Tor (blocks until bootstrapped)
-                    print("[Daemon] Securing network wrapper (bootstrapping Tor). Please wait...")
-                    onion, socks, peer = tor_manager_p2p.launch_tor()
-                    
-                    # Store variables
-                    tor_socks_port = socks
-                    onion_address = onion
-                    global active_port
-                    active_port = peer  # P2P uses dynamic free port from tor_manager
-                    
-                    # Write my onion address to database configuration
-                    database_p2p.set_config('my_onion_address', onion)
-                    
-                    print(f"[Daemon] Tor routing wrappers completed successfully.")
-                    print(f"[Daemon] Local administrative portal bound to port {active_port}")
-                    print(f"[Daemon] Onion hidden service: {onion}")
-                    
-                    # 3. Start socketio loop
-                    p2p_socketio.run(p2p_app, host='127.0.0.1', port=active_port, debug=False)
-                except Exception as e:
-                    print(f"FATAL: Service daemon execution failed: {e}")
-                    self.stop_daemon()
-            
-            server_thread = threading.Thread(target=launch_p2p_wrapper, daemon=True)
-            server_thread.start()
-            
-        else: # main Client-Server mode
-            self.btn_start.config(state=tk.DISABLED)
-            
-            def launch_main_wrapper():
-                try:
-                    import app_main.database as database_main
-                    from app_main.server import app as main_app, socketio as main_socketio, advertise_mdns
-                    
-                    # 1. Set environment configurations
-                    os.environ['PORT'] = str(port)
-                    os.environ['DISABLE_SSL'] = 'True'
-                    
-                    # 2. Initialize database
-                    print("[Daemon] Initializing database engine...")
-                    database_main.init_db()
-                    
-                    # 3. Advertise mDNS
-                    advertise_mdns(port)
-                    
-                    # 4. Optional Tor outbound proxy wrapper if enabled
-                    if use_tor:
-                        print("[Daemon] Tor proxy routing wrapping option selected.")
-                        # We can launch Tor if not running, or print a notice to configure SOCKS proxy
-                        # If P2P tor manager is available, we can reuse it to start a SOCKS proxy!
-                        try:
-                            import app_p2p.tor_manager as tor_manager_p2p
-                            print("[Daemon] Starting Tor Expert Bundle proxy wrapper...")
-                            _, socks, _ = tor_manager_p2p.launch_tor()
-                            global tor_socks_port
-                            tor_socks_port = socks
-                            # Let app_main use Tor outbound SOCKS proxy
-                            os.environ['HTTP_PROXY'] = f"socks5h://127.0.0.1:{socks}"
-                            os.environ['HTTPS_PROXY'] = f"socks5h://127.0.0.1:{socks}"
-                            print(f"[Daemon] Route wrappers configured to redirect outbound HTTP to SOCKS5 port {socks}")
-                        except Exception as tor_err:
-                            print(f"[Daemon] SOCKS Proxy setup bypassed or failed: {tor_err}")
-                    
-                    print(f"[Daemon] Local gateway listener bound to port {port}")
-                    # Start socketio loop
-                    main_socketio.run(main_app, host='127.0.0.1', port=port, debug=False)
-                except Exception as e:
-                    print(f"FATAL: Service daemon execution failed: {e}")
-                    self.stop_daemon()
-
-            server_thread = threading.Thread(target=launch_main_wrapper, daemon=True)
-            server_thread.start()
+        self.btn_start.config(state=tk.DISABLED)
+        
+        # Run P2P startup in thread
+        def launch_p2p_wrapper():
+            global tor_socks_port, onion_address
+            try:
+                # Delay import until needed to avoid circular import issues or early errors
+                import app_p2p.database as database_p2p
+                import app_p2p.tor_manager as tor_manager_p2p
+                from app_p2p.server import app as p2p_app, socketio as p2p_socketio
+                
+                # 1. Initialize P2P local DB
+                print("[Daemon] Initializing database engine...")
+                database_p2p.init_db()
+                
+                # 2. Boot Tor (blocks until bootstrapped)
+                print("[Daemon] Securing network wrapper (bootstrapping Tor). Please wait...")
+                onion, socks, peer = tor_manager_p2p.launch_tor()
+                
+                # Store variables
+                tor_socks_port = socks
+                onion_address = onion
+                global active_port
+                active_port = peer  # P2P uses dynamic free port from tor_manager
+                
+                # Write my onion address to database configuration
+                database_p2p.set_config('my_onion_address', onion)
+                
+                print(f"[Daemon] Tor routing wrappers completed successfully.")
+                print(f"[Daemon] Local administrative portal bound to port {active_port}")
+                print(f"[Daemon] Onion hidden service: {onion}")
+                
+                # 3. Start socketio loop
+                p2p_socketio.run(p2p_app, host='127.0.0.1', port=active_port, debug=False)
+            except Exception as e:
+                print(f"FATAL: Service daemon execution failed: {e}")
+                self.stop_daemon()
+        
+        server_thread = threading.Thread(target=launch_p2p_wrapper, daemon=True)
+        server_thread.start()
 
     def stop_daemon(self):
         """Stops Flask server socket connection threads and runs Tor cleanup."""
@@ -579,10 +472,10 @@ class NetworkDiagnosticsApp:
             self.btn_stop.config(state=tk.NORMAL)
             
             # Update onion address label
-            if active_mode == "p2p" and onion_address != "N/A":
+            if onion_address != "N/A":
                 self.lbl_onion.config(text=f"Onion Address: {onion_address}")
             else:
-                self.lbl_onion.config(text="Onion Address: Not routing local hidden services")
+                self.lbl_onion.config(text="Onion Address: Bootstrapping Onion routing...")
                 
             # Uptime calculation
             uptime = int(time.time() - start_time)

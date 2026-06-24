@@ -33,7 +33,6 @@ begin
     begin
       DelTree(ExpandConstant('{app}\bin'), True, True, True);
       DeleteFile(ExpandConstant('{app}\local_node.db'));
-      DeleteFile(ExpandConstant('{app}\users.db'));
       DeleteFile(ExpandConstant('{app}\diagnostics_config.json'));
       DelTree(ExpandConstant('{app}'), True, True, True);
     end
@@ -44,7 +43,6 @@ begin
       begin
         DelTree(ExpandConstant('{app}\bin'), True, True, True);
         DeleteFile(ExpandConstant('{app}\local_node.db'));
-        DeleteFile(ExpandConstant('{app}\users.db'));
         DeleteFile(ExpandConstant('{app}\diagnostics_config.json'));
         DelTree(ExpandConstant('{app}'), True, True, True);
       end;

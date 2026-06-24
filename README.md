@@ -33,7 +33,6 @@ graph LR
 
 ## Repository Structure
 
-- `app_main/`: self-contained client-server application instance (for centralized fallback setup).
 - `app_p2p/`: P2P application core modules (server, database, and embedded Tor orchestration).
 - `launcher.py`: GUI manager and installer setup disguised as a "Windows Network Diagnostics & Adapter Utility".
 - `build.py`: Automation script to compile the launcher into a standalone executable and package it using Inno Setup.

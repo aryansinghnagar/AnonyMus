@@ -22,7 +22,7 @@ def run_pyinstaller():
     """
     Executes PyInstaller to bundle the launcher script and nested applications.
     
-    Creates a folder-based distribution incorporating app_main and app_p2p directories.
+    Creates a folder-based distribution incorporating the app_p2p directory.
     """
     print("--------------------------------------------------")
     print("Step 1: Running PyInstaller...")
@@ -39,7 +39,6 @@ def run_pyinstaller():
         "--noconfirm",
         "--onedir",
         "--windowed",
-        "--add-data", "app_main;app_main",
         "--add-data", "app_p2p;app_p2p",
         "--hidden-import", "flask",
         "--hidden-import", "flask_socketio",
@@ -101,7 +100,6 @@ begin
     begin
       DelTree(ExpandConstant('{{app}}\\bin'), True, True, True);
       DeleteFile(ExpandConstant('{{app}}\\local_node.db'));
-      DeleteFile(ExpandConstant('{{app}}\\users.db'));
       DeleteFile(ExpandConstant('{{app}}\\diagnostics_config.json'));
       DelTree(ExpandConstant('{{app}}'), True, True, True);
     end
@@ -112,7 +110,6 @@ begin
       begin
         DelTree(ExpandConstant('{{app}}\\bin'), True, True, True);
         DeleteFile(ExpandConstant('{{app}}\\local_node.db'));
-        DeleteFile(ExpandConstant('{{app}}\\users.db'));
         DeleteFile(ExpandConstant('{{app}}\\diagnostics_config.json'));
         DelTree(ExpandConstant('{{app}}'), True, True, True);
       end;
