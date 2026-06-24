@@ -1,6 +1,6 @@
 package com.anonymus.app.data
 
-import android.util.Base64
+import java.util.Base64
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPair
@@ -48,11 +48,11 @@ object CryptoUtils {
         System.arraycopy(x, 0, raw, 1, 32)
         System.arraycopy(y, 0, raw, 33, 32)
 
-        return Base64.encodeToString(raw, Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(raw)
     }
 
     fun importPublicKey(base64String: String): PublicKey {
-        val rawKey = Base64.decode(base64String, Base64.NO_WRAP)
+        val rawKey = Base64.getDecoder().decode(base64String)
         require(rawKey.size == 65 && rawKey[0] == 0x04.toByte()) {
             "Invalid public key format: expected 65-byte uncompressed EC key"
         }
@@ -71,7 +71,7 @@ object CryptoUtils {
 
     fun constructAAD(role: String, seqNum: Int): ByteArray {
         val aad = ByteArray(5)
-        aad[0] = role[0].toByte()
+        aad[0] = role[0].code.toByte()
         val buffer = java.nio.ByteBuffer.wrap(aad)
         buffer.position(1)
         buffer.putInt(seqNum)
@@ -163,15 +163,15 @@ object CryptoUtils {
 
         val ciphertext = cipher.doFinal(buffer.array())
         return EncryptedPayload(
-            iv = Base64.encodeToString(iv, Base64.NO_WRAP),
-            ciphertext = Base64.encodeToString(ciphertext, Base64.NO_WRAP)
+            iv = Base64.getEncoder().encodeToString(iv),
+            ciphertext = Base64.getEncoder().encodeToString(ciphertext)
         )
     }
 
     fun decryptMessage(keyBytes: ByteArray, ivBase64: String, ciphertextBase64: String, role: String, seqNum: Int): String? {
         return try {
-            val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
-            val ciphertext = Base64.decode(ciphertextBase64, Base64.NO_WRAP)
+            val iv = Base64.getDecoder().decode(ivBase64)
+            val ciphertext = Base64.getDecoder().decode(ciphertextBase64)
 
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             val parameterSpec = GCMParameterSpec(128, iv)

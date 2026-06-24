@@ -58,15 +58,70 @@ async function importPublicKey(base64String) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. ECDH — deriving the shared secret
+// 3. ECDH & HKDF Chain Key Derivation
 // ---------------------------------------------------------------------------
 
-function constructAAD(role, seqNum) {
-  const aad = new Uint8Array(5);
+function constructAAD(role, seqNum, sessionId, protocolVersion = 2) {
+  if (protocolVersion === 1) {
+    const aad = new Uint8Array(5);
+    aad[0] = role.charCodeAt(0);
+    const view = new DataView(aad.buffer);
+    view.setUint32(1, seqNum, false);
+    return aad;
+  }
+  
+  const aad = new Uint8Array(1 + 4 + 16 + 1);
   aad[0] = role.charCodeAt(0);
   const view = new DataView(aad.buffer);
-  view.setUint32(1, seqNum, false); // Length as 32-bit big-endian
+  view.setUint32(1, seqNum, false);
+  
+  // Hash the safety/session ID string to bind it
+  const encoder = new TextEncoder();
+  const sessionBytes = encoder.encode(sessionId || "");
+  const truncatedSession = new Uint8Array(16);
+  truncatedSession.set(sessionBytes.slice(0, 16));
+  
+  aad.set(truncatedSession, 5);
+  aad[21] = protocolVersion;
   return aad;
+}
+
+async function hkdfDerive(ikm, info, salt = new Uint8Array(32)) {
+  const hkdfKey = await crypto.subtle.importKey(
+    'raw',
+    ikm,
+    { name: 'HKDF' },
+    false,
+    ['deriveKey', 'deriveBits']
+  );
+  
+  return await crypto.subtle.deriveBits(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: salt,
+      info: info
+    },
+    hkdfKey,
+    256
+  );
+}
+
+async function deriveChainKeys(rootKey) {
+  const chainKey = await hkdfDerive(rootKey, new TextEncoder().encode("AnonyMus-ChainKey"));
+  const messageKey = await hkdfDerive(chainKey, new TextEncoder().encode("AnonyMus-MessageKey"));
+  
+  // Import as AES-GCM keys
+  const messageKeyObj = await crypto.subtle.importKey(
+    'raw',
+    messageKey,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  );
+  
+  const nextChainKey = await hkdfDerive(chainKey, new TextEncoder().encode("AnonyMus-NextChainKey"));
+  return { messageKey: messageKeyObj, nextChainKey };
 }
 
 async function deriveSessionKeys(myPrivateKey, theirPublicKey, myPubKeyB64, theirPubKeyB64) {
@@ -81,58 +136,43 @@ async function deriveSessionKeys(myPrivateKey, theirPublicKey, myPubKeyB64, thei
     sharedSecretBits,
     { name: 'HKDF' },
     false,
-    ['deriveKey']
+    ['deriveKey', 'deriveBits']
   );
 
   const salt = new Uint8Array(32); // 32 zero bytes
   const labelClient = new TextEncoder().encode("AnonyMus-Client-To-Server-Key");
   const labelServer = new TextEncoder().encode("AnonyMus-Server-To-Client-Key");
 
-  const clientKey = await crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: salt,
-      info: labelClient
-    },
+  // Derive 32-byte raw bits for client and server chain key roots
+  const clientChainKeyBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt, info: labelClient },
     hkdfKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
+    256
   );
 
-  const serverKey = await crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: salt,
-      info: labelServer
-    },
+  const serverChainKeyBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt, info: labelServer },
     hkdfKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
+    256
   );
 
   const isAlice = myPubKeyB64 < theirPubKeyB64;
   return {
-    writeKey: isAlice ? clientKey : serverKey,
-    readKey: isAlice ? serverKey : clientKey
+    sendChainKey: isAlice ? clientChainKeyBits : serverChainKeyBits,
+    recvChainKey: isAlice ? serverChainKeyBits : clientChainKeyBits
   };
 }
 
 // ---------------------------------------------------------------------------
-// 4. Safety Number Derivation (Phase 2)
+// 4. Safety Number Derivation
 // ---------------------------------------------------------------------------
 
 async function computeSafetyNumber(myPubKeyB64, theirPubKeyB64) {
-  // Sort them to ensure both parties compute the exact same hash
   const sorted = [myPubKeyB64, theirPubKeyB64].sort();
   const data = new TextEncoder().encode(sorted[0] + sorted[1]);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   
-  // Use all 256 bits formatted as hex chunks
   const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   let chunks = [];
   for (let i = 0; i < hex.length; i += 8) {
@@ -142,33 +182,31 @@ async function computeSafetyNumber(myPubKeyB64, theirPubKeyB64) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. AES-GCM — encrypting and decrypting messages with Length-Prefixed Padding
+// 5. AES-GCM — encrypting and decrypting messages
 // ---------------------------------------------------------------------------
 
 const BLOCK_SIZE = 512;
 
-async function encryptMessage(key, plaintext, role, seqNum) {
+async function encryptMessage(key, plaintext, role, seqNum, sessionId) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const textBytes = new TextEncoder().encode(plaintext);
   const textLen = textBytes.length;
   
-  // Padding logic: pad to nearest multiple of BLOCK_SIZE with random bytes
   let paddedLength = Math.ceil((textLen + 4) / BLOCK_SIZE) * BLOCK_SIZE;
   const paddedBuffer = new Uint8Array(paddedLength);
   
   const view = new DataView(paddedBuffer.buffer);
-  view.setUint32(0, textLen, false); // Length as 32-bit big-endian
+  view.setUint32(0, textLen, false);
   
   paddedBuffer.set(textBytes, 4);
   
-  // Add random padding
   if (paddedLength > textLen + 4) {
     const paddingBytes = new Uint8Array(paddedLength - textLen - 4);
     crypto.getRandomValues(paddingBytes);
     paddedBuffer.set(paddingBytes, textLen + 4);
   }
 
-  const aad = constructAAD(role, seqNum);
+  const aad = constructAAD(role, seqNum, sessionId, 2);
 
   const encryptedBuffer = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: aad },
@@ -182,22 +220,34 @@ async function encryptMessage(key, plaintext, role, seqNum) {
   };
 }
 
-async function decryptMessage(key, ivBase64, ciphertextBase64, role, seqNum) {
+async function decryptMessage(key, ivBase64, ciphertextBase64, role, seqNum, sessionId) {
   try {
     const iv = fromBase64(ivBase64);
     const ciphertext = fromBase64(ciphertextBase64);
-    const aad = constructAAD(role, seqNum);
 
-    const decryptedBuffer = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv, additionalData: aad },
-      key,
-      ciphertext
-    );
+    let decryptedBuffer = null;
+    
+    // Try V2 protocol decrypt
+    try {
+      const aadV2 = constructAAD(role, seqNum, sessionId, 2);
+      decryptedBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv, additionalData: aadV2 },
+        key,
+        ciphertext
+      );
+    } catch (v2Error) {
+      // Fallback: Try V1 protocol decrypt
+      const aadV1 = constructAAD(role, seqNum, sessionId, 1);
+      decryptedBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv, additionalData: aadV1 },
+        key,
+        ciphertext
+      );
+    }
 
     const view = new DataView(decryptedBuffer);
     const textLen = view.getUint32(0, false);
     
-    // Safety check to prevent out-of-bounds error
     if (textLen > decryptedBuffer.byteLength - 4) {
       return null;
     }

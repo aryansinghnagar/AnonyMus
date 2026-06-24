@@ -407,3 +407,36 @@ body.blurred { filter: blur(20px); pointer-events: none; }
 .calc-btn-op { background: #f3f2f1; }
 .calc-btn-eq { background: #0078d4; color: white; }
 .calc-btn-eq:hover { background: #005a9e; }
+
+/* Disappearing Messages Styles */
+.message-timer {
+  font-size: 0.75em;
+  color: #605e5c;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  text-align: right;
+  margin-top: 4px;
+}
+
+.message.expiring {
+  animation: pulse-fade 2s ease-in-out infinite;
+}
+
+@keyframes pulse-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.message.fading-out {
+  opacity: 0;
+  max-height: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  overflow: hidden;
+  transition: all 0.5s ease-in-out;
+}

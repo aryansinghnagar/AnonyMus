@@ -44,3 +44,12 @@ desktop.ini
 # ---------------------- Planning docs (optional) -------------
 implementation_plan.md
 privacy-chat-plan.md
+
+# Tor runtime state and service secrets
+bin/tor_data/
+bin/tor_service/
+bin/tor/
+
+# Local test runs / runtime nodes
+test_run/
+
