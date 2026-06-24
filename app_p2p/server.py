@@ -1,3 +1,11 @@
+"""
+Server Module for AnonyMus (P2P Decentralized Architecture).
+
+Implements the local node interface and public Tor peer-to-peer message endpoints.
+Local routes (/api/*, /, /chat) are secured to localhost only.
+Public P2P routes (/p2p/*) process incoming requests routed through the Tor onion service.
+"""
+
 import os
 import sys
 import uuid
@@ -12,23 +20,35 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
+import app_p2p.database as database
+import app_p2p.tor_manager as tor_manager
+
+# Regex for validating peer Tor hidden service addresses
 ONION_RE = re.compile(r'^[a-z2-7]{16,56}\.onion$')
 
+
 def validate_onion(addr):
+    """
+    Validates and normalizes Tor Onion addresses.
+    
+    Args:
+        addr (str): Raw string containing the onion address.
+        
+    Returns:
+        str: Sanitized lowercase address, or None if validation fails.
+    """
     addr = (addr or '').strip().lower()
     if not ONION_RE.match(addr):
         return None
     return addr
 
-import app_p2p.database_p2p as database
-import app_p2p.tor_manager_p2p as tor_manager
 
-# Load environment variables
+# Load configurations from environment variables
 load_dotenv()
 
 app = Flask(__name__)
 
-# Initialize secret key
+# Enforce secure session key setup
 secret_key = os.environ.get('FLASK_SECRET_KEY')
 debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 if not secret_key:
@@ -41,13 +61,15 @@ if not secret_key:
     secret_key = os.urandom(32).hex()
 app.secret_key = secret_key
 
+# Apply session cookie and payload constraints
 app.config.update(
     SESSION_COOKIE_SECURE=False,  # Set to False because local browser connects via HTTP (localhost)
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Strict',
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024  # 1MB limit
+    MAX_CONTENT_LENGTH=1 * 1024 * 1024  # Enforce 1MB maximum payload size
 )
 
+# Initialize local controller rate limiter
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -55,9 +77,16 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# Security Headers
+
 @app.after_request
 def set_security_headers(response):
+    """
+    Flask hook to enforce browser security headers.
+    
+    Sets Strict-Transport-Security (HTTPS only), X-Content-Type-Options,
+    X-Frame-Options, X-XSS-Protection, CSP rules, and disables route caching
+    on sensitive dashboards.
+    """
     if request.is_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -66,6 +95,7 @@ def set_security_headers(response):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     
+    # Restrict loading of scripts/frames, allowing socket connection over WS/WSS
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         "script-src 'self' https://cdn.socket.io; "
@@ -77,25 +107,39 @@ def set_security_headers(response):
         "connect-src 'self' ws: wss:;"
     )
     
+    # Disable caching on core views
     if request.path in ['/login', '/register', '/chat']:
         response.headers['Cache-Control'] = 'no-store, max-age=0'
         
     return response
 
-# SocketIO setup (only allows connections from localhost)
+
+# Socket.IO local control interface setup (only allows connections from localhost)
 socketio = SocketIO(app, cors_allowed_origins="*", transports=['websocket'])
 
-# Initialize Local DB
+# Ensure P2P database tables exist
 database.init_db()
 
 # Outbound Tor SOCKS proxy config
 SOCKS_PORT = 9050
 
+# Thread pool executor for non-blocking asynchronous Tor requests
 from concurrent.futures import ThreadPoolExecutor
 executor = ThreadPoolExecutor(max_workers=20)
 
-# Helper to send requests over Tor
+
 def send_onion_post(onion_address, endpoint, payload):
+    """
+    Sends an HTTP POST request to a remote Onion service through the Tor SOCKS proxy.
+    
+    Args:
+        onion_address (str): Target .onion address.
+        endpoint (str): Route endpoint (e.g., '/p2p/message').
+        payload (dict): JSON data to transmit.
+        
+    Returns:
+        dict: Decoded JSON response, or error dict on network failure.
+    """
     proxies = {
         'http': f'socks5h://127.0.0.1:{SOCKS_PORT}',
         'https': f'socks5h://127.0.0.1:{SOCKS_PORT}'
@@ -108,6 +152,7 @@ def send_onion_post(onion_address, endpoint, payload):
         print(f"Error connecting to onion {onion_address} via Tor: {e}")
         return {"error": "unreachable"}
 
+
 # ==========================================
 # SECURITY FILTER (Before Request Hook)
 # ==========================================
@@ -115,6 +160,7 @@ def send_onion_post(onion_address, endpoint, payload):
 def restrict_access():
     """
     Enforces the security boundary between the local control panel and the public Tor network.
+    
     Local UI endpoints and APIs must ONLY be accessed from localhost.
     P2P endpoints (/p2p/*) can be accessed via Tor (which carries the .onion Host header).
     """
@@ -128,26 +174,32 @@ def restrict_access():
         # Remote users over Tor attempting to access local control panel
         return "Forbidden: Local access only", 403
 
+
 # ==========================================
 # 1. HTTP UI ROUTES (Local only)
 # ==========================================
 @app.route('/', methods=['GET'])
 def index():
+    """Renders registration view on first boot, login screen on subsequent boots, or redirects to chat."""
     if not database.is_initialized():
         return render_template('login.html', register_only=True)
     if 'username' in session:
         return redirect(url_for('chat'))
     return render_template('login.html')
 
+
 @app.route('/chat', methods=['GET'])
 def chat():
+    """Renders chat dashboard view for authenticated users."""
     if 'username' not in session:
         return redirect(url_for('index'))
     return render_template('chat.html')
 
+
 @app.route('/register', methods=['POST'])
 @limiter.limit("5 per minute")
 def register():
+    """Handles local database initialization and master password registration."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -162,9 +214,11 @@ def register():
     res = database.register_local_user(username, password)
     return jsonify(res)
 
+
 @app.route('/login', methods=['POST'])
 @limiter.limit("10 per minute")
 def login():
+    """Authenticates local user and derives the database decryption key from password."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -182,16 +236,20 @@ def login():
         session['db_key'] = db_key.hex()
     return jsonify(res)
 
+
 @app.route('/logout', methods=['POST'])
 def logout():
+    """Clears Flask session data."""
     session.clear()
     return jsonify({"success": True})
+
 
 # ==========================================
 # 2. LOCAL API ROUTES (Local only)
 # ==========================================
 @app.route('/api/my_info', methods=['GET'])
 def my_info():
+    """Retrieves local node onion address and local username."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify({
@@ -199,15 +257,19 @@ def my_info():
         "local_username": session['username']
     })
 
+
 @app.route('/api/contacts', methods=['GET'])
 def get_contacts():
+    """Retrieves list of contacts, decrypting secrets if authenticated."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     db_key = session.get('db_key')
     return jsonify(database.get_contacts(db_key=db_key))
 
+
 @app.route('/api/contacts/add', methods=['POST'])
 def add_contact():
+    """Initiates an asynchronous handshake request with a remote P2P node over Tor."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
         
@@ -245,8 +307,10 @@ def add_contact():
     
     return jsonify({"success": True})
 
+
 @app.route('/api/contacts/accept', methods=['POST'])
 def accept_contact():
+    """Accepts a pending incoming contact handshake request and notifies the peer."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
         
@@ -281,8 +345,10 @@ def accept_contact():
     
     return jsonify({"success": True})
 
+
 @app.route('/api/contacts/save_secret', methods=['POST'])
 def save_secret():
+    """Saves derived shared cryptographic secret for an accepted contact."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
         
@@ -299,8 +365,10 @@ def save_secret():
     database.update_contact_secret(onion, shared_secret, peer_public_key, db_key=db_key)
     return jsonify({"success": True})
 
+
 @app.route('/api/contacts/delete', methods=['POST'])
 def delete_contact():
+    """Deletes a contact and cleans up associated chat history."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json()
@@ -311,8 +379,10 @@ def delete_contact():
     database.delete_contact(onion)
     return jsonify({"success": True})
 
+
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
+    """Retrieves chat history for a contact."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     onion = request.args.get('onion', '').strip().lower()
@@ -321,8 +391,10 @@ def get_messages():
         return jsonify({"error": "Invalid onion address"}), 400
     return jsonify(database.get_messages(onion))
 
+
 @app.route('/api/messages/send', methods=['POST'])
 def send_message():
+    """Encrypts and pushes message to peer onion service over Tor."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
         
@@ -367,12 +439,15 @@ def send_message():
     
     return jsonify({"success": True, "timestamp": timestamp})
 
+
 @app.route('/api/reset-data', methods=['POST'])
 def handle_reset_data():
+    """Wipes all local contacts, configuration, and messages databases."""
     if 'username' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     database.reset_app_data()
     return jsonify({"success": True})
+
 
 # ==========================================
 # 3. PUBLIC TOR P2P ROUTES (Tor Network only)
@@ -380,7 +455,7 @@ def handle_reset_data():
 @app.route('/p2p/handshake', methods=['POST'])
 @limiter.limit("20 per minute")
 def p2p_handshake():
-    """Receives contact requests from remote Tor peers."""
+    """Receives contact request handshakes from remote Tor peers."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid payload"}), 400
@@ -393,14 +468,13 @@ def p2p_handshake():
     if not onion or not nickname or not public_key:
         return jsonify({"error": "Missing or invalid payload fields"}), 400
         
-    # Check if already blocked or accepted
+    # Verify contact is not blocked
     existing = database.get_contact(onion)
     if existing and existing['status'] == 'blocked':
         return jsonify({"error": "blocked"}), 403
         
     # Store request locally as pending_incoming
     database.add_contact(onion, nickname, status='pending_incoming')
-    # Save their public key
     database.update_contact_secret(onion, None, public_key)
     database.update_contact_status(onion, 'pending_incoming')
     
@@ -413,10 +487,11 @@ def p2p_handshake():
     
     return jsonify({"status": "pending"})
 
+
 @app.route('/p2p/accept', methods=['POST'])
 @limiter.limit("20 per minute")
 def p2p_accept():
-    """Receives handshake acceptance from a peer."""
+    """Receives handshake acceptance confirmation from a remote peer."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid payload"}), 400
@@ -432,10 +507,10 @@ def p2p_accept():
     if not contact:
         return jsonify({"error": "No handshake record found."}), 404
         
-    # Retrieve our own public key we generated for this contact
+    # Retrieve our own public key generated for this contact
     my_pubkey = database.get_config(f"my_pubkey_for_{onion}")
     
-    # Emit event to Alice's browser so her browser can derive the secret
+    # Emit event to browser to trigger DH secret derivation
     socketio.emit('handshake_accepted', {
         "onion_address": onion,
         "peer_public_key": public_key,
@@ -444,10 +519,11 @@ def p2p_accept():
     
     return jsonify({"status": "accepted"})
 
+
 @app.route('/p2p/message', methods=['POST'])
 @limiter.limit("30 per minute")
 def p2p_message():
-    """Receives encrypted messages from accepted remote peers."""
+    """Receives incoming encrypted messages from authorized remote peers."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid payload"}), 400
@@ -466,11 +542,11 @@ def p2p_message():
     if not contact or contact['status'] != 'accepted':
         return jsonify({"error": "Unauthorized contact."}), 403
         
-    # Store message locally (encrypted)
+    # Store encrypted payload locally
     message_payload = {"iv": iv, "ciphertext": ciphertext, "seq": seq}
     database.save_message(sender, sender, json.dumps(message_payload), timestamp)
     
-    # Push to local browser UI
+    # Push notification to active local browser UI
     socketio.emit('incoming_message', {
         "sender": sender,
         "iv": iv,
@@ -481,11 +557,12 @@ def p2p_message():
     
     return jsonify({"status": "delivered"})
 
+
 # ==========================================
 # STARTUP
 # ==========================================
 if __name__ == '__main__':
-    # Start Tor in background thread to allow Flask to boot or boot Tor first
+    # Launch Tor expert bundle and bind ports
     try:
         onion, socks, peer = tor_manager.launch_tor()
         SOCKS_PORT = socks

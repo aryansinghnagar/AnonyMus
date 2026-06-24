@@ -1,3 +1,11 @@
+"""
+Server Module for AnonyMus (Client-Server Relay Architecture).
+
+Implements a zero-knowledge WebSocket relay server using Flask-SocketIO.
+Coordinates secure message routing, queue ownership validation, session management,
+rate limiting, self-signed SSL certificate generation, and mDNS local network service discovery.
+"""
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -13,7 +21,7 @@ from flask import Flask, request, jsonify, render_template, session, redirect, u
 from flask_socketio import SocketIO, emit, join_room, disconnect
 from dotenv import load_dotenv
 
-import app_main.database_main as database
+import app_main.database as database
 
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -23,10 +31,12 @@ from cryptography.hazmat.primitives import serialization
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-# Load environment variables
+# Load configurations from environment file
 load_dotenv()
 
 app = Flask(__name__)
+
+# Enforce secure session key setup
 secret_key = os.environ.get('FLASK_SECRET_KEY')
 debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 if not secret_key:
@@ -39,13 +49,15 @@ if not secret_key:
     secret_key = os.urandom(32).hex()
 app.secret_key = secret_key
 
+# Apply session cookie and payload constraints
 app.config.update(
     SESSION_COOKIE_SECURE=not os.environ.get('DISABLE_SSL', 'False').lower() == 'true',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Strict',
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024
+    MAX_CONTENT_LENGTH=1 * 1024 * 1024  # Enforce 1MB maximum payload size
 )
 
+# Initialize HTTP endpoint rate limiter (uses Redis backend if configured)
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -53,10 +65,17 @@ limiter = Limiter(
     storage_uri=os.environ.get('REDIS_URL', 'memory://')
 )
 
-# Helpers for local IP and mDNS
+
 def get_local_ip():
+    """
+    Determines the local network IP address of the machine.
+    
+    Returns:
+        str: IPv4 address string (defaults to '127.0.0.1' on error).
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        # Route to a dummy public IP to resolve local interface binding
         s.connect(('10.255.255.255', 1))
         ip = s.getsockname()[0]
     except Exception:
@@ -65,9 +84,20 @@ def get_local_ip():
         s.close()
     return ip
 
+
+# Thread-safe global references for mDNS advertising
 zeroconf_instance = None
 
+
 def advertise_mdns(port):
+    """
+    Spawns a background thread to advertise the server via Multicast DNS (mDNS).
+    
+    Service registered: _anonymus._tcp.local.
+    
+    Args:
+        port (int): The network port the server is binding to.
+    """
     def run():
         global zeroconf_instance
         try:
@@ -89,27 +119,48 @@ def advertise_mdns(port):
     t = threading.Thread(target=run, daemon=True)
     t.start()
 
-# Secure Log Redacting
+
 def redact_sensitive(log_message):
-    """Remove UUIDs and Base64 strings from log messages."""
+    """
+    Removes Base64 cryptographic keys and UUID strings from log output.
+    
+    Args:
+        log_message (str): Original logging message string.
+        
+    Returns:
+        str: Redacted message string.
+    """
     if not isinstance(log_message, str):
         return log_message
+    # Redact standard UUID structures
     log_message = re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '[REDACTED-UUID]', log_message)
+    # Redact Base64 ciphertext/key payloads
     log_message = re.sub(r'[A-Za-z0-9+/]{20,}={0,2}', '[REDACTED-B64]', log_message)
     return log_message
 
+
 class RedactingFilter(logging.Filter):
+    """Logging filter to invoke redaction on all processed logs."""
     def filter(self, record):
         if record.msg and isinstance(record.msg, str):
             record.msg = redact_sensitive(record.msg)
         return True
 
+
+# Register filters to scrub system logs
 app.logger.addFilter(RedactingFilter())
 logging.getLogger().addFilter(RedactingFilter())
 
-# Security Headers
+
 @app.after_request
 def set_security_headers(response):
+    """
+    Flask hook to enforce browser security headers.
+    
+    Sets Strict-Transport-Security (HTTPS only), X-Content-Type-Options,
+    X-Frame-Options, X-XSS-Protection, CSP rules, and disables route caching
+    on sensitive dashboards.
+    """
     if request.is_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -118,7 +169,7 @@ def set_security_headers(response):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     
-    # Stricter CSP: no 'unsafe-inline' for scripts, restrict connect-src
+    # Restrict loading of scripts/frames, allowing socket connection over WS/WSS
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         "script-src 'self' https://cdn.socket.io; "
@@ -130,13 +181,14 @@ def set_security_headers(response):
         "connect-src 'self' wss: ws:;"
     )
     
-    # Sensitive routes should not be cached
+    # Disable caching on core views
     if request.path in ['/login', '/register', '/chat']:
         response.headers['Cache-Control'] = 'no-store, max-age=0'
         
     return response
 
-# Initialize SocketIO CORS origins securely
+
+# Configure allowed Socket.IO CORS Origins dynamically
 cors_origins_env = os.environ.get("CORS_ORIGINS")
 if cors_origins_env:
     allowed_origins = cors_origins_env.split(",")
@@ -165,7 +217,7 @@ if not redis_url and os.environ.get('WEB_CONCURRENCY', '1') != '1':
                        "Rate limiting and queue ownership will be per-worker. "
                        "Set REDIS_URL for consistent state.")
 
-# Initialize Redis client if configured
+# Setup Redis Client connection pool if configuring multi-worker scaling
 r_client = None
 if redis_url:
     try:
@@ -174,26 +226,44 @@ if redis_url:
     except Exception as e:
         app.logger.warning(f"Could not initialize Redis client, falling back to memory: {e}")
 
-# Initialize DB for all workers
+# Ensure database tables exist
 database.init_db()
 
-# Queue Ownership mapping & locks
+# Queue state management maps & lock primitives (for single worker fallback)
 queue_owners = {}
 queue_creators = {}
 queue_owners_lock = threading.Lock()
 
+
 def add_queue_owner(queue_id, sid):
+    """
+    Binds a Socket connection ID (sid) as an authorized recipient for a message queue.
+    
+    Stores in Redis set if available, otherwise falls back to local in-memory tracking.
+    
+    Args:
+        queue_id (str): UUID representation of queue.
+        sid (str): WebSocket session ID.
+    """
     if r_client:
         try:
             r_client.sadd(f"queue_owner:{queue_id}", sid)
-            r_client.expire(f"queue_owner:{queue_id}", 86400) # 24h TTL
+            r_client.expire(f"queue_owner:{queue_id}", 86400)  # 24 hour TTL
             return
         except Exception:
             pass
     with queue_owners_lock:
         queue_owners.setdefault(queue_id, set()).add(sid)
 
+
 def add_queue_creator(queue_id, sid):
+    """
+    Registers the primary creator/host socket connection for a message queue.
+    
+    Args:
+        queue_id (str): UUID representation of queue.
+        sid (str): WebSocket session ID.
+    """
     if r_client:
         try:
             r_client.set(f"queue_creator:{queue_id}", sid, ex=86400)
@@ -203,7 +273,18 @@ def add_queue_creator(queue_id, sid):
     with queue_owners_lock:
         queue_creators[queue_id] = sid
 
+
 def is_queue_owner(queue_id, sid):
+    """
+    Checks if a Socket connection ID is authorized to access the queue.
+    
+    Args:
+        queue_id (str): Queue UUID.
+        sid (str): WebSocket session ID.
+        
+    Returns:
+        bool: True if authorized, False otherwise.
+    """
     if r_client:
         try:
             return r_client.sismember(f"queue_owner:{queue_id}", sid)
@@ -212,7 +293,17 @@ def is_queue_owner(queue_id, sid):
     with queue_owners_lock:
         return queue_id in queue_owners and sid in queue_owners[queue_id]
 
+
 def is_recipient_online(queue_id):
+    """
+    Checks if the queue creator's socket is active and registered.
+    
+    Args:
+        queue_id (str): Queue UUID.
+        
+    Returns:
+        bool: True if online, False otherwise.
+    """
     creator_sid = None
     if r_client:
         try:
@@ -227,38 +318,59 @@ def is_recipient_online(queue_id):
     with socket_connect_times_lock:
         return creator_sid in socket_connect_times
 
-# Rate limiting for sockets
+
+# In-memory WebSocket client rate limiter structures
 socket_rate_limits = {}
 socket_rate_limits_lock = threading.Lock()
 
+
 def is_rate_limited(sid, limit=5, window=1):
+    """
+    Evaluates Socket.IO message frequency to detect flood attempts.
+    
+    Args:
+        sid (str): Socket connection ID.
+        limit (int): Max messages allowed within temporal window.
+        window (int): Time interval in seconds.
+        
+    Returns:
+        bool: True if rate limit breached, False otherwise.
+    """
     now = time.time()
     with socket_rate_limits_lock:
         if sid not in socket_rate_limits:
             socket_rate_limits[sid] = []
         
-        # Clean up old timestamps
+        # Prune expired timestamps outside active window
         socket_rate_limits[sid] = [t for t in socket_rate_limits[sid] if now - t < window]
         
         is_limited = len(socket_rate_limits[sid]) >= limit
         if not is_limited:
             socket_rate_limits[sid].append(now)
             
-        # Clean up empty dictionary keys to prevent memory leak
+        # Deallocate unused dictionary keys to optimize memory footprint
         if not socket_rate_limits[sid]:
             del socket_rate_limits[sid]
             
         return is_limited
 
-# WebSocket session connect timestamps (8-hour limit check)
+
+# Connection time logging and session lifetime enforcement structures
 socket_connect_times = {}
 socket_connect_times_lock = threading.Lock()
 
+
 def validate_session():
-    """Called periodically or before sensitive operations."""
+    """
+    Validates active cookie session data and forces disconnection
+    if connection exceeds 8 hours to refresh key states.
+    
+    Returns:
+        bool: True if session remains valid, False if invalid/expired.
+    """
     if 'username' not in session:
         return False
-    # Enforce maximum connection lifetime (8 hours)
+    
     with socket_connect_times_lock:
         connect_time = socket_connect_times.get(request.sid)
     if connect_time and (time.time() - connect_time > 8 * 3600):
@@ -266,8 +378,17 @@ def validate_session():
         return False
     return True
 
-# Validation helper functions
+
 def validate_username(username):
+    """
+    Validates username pattern and length.
+    
+    Args:
+        username (str): Target username.
+        
+    Returns:
+        str: Error message, or None if validation passes.
+    """
     if not username:
         return "Username is required."
     if len(username) < 3 or len(username) > 50:
@@ -276,7 +397,20 @@ def validate_username(username):
         return "Username can only contain letters, numbers, underscores, and hyphens."
     return None
 
+
 def validate_password(password):
+    """
+    Enforces strong password composition boundaries.
+    
+    Requires minimum 8 characters, maximum 128 characters, and complexity containing
+    characters from at least 3 categories (uppercase, lowercase, digits, special characters).
+    
+    Args:
+        password (str): Target password.
+        
+    Returns:
+        str: Error message, or None if validation passes.
+    """
     if not password:
         return "Password is required."
     if len(password) < 8:
@@ -292,32 +426,40 @@ def validate_password(password):
         return "Password must contain characters from at least 3 of: uppercase, lowercase, digits, special characters."
     return None
 
+
 # ==========================================
 # 1. HTTP ROUTES
 # ==========================================
 
 @app.route('/', methods=['GET'])
 def index():
+    """Renders main entrance view or redirects to chat panel if authenticated."""
     if 'username' in session:
         return redirect(url_for('chat'))
     return render_template('login.html')
 
+
 @app.route('/chat', methods=['GET'])
 def chat():
+    """Renders chat dashboard view for authenticated users."""
     if 'username' not in session:
         return redirect(url_for('index'))
     return render_template('chat.html')
 
+
 @app.route('/health', methods=['GET'])
 def health():
+    """Basic health check probe for cluster metrics/monitoring."""
     return jsonify({
         "status": "ok",
         "timestamp": datetime.datetime.utcnow().isoformat()
     }), 200
 
+
 @app.route('/register', methods=['POST'])
 @limiter.limit("5 per minute")
 def register():
+    """Handles secure user account registration."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -336,9 +478,11 @@ def register():
     res = database.register_user(username, password)
     return jsonify(res)
 
+
 @app.route('/login', methods=['POST'])
 @limiter.limit("10 per minute")
 def login():
+    """Handles secure authentication, clearing session tokens to mitigate fixation attacks."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -353,10 +497,13 @@ def login():
         session['username'] = username
     return jsonify(res)
 
+
 @app.route('/logout', methods=['POST'])
 def logout():
+    """Logs out user, clearing current server sessions."""
     session.clear()
     return jsonify({"success": True})
+
 
 # ==========================================
 # 2. WEBSOCKET HANDLERS
@@ -364,6 +511,7 @@ def logout():
 
 @socketio.on('connect')
 def handle_connect():
+    """Validates HTTP session cookie state when initiating WS connection."""
     if 'username' not in session:
         return False
     with socket_connect_times_lock:
@@ -376,8 +524,10 @@ def handle_connect():
         if request.sid not in socket_rate_limits:
             socket_rate_limits[request.sid] = []
 
+
 @socketio.on('create_queue')
 def handle_create_queue():
+    """Generates a secure UUID and sets up an authorized message queue for client."""
     if not validate_session():
         emit('session_expired', {})
         disconnect()
@@ -395,8 +545,10 @@ def handle_create_queue():
     
     emit('queue_created', {'queue_id': queue_id})
 
+
 @socketio.on('register_peer')
 def handle_register_peer(data):
+    """Permits an active peer to authorize exchange routing to client's queue room."""
     if not validate_session():
         emit('session_expired', {})
         disconnect()
@@ -407,13 +559,15 @@ def handle_register_peer(data):
     if not my_queue or not peer_queue:
         return
 
-    # Verify that requesting client owns my_queue before allowing peer registration
+    # Verify requesting client owns target queue before associating permissions
     if is_queue_owner(my_queue, request.sid):
         add_queue_owner(peer_queue, request.sid)
         app.logger.debug(f"Peer queue {peer_queue[:8]} registered for owner SID={request.sid[:4]}")
 
+
 @socketio.on('push_queue')
 def handle_push_queue(data):
+    """Pushes secure E2EE payload to designated target queue."""
     if not validate_session():
         emit('session_expired', {})
         disconnect()
@@ -433,7 +587,7 @@ def handle_push_queue(data):
         app.logger.warning(f"Payload too large from SID={request.sid[:4]}")
         return
 
-    # Verify sender is authorized for target queue room
+    # Enforce queue authorization
     if not is_queue_owner(queue_id, request.sid):
         app.logger.warning(f"Unauthorised push_queue attempt for queue_id={queue_id[:8]} from SID={request.sid[:4]}")
         return
@@ -443,15 +597,17 @@ def handle_push_queue(data):
         return
     emit('queue_payload', {'queue_id': queue_id, 'payload': payload}, to=queue_id)
 
+
 @socketio.on('disconnect')
 def handle_disconnect():
+    """Wipes active session timestamps, rate limit tables, and clean up queue mappings."""
     sid = request.sid
     with socket_connect_times_lock:
         socket_connect_times.pop(sid, None)
     with socket_rate_limits_lock:
         socket_rate_limits.pop(sid, None)
         
-    # Clean up local queue owners and creators
+    # Clean up local queue mapping states
     with queue_owners_lock:
         empty_queues = []
         for q_id, sids in queue_owners.items():
@@ -468,11 +624,20 @@ def handle_disconnect():
 
     app.logger.debug(f"Client disconnected. SID={sid[:4]}")
 
+
 # ==========================================
 # 3. SSL EXECUTION
 # ==========================================
 
 def generate_self_signed_cert(cert_path, key_path):
+    """
+    Generates a secure self-signed P-256 SSL certificate and key pair
+    and writes them to the specified PEM filepaths.
+    
+    Args:
+        cert_path (str): Filepath to write the TLS certificate.
+        key_path (str): Filepath to write the private key.
+    """
     print("Generating self-signed SSL certificates...")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     
@@ -520,6 +685,7 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     disable_ssl = os.environ.get('DISABLE_SSL', 'False').lower() == 'true'
     
+    # Broadcast service via local multicast DNS
     advertise_mdns(port)
     
     if not debug_mode:
@@ -527,6 +693,7 @@ if __name__ == '__main__':
         log.setLevel(logging.WARNING)
         app.logger.setLevel(logging.WARNING)
     
+    # Secure server interface binding context
     bind_host = '127.0.0.1' if debug_mode else '0.0.0.0'
     
     if disable_ssl:

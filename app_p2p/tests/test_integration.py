@@ -2,12 +2,12 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key'
 
-import database
+import app_p2p.database as database
 database.DB_FILE = 'test_users_integration.db'
-import server
+import app_p2p.server as server
 
 class TestIntegration(unittest.TestCase):
     @classmethod

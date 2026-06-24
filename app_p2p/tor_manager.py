@@ -1,3 +1,11 @@
+"""
+Tor Process Management Module for AnonyMus (P2P Decentralized Architecture).
+
+Handles automated download, integrity verification, path traversal-safe extraction,
+configuration writing (torrc), subprocess spawning, and bootstrap monitoring
+for the embedded Tor Expert Bundle onion service proxy.
+"""
+
 import os
 import sys
 import platform
@@ -9,7 +17,7 @@ import atexit
 import shutil
 import socket
 
-# Configuration
+# Configuration version and bundle extraction paths
 TOR_VERSION = "15.0.16"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BIN_DIR = os.path.join(BASE_DIR, "bin")
@@ -22,20 +30,28 @@ TOR_RC_PATH = os.path.join(BIN_DIR, "torrc")
 SYSTEM = platform.system().lower()
 ARCH = platform.machine().lower()
 
-# Determine download URL and binary name
+# Resolve correct download URL and binary name for platform
 if SYSTEM == "windows":
     TOR_URL = f"https://dist.torproject.org/torbrowser/{TOR_VERSION}/tor-expert-bundle-windows-x86_64-{TOR_VERSION}.tar.gz"
     EXE_NAME = "tor.exe"
 elif SYSTEM == "darwin":
-    # macOS expert bundles are typically x86_64 or universal
     TOR_URL = f"https://dist.torproject.org/torbrowser/{TOR_VERSION}/tor-expert-bundle-macos-x86_64-{TOR_VERSION}.tar.gz"
     EXE_NAME = "tor"
 else:
-    # Default to Linux x86_64
     TOR_URL = f"https://dist.torproject.org/torbrowser/{TOR_VERSION}/tor-expert-bundle-linux-x86_64-{TOR_VERSION}.tar.gz"
     EXE_NAME = "tor"
 
+
 def find_free_port(start_port):
+    """
+    Scans sequential network ports starting at start_port to find a free port.
+    
+    Args:
+        start_port (int): Port index to begin scanning.
+        
+    Returns:
+        int: Free port index.
+    """
     port = start_port
     while port < 65535:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -47,15 +63,17 @@ def find_free_port(start_port):
         port += 1
     raise RuntimeError("No free ports available!")
 
+
 SOCKS_PORT = 9050
 CONTROL_PORT = 9051
-PEER_PORT = 8080  # Port where Flask handles P2P traffic
+PEER_PORT = 8080
 
-# Active Tor process reference
+# Spawned Tor subprocess reference
 tor_process = None
 
+
 def cleanup():
-    """Ensure Tor process is terminated on exit."""
+    """Ensures the background Tor process is cleanly terminated on application exit."""
     global tor_process
     if tor_process:
         print("Stopping Tor process...")
@@ -67,39 +85,57 @@ def cleanup():
         tor_process = None
         print("Tor stopped successfully.")
 
+
+# Register termination hook
 atexit.register(cleanup)
 
+
 def setup_directories():
-    """Create directory structure for Tor binaries, data, and service keys."""
+    """Initializes local storage directory layout for Tor binaries and runtime logs."""
     os.makedirs(BIN_DIR, exist_ok=True)
     os.makedirs(TOR_DIR, exist_ok=True)
     os.makedirs(TOR_DATA_DIR, exist_ok=True)
     os.makedirs(TOR_SERVICE_DIR, exist_ok=True)
 
+
 def find_tor_binary(search_path):
-    """Recursively search for the Tor executable in extracted files."""
+    """
+    Recursively scans search_path to locate the compiled Tor executable.
+    
+    Args:
+        search_path (str): Target directory to traverse.
+        
+    Returns:
+        str: Absolute path to the Tor executable, or None if not found.
+    """
     for root, dirs, files in os.walk(search_path):
         for file in files:
             if file.lower() == EXE_NAME.lower():
                 return os.path.join(root, file)
     return None
 
+
 def download_and_extract_tor():
-    """Download the Tor Expert Bundle and extract the binaries."""
+    """
+    Downloads Tor Expert Bundle if not present locally and extracts it safely.
+    
+    Implements path traversal sanitization checks to block malicious tar archives.
+    
+    Returns:
+        str: Path to the validated Tor executable.
+    """
     setup_directories()
     
-    # Check if binary already exists locally
     local_binary = find_tor_binary(TOR_DIR)
     if local_binary and os.path.exists(local_binary):
         print(f"Found local Tor binary at {local_binary}")
         return local_binary
 
-    # Download Tor Expert Bundle
     print(f"Downloading Tor Expert Bundle version {TOR_VERSION} for {SYSTEM}...")
     temp_archive = os.path.join(BIN_DIR, "tor_bundle.tar.gz")
     
     try:
-        # User-agent header to avoid download blocks
+        # Construct download request with custom User-Agent to avoid CDN blocks
         req = urllib.request.Request(
             TOR_URL, 
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -108,43 +144,46 @@ def download_and_extract_tor():
             shutil.copyfileobj(response, out_file)
         print("Download complete. Extracting archive...")
         
-        # Safe extraction (guarding against directory traversal)
+        # Safely extract archive verifying directories to prevent directory traversal attacks
         with tarfile.open(temp_archive, "r:gz") as tar:
             real_tor_dir = os.path.realpath(TOR_DIR)
             for member in tar.getmembers():
-                # Prevent path traversal vulnerabilities
                 member_path = os.path.realpath(os.path.join(real_tor_dir, member.name))
                 if not member_path.startswith(real_tor_dir + os.sep) and member_path != real_tor_dir:
+                    # Ignore path traversal attempts outside target directory
                     continue
                 tar.extract(member, path=real_tor_dir)
                 
         print("Extraction complete.")
         
-        # Clean up archive
         if os.path.exists(temp_archive):
             os.remove(temp_archive)
             
     except Exception as e:
         print(f"Failed to download/extract Tor: {e}")
-        # Clean up on failure
         if os.path.exists(temp_archive):
             os.remove(temp_archive)
         raise e
 
-    # Find the extracted executable
     extracted_binary = find_tor_binary(TOR_DIR)
     if not extracted_binary:
         raise FileNotFoundError("Could not find Tor binary inside the extracted files.")
     
-    # Make executable on Unix platforms
     if SYSTEM != "windows":
         os.chmod(extracted_binary, 0o755)
         
     return extracted_binary
 
+
 def write_torrc(socks_port, control_port, peer_port):
-    """Write the torrc configuration file for the Onion Service."""
-    # SOCKS5 proxy port, control port, and hidden service mapping
+    """
+    Writes custom configuration settings (torrc) for the Onion Hidden Service.
+    
+    Args:
+        socks_port (int): Port for outbound SOCKS5 proxy routing.
+        control_port (int): Tor control API port.
+        peer_port (int): Port index of local Flask server for inbound traffic.
+    """
     torrc_content = f"""SocksPort 127.0.0.1:{socks_port}
 ControlPort 127.0.0.1:{control_port}
 CookieAuthentication 1
@@ -156,10 +195,16 @@ HiddenServicePort 80 127.0.0.1:{peer_port}
         f.write(torrc_content)
     print(f"Wrote torrc configuration to {TOR_RC_PATH}")
 
+
 def get_onion_address():
-    """Retrieve the generated onion address for this node."""
+    """
+    Monitors Hidden Service directory to extract generated hostname.
+    
+    Returns:
+        str: Generated onion service address.
+    """
     hostname_path = os.path.join(TOR_SERVICE_DIR, "hostname")
-    for _ in range(30):  # Wait up to 30 seconds for Tor to generate the hostname
+    for _ in range(30):  # Wait up to 30 seconds for hostname generation
         if os.path.exists(hostname_path):
             with open(hostname_path, "r") as f:
                 onion = f.read().strip()
@@ -168,11 +213,17 @@ def get_onion_address():
         time.sleep(1)
     raise FileNotFoundError("Tor failed to generate Onion service hostname.")
 
+
 def launch_tor():
-    """Launch the embedded Tor process and block until bootstrapped."""
+    """
+    Spawns background Tor service, monitoring logs to block until bootstrap completes.
+    
+    Returns:
+        tuple: (onion_address, socks_port, peer_port) configuration parameters.
+    """
     global tor_process, SOCKS_PORT, CONTROL_PORT, PEER_PORT
     
-    # Dynamic port configuration if standard ports are in use
+    # Resolve unused network ports dynamically
     SOCKS_PORT = find_free_port(9050)
     CONTROL_PORT = find_free_port(9051)
     PEER_PORT = find_free_port(8080)
@@ -182,8 +233,7 @@ def launch_tor():
     
     print(f"Launching Tor on SOCKS port {SOCKS_PORT}, Control port {CONTROL_PORT}...")
     
-    # Start Tor process
-    # Pass config file using -f
+    # Spawn background Tor process, suppressing popup terminal on Windows
     tor_process = subprocess.Popen(
         [tor_binary, "-f", TOR_RC_PATH],
         stdout=subprocess.PIPE,
@@ -193,12 +243,10 @@ def launch_tor():
         creationflags=subprocess.CREATE_NO_WINDOW if SYSTEM == "windows" else 0
     )
     
-    # Monitor bootstrapping progress
     bootstrapped = False
     start_time = time.time()
     
     while True:
-        # Avoid hanging if the process dies
         if tor_process.poll() is not None:
             stdout, _ = tor_process.communicate()
             print(stdout)
@@ -208,7 +256,6 @@ def launch_tor():
         if not line:
             break
             
-        # Log Tor output
         if "Bootstrapped" in line:
             print(f"[Tor Log] {line.strip()}")
             
@@ -217,7 +264,7 @@ def launch_tor():
             print("Tor successfully bootstrapped!")
             break
             
-        # Timeout after 2 minutes
+        # Fail if bootstrap does not complete within 120s
         if time.time() - start_time > 120:
             cleanup()
             raise TimeoutError("Tor bootstrap timed out after 120 seconds.")
@@ -228,6 +275,7 @@ def launch_tor():
     onion_address = get_onion_address()
     print(f"Your User ID (Onion Address): {onion_address}")
     return onion_address, SOCKS_PORT, PEER_PORT
+
 
 if __name__ == "__main__":
     try:

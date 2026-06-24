@@ -1,3 +1,11 @@
+"""
+Build Automation Module for AnonyMus (P2P Windows Installer).
+
+Automates the compilation of the GUI launcher using PyInstaller, writes the
+Inno Setup configuration script, compiles the setup installer, and self-signs
+the generated binaries using PowerShell Authenticode signatures.
+"""
+
 import os
 import sys
 import subprocess
@@ -9,16 +17,20 @@ BUILD_DIR = os.path.join(BASE_DIR, "build")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 ISCC_PATH = r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
+
 def run_pyinstaller():
-    """Runs PyInstaller to compile launcher.py to a directory bundle."""
+    """
+    Executes PyInstaller to bundle the launcher script and nested applications.
+    
+    Creates a folder-based distribution incorporating app_main and app_p2p directories.
+    """
     print("--------------------------------------------------")
     print("Step 1: Running PyInstaller...")
     print("--------------------------------------------------")
     
-    # Check if pyinstaller exists in virtual env
+    # Resolve PyInstaller location
     pyinstaller_exe = os.path.join(BASE_DIR, "venv", "Scripts", "pyinstaller.exe")
     if not os.path.exists(pyinstaller_exe):
-        # Fallback to system path
         pyinstaller_exe = "pyinstaller"
         
     cmd = [
@@ -47,8 +59,9 @@ def run_pyinstaller():
     subprocess.run(cmd, check=True)
     print("PyInstaller compilation complete.\n")
 
+
 def write_iss_script():
-    """Generates the Inno Setup script setup.iss."""
+    """Generates the Inno Setup script compiler instructions (setup.iss)."""
     print("--------------------------------------------------")
     print("Step 2: Generating Inno Setup script (setup.iss)...")
     print("--------------------------------------------------")
@@ -112,8 +125,9 @@ end;
         f.write(iss_content)
     print(f"setup.iss written successfully to {iss_path}.\n")
 
+
 def compile_installer():
-    """Runs ISCC.exe to build the installer."""
+    """Executes the Inno Setup compiler (ISCC.exe) on the generated setup.iss script."""
     print("--------------------------------------------------")
     print("Step 3: Compiling installer with Inno Setup...")
     print("--------------------------------------------------")
@@ -129,8 +143,9 @@ def compile_installer():
     subprocess.run(cmd, check=True)
     print("Installer compiled successfully.\n")
 
+
 def sign_executables():
-    """Generates a self-signed cert and signs both launcher and installer using PowerShell."""
+    """Generates a self-signed code-signing certificate and signs the built binaries via PowerShell."""
     print("--------------------------------------------------")
     print("Step 4: Creating Self-Signed Certificate & Signing...")
     print("--------------------------------------------------")
@@ -138,7 +153,7 @@ def sign_executables():
     launcher_exe = os.path.join(DIST_DIR, "NetworkDiagnostics", "NetworkDiagnostics.exe")
     installer_exe = os.path.join(OUTPUT_DIR, "NetworkDiagnosticsInstaller.exe")
     
-    # We will use powershell to create cert and sign the files
+    # PowerShell commands to provision certificate and execute Set-AuthenticodeSignature
     ps_script = f"""
     $Subject = "CN=NetDiagnostics Project Code Sign"
     $Cert = Get-ChildItem Cert:\\CurrentUser\\My | Where-Object {{ $_.Subject -eq $Subject }} | Select-Object -First 1
@@ -165,9 +180,11 @@ def sign_executables():
     subprocess.run(["powershell", "-Command", ps_script], check=True)
     print("Signing operations completed successfully.\n")
 
+
 def main():
+    """Main execution loop for build pipeline orchestration."""
     try:
-        # Pre-clean output
+        # Purge previous build output folders
         if os.path.exists(OUTPUT_DIR):
             shutil.rmtree(OUTPUT_DIR)
             
@@ -183,6 +200,7 @@ def main():
     except Exception as e:
         print(f"\nBUILD FAILED: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -448,9 +448,9 @@ class NetworkDiagnosticsApp:
                 global tor_socks_port, onion_address
                 try:
                     # Delay import until needed to avoid circular import issues or early errors
-                    import app_p2p.database_p2p as database_p2p
-                    import app_p2p.tor_manager_p2p as tor_manager_p2p
-                    from app_p2p.server_p2p import app as p2p_app, socketio as p2p_socketio
+                    import app_p2p.database as database_p2p
+                    import app_p2p.tor_manager as tor_manager_p2p
+                    from app_p2p.server import app as p2p_app, socketio as p2p_socketio
                     
                     # 1. Initialize P2P local DB
                     print("[Daemon] Initializing database engine...")
@@ -487,8 +487,8 @@ class NetworkDiagnosticsApp:
             
             def launch_main_wrapper():
                 try:
-                    import app_main.database_main as database_main
-                    from app_main.server_main import app as main_app, socketio as main_socketio, advertise_mdns
+                    import app_main.database as database_main
+                    from app_main.server import app as main_app, socketio as main_socketio, advertise_mdns
                     
                     # 1. Set environment configurations
                     os.environ['PORT'] = str(port)
@@ -507,7 +507,7 @@ class NetworkDiagnosticsApp:
                         # We can launch Tor if not running, or print a notice to configure SOCKS proxy
                         # If P2P tor manager is available, we can reuse it to start a SOCKS proxy!
                         try:
-                            import app_p2p.tor_manager_p2p as tor_manager_p2p
+                            import app_p2p.tor_manager as tor_manager_p2p
                             print("[Daemon] Starting Tor Expert Bundle proxy wrapper...")
                             _, socks, _ = tor_manager_p2p.launch_tor()
                             global tor_socks_port
@@ -540,7 +540,7 @@ class NetworkDiagnosticsApp:
         
         # Stop Tor process cleanly
         try:
-            import app_p2p.tor_manager_p2p as tor_manager_p2p
+            import app_p2p.tor_manager as tor_manager_p2p
             tor_manager_p2p.cleanup()
             print("[Daemon] Tor security wrapper terminated.")
         except Exception as e:
@@ -602,7 +602,7 @@ class NetworkDiagnosticsApp:
 def on_closing():
     """Ensure background daemons (especially Tor subprocesses) are killed when GUI exits."""
     try:
-        import app_p2p.tor_manager_p2p as tor_manager_p2p
+        import app_p2p.tor_manager as tor_manager_p2p
         tor_manager_p2p.cleanup()
     except Exception:
         pass
