@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace Portal</title>
+  <meta name="robots" content="noindex, nosnippet">
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="logo-container">
+        <!-- Using a generic icon or text -->
+        <h1>Workspace Portal</h1>
+      </div>
+    </header>
+
+    <div class="auth-container" id="login-view">
+      <h2>System Access</h2>
+      <div class="input-group">
+        <label>Username</label>
+        <input type="text" id="login-username" autocomplete="off">
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="login-password">
+      </div>
+      <button class="btn" id="btn-login">Login</button>
+      <div class="error-msg" id="login-error"></div>
+      <a class="toggle-link" id="link-to-register">Don't have an account? Register</a>
+    </div>
+
+    <div class="auth-container" id="register-view" style="display: none;">
+      <h2>Create Account</h2>
+      <div class="input-group">
+        <label>Username</label>
+        <input type="text" id="reg-username" autocomplete="off">
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="reg-password">
+      </div>
+      <button class="btn" id="btn-register">Register</button>
+      <div class="error-msg" id="reg-error"></div>
+      <div class="success-msg" id="reg-success"></div>
+      <a class="toggle-link" id="link-to-login">Already have an account? Login</a>
+    </div>
+  </div>
+
+  <script src="/static/login.js"></script>
+  <script>
+    {% if register_only %}
+    document.addEventListener('DOMContentLoaded', () => {
+      toggleView('register-view');
+      const toLogin = document.getElementById('link-to-login');
+      if (toLogin) toLogin.style.display = 'none';
+    });
+    {% endif %}
+  </script>
+</body>
+</html>

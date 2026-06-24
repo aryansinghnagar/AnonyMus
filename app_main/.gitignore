@@ -25,9 +25,7 @@ env/
 *.sqlite3
 
 # ---------------------- Android app ----------------------------
-AnonyMus_android/
-AnonyMus_android.zip
-AnonyMus.zip
+privacy_chat_android/
 *.apk
 
 # ---------------------- IDE / Editor -------------------------
@@ -43,15 +41,15 @@ AnonyMus.zip
 Thumbs.db
 desktop.ini
 
-# ---------------------- Runtime / Temporary Tor files --------
-bin/
-test_run/
-
 # ---------------------- Planning docs (optional) -------------
 implementation_plan.md
 privacy-chat-plan.md
-anonymus_plan.md
 
-# ---------------------- Packaging / Installer ----------------
-output/
-*.spec
+# Tor runtime state and service secrets
+bin/tor_data/
+bin/tor_service/
+bin/tor/
+
+# Local test runs / runtime nodes
+test_run/
+
