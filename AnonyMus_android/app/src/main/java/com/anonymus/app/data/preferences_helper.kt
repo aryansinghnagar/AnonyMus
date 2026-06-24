@@ -19,6 +19,7 @@ class PreferencesHelper(context: Context) {
         private const val KEY_HOST = "server_host"
         private const val KEY_PORT = "server_port"
         private const val KEY_TRUST_SELF_SIGNED = "trust_self_signed"
+        private const val KEY_BIOMETRIC_LOCK = "biometric_lock"
     }
 
     var host: String?
@@ -33,19 +34,13 @@ class PreferencesHelper(context: Context) {
         get() = prefs.getBoolean(KEY_TRUST_SELF_SIGNED, false)
         set(value) = prefs.edit().putBoolean(KEY_TRUST_SELF_SIGNED, value).apply()
 
+    var biometricLock: Boolean
+        get() = prefs.getBoolean(KEY_BIOMETRIC_LOCK, false)
+        set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_LOCK, value).apply()
+
     fun isConfigured(): Boolean {
         return !host.isNullOrBlank()
     }
-    
-    val deviceId: String
-        get() {
-            var id = prefs.getString("device_id", null)
-            if (id == null) {
-                id = java.util.UUID.randomUUID().toString()
-                prefs.edit().putString("device_id", id).apply()
-            }
-            return id
-        }
 
     var sessionCookie: String?
         get() = prefs.getString("session_cookie", null)

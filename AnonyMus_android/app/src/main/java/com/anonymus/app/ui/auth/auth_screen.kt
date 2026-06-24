@@ -7,12 +7,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.anonymus.app.data.ChatManager
+import com.anonymus.app.LocalChatManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(onLoginSuccess: () -> Unit) {
+    val chatManager = LocalChatManager.current
     var isRegister by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -22,7 +23,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
 
     // Auto-login check
     LaunchedEffect(Unit) {
-        if (ChatManager.isLoggedIn()) {
+        if (chatManager.isLoggedIn()) {
             onLoginSuccess()
         }
     }
@@ -63,9 +64,36 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                 onClick = {
                     isLoading = true
                     error = null
+
+                    // Alphanumeric username check
+                    if (username.length < 3 || username.length > 50 || !username.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+                        isLoading = false
+                        error = "Username must be 3-50 chars and contain only alphanumeric, underscores, or hyphens."
+                        return@Button
+                    }
+
+                    // Password policy check
+                    if (isRegister) {
+                        if (password.length < 8) {
+                            isLoading = false
+                            error = "Password must be at least 8 characters."
+                            return@Button
+                        }
+                        var categories = 0
+                        if (password.any { it.isUpperCase() }) categories++
+                        if (password.any { it.isLowerCase() }) categories++
+                        if (password.any { it.isDigit() }) categories++
+                        if (password.any { !it.isLetterOrDigit() }) categories++
+                        if (categories < 3) {
+                            isLoading = false
+                            error = "Password must use 3 of: uppercase, lowercase, numbers, symbols."
+                            return@Button
+                        }
+                    }
+
                     scope.launch {
                         if (isRegister) {
-                            val (success, msg) = ChatManager.register(username, password)
+                            val (success, msg) = chatManager.register(username, password)
                             isLoading = false
                             if (success) {
                                 isRegister = false // Switch to login
@@ -74,7 +102,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                 error = msg
                             }
                         } else {
-                            val (success, msg) = ChatManager.login(username, password)
+                            val (success, msg) = chatManager.login(username, password)
                             isLoading = false
                             if (success) {
                                 onLoginSuccess()

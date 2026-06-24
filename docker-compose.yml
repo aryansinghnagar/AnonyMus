@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_SECRET_KEY=generate-a-secure-random-key-in-production
+      - FLASK_DEBUG=False
+      - DISABLE_SSL=True  # Usually disabled behind reverse proxy/Docker networking
+      - DATABASE_URL=postgresql://anonymus:anonymus_pass@db:5432/anonymus_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=anonymus
+      - POSTGRES_PASSWORD=anonymus_pass
+      - POSTGRES_DB=anonymus_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  pgdata:

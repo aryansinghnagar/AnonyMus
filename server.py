@@ -6,8 +6,11 @@ import datetime
 import uuid
 import socket
 import time
+import re
+import threading
+import logging
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
-from flask_socketio import SocketIO, emit, join_room
+from flask_socketio import SocketIO, emit, join_room, disconnect
 from dotenv import load_dotenv
 
 import database
@@ -50,6 +53,61 @@ limiter = Limiter(
     storage_uri=os.environ.get('REDIS_URL', 'memory://')
 )
 
+# Helpers for local IP and mDNS
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('10.255.255.255', 1))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
+zeroconf_instance = None
+
+def advertise_mdns(port):
+    def run():
+        global zeroconf_instance
+        try:
+            from zeroconf import Zeroconf, ServiceInfo
+            zeroconf_instance = Zeroconf()
+            local_ip = get_local_ip()
+            info = ServiceInfo(
+                "_anonymus._tcp.local.",
+                f"AnonyMus Server._anonymus._tcp.local.",
+                addresses=[socket.inet_aton(local_ip)],
+                port=port,
+                properties={},
+            )
+            zeroconf_instance.register_service(info)
+            print(f"mDNS Service advertised: _anonymus._tcp.local. on {local_ip}:{port}")
+        except Exception as e:
+            print(f"mDNS advertisement not active: {e}")
+            
+    import threading
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
+# Secure Log Redacting
+def redact_sensitive(log_message):
+    """Remove UUIDs and Base64 strings from log messages."""
+    if not isinstance(log_message, str):
+        return log_message
+    log_message = re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '[REDACTED-UUID]', log_message)
+    log_message = re.sub(r'[A-Za-z0-9+/]{20,}={0,2}', '[REDACTED-B64]', log_message)
+    return log_message
+
+class RedactingFilter(logging.Filter):
+    def filter(self, record):
+        if record.msg and isinstance(record.msg, str):
+            record.msg = redact_sensitive(record.msg)
+        return True
+
+app.logger.addFilter(RedactingFilter())
+logging.getLogger().addFilter(RedactingFilter())
+
 # Security Headers
 @app.after_request
 def set_security_headers(response):
@@ -78,22 +136,70 @@ def set_security_headers(response):
         
     return response
 
-# Initialize SocketIO
-allowed_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
-if "*" in allowed_origins:
-    allowed_origins = "*"
-redis_url = os.environ.get('REDIS_URL')
-if redis_url:
-    socketio = SocketIO(app, cors_allowed_origins=allowed_origins, message_queue=redis_url, transports=['websocket'])
+# Initialize SocketIO CORS origins securely
+cors_origins_env = os.environ.get("CORS_ORIGINS")
+if cors_origins_env:
+    allowed_origins = cors_origins_env.split(",")
 else:
-    socketio = SocketIO(app, cors_allowed_origins=allowed_origins, transports=['websocket'])
+    if debug_mode:
+        allowed_origins = "*"
+    else:
+        local_ip = get_local_ip()
+        allowed_origins = ["https://localhost", "https://127.0.0.1", f"https://{local_ip}"]
+
+redis_url = os.environ.get('REDIS_URL')
+socketio_kwargs = {
+    "cors_allowed_origins": allowed_origins,
+    "transports": ['websocket'],
+    "engineio_logger": False,
+    "ping_timeout": 60,
+    "ping_interval": 25
+}
+if redis_url:
+    socketio_kwargs["message_queue"] = redis_url
+
+socketio = SocketIO(app, **socketio_kwargs)
+
+if not redis_url and os.environ.get('WEB_CONCURRENCY', '1') != '1':
+    app.logger.warning("Multi-worker mode without Redis detected. "
+                       "Rate limiting and queue ownership will be per-worker. "
+                       "Set REDIS_URL for consistent state.")
+
+# Initialize Redis client if configured
+r_client = None
+if redis_url:
+    try:
+        import redis
+        r_client = redis.Redis.from_url(redis_url, decode_responses=True)
+    except Exception as e:
+        app.logger.warning(f"Could not initialize Redis client, falling back to memory: {e}")
 
 # Initialize DB for all workers
 database.init_db()
 
-# Rooms are used natively for Zero-Knowledge Queues routing, eliminating in-memory state.
+# Queue Ownership mapping & locks
+queue_owners = {}
+queue_owners_lock = threading.Lock()
 
-import threading
+def add_queue_owner(queue_id, sid):
+    if r_client:
+        try:
+            r_client.sadd(f"queue_owner:{queue_id}", sid)
+            r_client.expire(f"queue_owner:{queue_id}", 86400) # 24h TTL
+            return
+        except Exception:
+            pass
+    with queue_owners_lock:
+        queue_owners.setdefault(queue_id, set()).add(sid)
+
+def is_queue_owner(queue_id, sid):
+    if r_client:
+        try:
+            return r_client.sismember(f"queue_owner:{queue_id}", sid)
+        except Exception:
+            pass
+    with queue_owners_lock:
+        return queue_id in queue_owners and sid in queue_owners[queue_id]
 
 # Rate limiting for sockets
 socket_rate_limits = {}
@@ -118,6 +224,47 @@ def is_rate_limited(username, limit=5, window=1):
             
         return is_limited
 
+# WebSocket session connect timestamps (8-hour limit check)
+socket_connect_times = {}
+socket_connect_times_lock = threading.Lock()
+
+def validate_session():
+    """Called periodically or before sensitive operations."""
+    if 'username' not in session:
+        return False
+    # Enforce maximum connection lifetime (8 hours)
+    connect_time = socket_connect_times.get(request.sid)
+    if connect_time and (time.time() - connect_time > 8 * 3600):
+        app.logger.warning(f"WebSocket session expired (8h limit) for SID={request.sid}")
+        return False
+    return True
+
+# Validation helper functions
+def validate_username(username):
+    if not username:
+        return "Username is required."
+    if len(username) < 3 or len(username) > 50:
+        return "Username must be between 3 and 50 characters."
+    if not re.match(r"^[a-zA-Z0-9_-]+$", username):
+        return "Username can only contain letters, numbers, underscores, and hyphens."
+    return None
+
+def validate_password(password):
+    if not password:
+        return "Password is required."
+    if len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if len(password) > 128:
+        return "Password must be at most 128 characters long."
+    categories = 0
+    if re.search(r'[A-Z]', password): categories += 1
+    if re.search(r'[a-z]', password): categories += 1
+    if re.search(r'[0-9]', password): categories += 1
+    if re.search(r'[^A-Za-z0-9]', password): categories += 1
+    if categories < 3:
+        return "Password must contain characters from at least 3 of: uppercase, lowercase, digits, special characters."
+    return None
+
 # ==========================================
 # 1. HTTP ROUTES
 # ==========================================
@@ -134,6 +281,13 @@ def chat():
         return redirect(url_for('index'))
     return render_template('chat.html')
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }), 200
+
 @app.route('/register', methods=['POST'])
 @limiter.limit("5 per minute")
 def register():
@@ -144,11 +298,13 @@ def register():
     username = data.get('username')
     password = data.get('password')
     
-    # Enforce lengths
-    if username and len(username) > 50:
-        return jsonify({"error": "Username too long"}), 400
-    if password and len(password) > 128:
-        return jsonify({"error": "Password too long"}), 400
+    user_err = validate_username(username)
+    if user_err:
+        return jsonify({"error": user_err}), 400
+
+    pwd_err = validate_password(password)
+    if pwd_err:
+        return jsonify({"error": pwd_err}), 400
         
     res = database.register_user(username, password)
     return jsonify(res)
@@ -183,27 +339,59 @@ def logout():
 def handle_connect():
     if 'username' not in session:
         return False
-    app.logger.debug(f"Client connected. SID={request.sid}, User={session['username']}")
-    # Do not clear rate limits on reconnect, only initialize if not present
+    with socket_connect_times_lock:
+        socket_connect_times[request.sid] = time.time()
+        
+    truncated_sid = request.sid[:4] if request.sid else "None"
+    app.logger.debug(f"Client connected. SID={truncated_sid}, User={session['username']}")
+    
     with socket_rate_limits_lock:
         if request.sid not in socket_rate_limits:
             socket_rate_limits[request.sid] = []
 
 @socketio.on('create_queue')
 def handle_create_queue():
+    if not validate_session():
+        emit('session_expired', {})
+        disconnect()
+        return
+
     username = session.get('username', request.sid)
     if is_rate_limited(username, limit=5, window=10):
         app.logger.warning(f"Rate limit exceeded for create_queue on User={username}")
         return
 
     queue_id = str(uuid.uuid4())
+    add_queue_owner(queue_id, request.sid)
     join_room(queue_id)
-    app.logger.debug(f"Queue room {queue_id} joined by SID={request.sid}")
+    app.logger.debug(f"Queue room {queue_id} joined by SID={request.sid[:4]}")
     
     emit('queue_created', {'queue_id': queue_id})
 
+@socketio.on('register_peer')
+def handle_register_peer(data):
+    if not validate_session():
+        emit('session_expired', {})
+        disconnect()
+        return
+
+    my_queue = data.get('my_queue')
+    peer_queue = data.get('peer_queue')
+    if not my_queue or not peer_queue:
+        return
+
+    # Verify that requesting client owns my_queue before allowing peer registration
+    if is_queue_owner(my_queue, request.sid):
+        add_queue_owner(peer_queue, request.sid)
+        app.logger.debug(f"Peer queue {peer_queue[:8]} registered for owner SID={request.sid[:4]}")
+
 @socketio.on('push_queue')
 def handle_push_queue(data):
+    if not validate_session():
+        emit('session_expired', {})
+        disconnect()
+        return
+
     username = session.get('username', request.sid)
     if is_rate_limited(username, limit=10, window=1):
         app.logger.warning(f"Rate limit exceeded for push_queue on User={username}")
@@ -218,7 +406,12 @@ def handle_push_queue(data):
     if len(payload) > 100 * 1024:
         app.logger.warning(f"Payload too large from User={username}")
         return
-        
+
+    # Verify sender is authorized for target queue room
+    if not is_queue_owner(queue_id, request.sid):
+        app.logger.warning(f"Unauthorised push_queue attempt for queue_id={queue_id[:8]} from SID={request.sid[:4]}")
+        return
+
     participants = socketio.server.manager.get_participants(request.namespace, queue_id)
     if not list(participants):
         emit('push_queue_error', {'queue_id': queue_id, 'error': 'recipient_offline'})
@@ -228,25 +421,27 @@ def handle_push_queue(data):
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
-    # Clean up rate limit data associated with request.sid
+    with socket_connect_times_lock:
+        socket_connect_times.pop(sid, None)
     with socket_rate_limits_lock:
         socket_rate_limits.pop(sid, None)
-    app.logger.debug(f"Client disconnected. SID={sid}")
+        
+    # Clean up local queue owners
+    with queue_owners_lock:
+        empty_queues = []
+        for q_id, sids in queue_owners.items():
+            if sid in sids:
+                sids.remove(sid)
+            if not sids:
+                empty_queues.append(q_id)
+        for q_id in empty_queues:
+            del queue_owners[q_id]
+
+    app.logger.debug(f"Client disconnected. SID={sid[:4]}")
 
 # ==========================================
 # 3. SSL EXECUTION
 # ==========================================
-
-def get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(('10.255.255.255', 1))
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = '127.0.0.1'
-    finally:
-        s.close()
-    return ip
 
 def generate_self_signed_cert(cert_path, key_path):
     print("Generating self-signed SSL certificates...")
@@ -296,13 +491,13 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     disable_ssl = os.environ.get('DISABLE_SSL', 'False').lower() == 'true'
     
-    import logging
+    advertise_mdns(port)
+    
     if not debug_mode:
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.WARNING)
         app.logger.setLevel(logging.WARNING)
     
-    # Never bind 0.0.0.0 with debug mode enabled to prevent remote debugger access
     bind_host = '127.0.0.1' if debug_mode else '0.0.0.0'
     
     if disable_ssl:
@@ -321,4 +516,4 @@ if __name__ == '__main__':
         if socketio.server.eio.async_mode == 'threading':
             socketio.run(app, host=bind_host, port=port, debug=debug_mode, ssl_context=(cert_path, key_path), allow_unsafe_werkzeug=debug_mode)
         else:
-            socketio.run(app, host=bind_host, port=port, debug=debug_mode, certfile=cert_path, keyfile=key_path)
+            socketio.run(app, host=bind_host, port=port, debug=debug_mode, certfile=cert_path, keyfile=key_path)

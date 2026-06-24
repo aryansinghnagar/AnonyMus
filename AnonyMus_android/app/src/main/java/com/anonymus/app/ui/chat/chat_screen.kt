@@ -16,29 +16,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.filled.FlashOn
-import com.anonymus.app.data.ChatManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.anonymus.app.LocalChatManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
-    val conversations by ChatManager.conversations.collectAsState()
+    val chatManager = LocalChatManager.current
+    val conversations by chatManager.conversations.collectAsState()
     val messages = conversations["Peer"] ?: emptyList()
+    val disappearTimerSeconds by chatManager.disappearTimerSeconds.collectAsState()
 
     var messageText by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var covertMode by remember { mutableStateOf(false) }
 
     if (covertMode) {
-        // Phase 5: Covert Mode Calculator UI
-        Scaffold { padding ->
+        // Covert Mode Calculator UI
+        Scaffold { paddingValues ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(paddingValues)
                     .background(Color.White)
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -49,7 +50,7 @@ fun ChatScreen() {
                     value = "0",
                     onValueChange = {},
                     enabled = false,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Calculator Display" },
                     textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.End, fontSize = androidx.compose.ui.unit.TextUnit(32f, androidx.compose.ui.unit.TextUnitType.Sp)),
                     colors = OutlinedTextFieldDefaults.colors(
                         disabledTextColor = Color.Black,
@@ -59,7 +60,7 @@ fun ChatScreen() {
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = { covertMode = false }, // Hidden way to exit
-                    modifier = Modifier.fillMaxWidth().height(80.dp),
+                    modifier = Modifier.fillMaxWidth().height(80.dp).semantics { contentDescription = "Calculate" },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
                 ) {
                     Text("=", color = Color.Black, style = MaterialTheme.typography.headlineLarge)
@@ -76,10 +77,11 @@ fun ChatScreen() {
                     Column {
                         Text("Chat", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Verification Code: ${ChatManager.safetyNumber ?: "Unknown"}",
+                            "Verification Code: ${chatManager.safetyNumber ?: "Unknown"}",
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.tertiary
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.semantics { contentDescription = "Session verification code" }
                         )
                     }
                 },
@@ -90,20 +92,29 @@ fun ChatScreen() {
                 ),
                 actions = {
                     // Elven Cloak Button
-                    IconButton(onClick = { covertMode = true }) {
+                    IconButton(
+                        onClick = { covertMode = true },
+                        modifier = Modifier.semantics { contentDescription = "Activate Covert Mode" }
+                    ) {
                         Icon(Icons.Default.VisibilityOff, contentDescription = "Calculator", tint = MaterialTheme.colorScheme.onPrimary)
                     }
 
                     // Obliviate Button
-                    IconButton(onClick = { ChatManager.obliviate() }) {
+                    IconButton(
+                        onClick = { chatManager.obliviate() },
+                        modifier = Modifier.semantics { contentDescription = "Wipe and clear peer session" }
+                    ) {
                         Icon(Icons.Default.FlashOn, contentDescription = "Clear Chat Data", tint = Color(0xFF8B5CF6))
                     }
 
                     // Tears in Rain (Disappearing Messages)
                     Box {
-                        TextButton(onClick = { expanded = true }) {
+                        TextButton(
+                            onClick = { expanded = true },
+                            modifier = Modifier.semantics { contentDescription = "Set disappearing messages timer. Current timer: ${if (disappearTimerSeconds == 0) "Keep Messages" else "$disappearTimerSeconds seconds"}" }
+                        ) {
                             Text(
-                                if (ChatManager.disappearTimerSeconds == 0) "Keep Msgs" else "${ChatManager.disappearTimerSeconds}s",
+                                if (disappearTimerSeconds == 0) "Keep Msgs" else "${disappearTimerSeconds}s",
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
@@ -111,14 +122,39 @@ fun ChatScreen() {
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
                         ) {
-                            DropdownMenuItem(text = { Text("Off (Session)") }, onClick = { ChatManager.disappearTimerSeconds = 0; expanded = false })
-                            DropdownMenuItem(text = { Text("15 Seconds") }, onClick = { ChatManager.disappearTimerSeconds = 15; expanded = false })
-                            DropdownMenuItem(text = { Text("60 Seconds") }, onClick = { ChatManager.disappearTimerSeconds = 60; expanded = false })
+                            DropdownMenuItem(
+                                text = { Text("Off (Session)") },
+                                onClick = { chatManager.setDisappearingTimer(0); expanded = false },
+                                modifier = Modifier.semantics { contentDescription = "Disappearing messages off" }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("15 Seconds") },
+                                onClick = { chatManager.setDisappearingTimer(15); expanded = false },
+                                modifier = Modifier.semantics { contentDescription = "Disappearing messages 15 seconds" }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("60 Seconds") },
+                                onClick = { chatManager.setDisappearingTimer(60); expanded = false },
+                                modifier = Modifier.semantics { contentDescription = "Disappearing messages 60 seconds" }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("5 Minutes") },
+                                onClick = { chatManager.setDisappearingTimer(300); expanded = false },
+                                modifier = Modifier.semantics { contentDescription = "Disappearing messages 5 minutes" }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("30 Minutes") },
+                                onClick = { chatManager.setDisappearingTimer(1800); expanded = false },
+                                modifier = Modifier.semantics { contentDescription = "Disappearing messages 30 minutes" }
+                            )
                         }
                     }
 
                     // Infinity Snap (Panic Button)
-                    IconButton(onClick = { ChatManager.infinitySnap() }) {
+                    IconButton(
+                        onClick = { chatManager.infinitySnap() },
+                        modifier = Modifier.semantics { contentDescription = "Emergency Panic Button: Wipe and destroy session" }
+                    ) {
                         Icon(Icons.Default.Warning, contentDescription = "Close Chat", tint = Color(0xFFF59E0B))
                     }
                 }
@@ -133,28 +169,71 @@ fun ChatScreen() {
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .semantics { contentDescription = "List of chat messages" },
                 reverseLayout = true
             ) {
                 // Reverse list for bottom-up scrolling
-                items(messages.reversed()) { msg ->
+                items(messages.reversed(), key = { it.id }) { msg ->
                     val isOwn = msg.sender == "You"
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
-                    ) {
-                        Surface(
-                            shape = MaterialTheme.shapes.medium,
-                            color = if (isOwn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier.widthIn(max = 280.dp)
+                    val isSystem = msg.sender == "System"
+
+                    if (isSystem) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = msg.text,
-                                modifier = Modifier.padding(12.dp),
-                                color = if (!msg.isDecryptedSuccessfully) Color.Red else MaterialTheme.colorScheme.onSurface
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.semantics { contentDescription = "System message: ${msg.text}" }
                             )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
+                        ) {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = if (isOwn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier
+                                    .widthIn(max = 280.dp)
+                                    .semantics {
+                                        contentDescription = "${if (isOwn) "Your message" else "Peer's message"}: ${msg.text}${if (msg.remainingSeconds > 0) ", disappears in ${msg.remainingSeconds} seconds" else ""}"
+                                    }
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = msg.text,
+                                        color = if (!msg.isDecryptedSuccessfully) Color.Red else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (msg.remainingSeconds > 0) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.End,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "${msg.remainingSeconds}s",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isOwn) {
+                                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -174,7 +253,9 @@ fun ChatScreen() {
                     OutlinedTextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { contentDescription = "Message text input field" },
                         placeholder = { Text("Type a message...") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(autoCorrect = false)
@@ -183,11 +264,12 @@ fun ChatScreen() {
                     Button(
                         onClick = {
                             if (messageText.isNotBlank()) {
-                                ChatManager.sendPrivateMessage(messageText)
+                                chatManager.sendPrivateMessage(messageText)
                                 messageText = ""
                             }
                         },
-                        enabled = messageText.isNotBlank()
+                        enabled = messageText.isNotBlank(),
+                        modifier = Modifier.semantics { contentDescription = "Send message" }
                     ) {
                         Text("Send")
                     }

@@ -1,20 +1,20 @@
 const socket = io({ transports: ['websocket'] });
 
-const socket = io({ transports: ['websocket'] });
-
 const chatSession = {
   myKeys: null,
   myPublicKeyExported: null,
   myQueueId: null,
   theirQueueId: null,
   theirPublicKeyExported: null,
-  writeKey: null,
-  readKey: null,
+  sendChainKey: null,
+  recvChainKey: null,
+  sessionId: null, // safety number/hash
   myRole: null, // 'A' or 'B'
   theirRole: null, // 'B' or 'A'
   sendSeq: 0,
   recvSeq: 0,
   lastCopiedInviteUrl: null,
+  disappearTimer: 0, // negotiated timer in seconds
   
   reset() {
     this.myKeys = null;
@@ -22,13 +22,15 @@ const chatSession = {
     this.myQueueId = null;
     this.theirQueueId = null;
     this.theirPublicKeyExported = null;
-    this.writeKey = null;
-    this.readKey = null;
+    this.sendChainKey = null;
+    this.recvChainKey = null;
+    this.sessionId = null;
     this.myRole = null;
     this.theirRole = null;
     this.sendSeq = 0;
     this.recvSeq = 0;
     this.lastCopiedInviteUrl = null;
+    this.disappearTimer = 0;
   }
 };
 
@@ -74,6 +76,18 @@ function resetSession() {
   
   socket.disconnect();
   document.body.innerHTML = '';
+  
+  // Best-effort key material sanitization
+  chatSession.writeKey = null;
+  chatSession.readKey = null;
+  chatSession.myKeys = null;
+  chatSession.sendChainKey = null;
+  chatSession.recvChainKey = null;
+
+  // Force a minor GC trigger by allocating and releasing a large buffer
+  const buf = new ArrayBuffer(16 * 1024 * 1024); // 16MB
+  setTimeout(() => {}, 0);
+
   window.location.replace("about:blank");
 }
 
@@ -102,18 +116,24 @@ btnCloseChat.addEventListener('click', () => {
 
 btnClearCache.addEventListener('click', () => {
   if (confirm('Clear connection cache? This will permanently delete the chat history for both you and your peer, and close the session.')) {
-    if (chatSession.writeKey && chatSession.theirQueueId) {
+    if (chatSession.sendChainKey && chatSession.theirQueueId) {
       const plaintext = JSON.stringify({ type: 'control', action: 'clear' });
-      encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq).then(({iv, ciphertext}) => {
-        chatSession.sendSeq++;
-        const payload = JSON.stringify({
-          type: 'message',
-          iv,
-          ciphertext
+      deriveChainKeys(chatSession.sendChainKey).then(({ messageKey, nextChainKey }) => {
+        chatSession.sendChainKey = nextChainKey;
+        encryptMessage(messageKey, plaintext, chatSession.myRole, chatSession.sendSeq, chatSession.sessionId).then(({iv, ciphertext}) => {
+          chatSession.sendSeq++;
+          const payload = JSON.stringify({
+            type: 'message',
+            iv,
+            ciphertext
+          });
+          socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+          resetSession();
         });
-        socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+      }).catch(err => {
+        console.error(err);
         resetSession();
-      }).catch(err => console.error(err));
+      });
     } else {
       resetSession();
     }
@@ -131,10 +151,14 @@ btnCalculatorExit.addEventListener('click', () => {
 function startKeepAlive() {
   if (staticInterval) clearTimeout(staticInterval);
   
-  function sendKeepAlive() {
-    if (chatSession.writeKey && chatSession.theirQueueId) {
-      const plaintext = JSON.stringify({ type: 'control', action: 'heartbeat' });
-      encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq).then(({iv, ciphertext}) => {
+  async function sendKeepAlive() {
+    if (chatSession.sendChainKey && chatSession.theirQueueId) {
+      try {
+        const { messageKey, nextChainKey } = await deriveChainKeys(chatSession.sendChainKey);
+        chatSession.sendChainKey = nextChainKey;
+        
+        const plaintext = JSON.stringify({ type: 'control', action: 'heartbeat' });
+        const { iv, ciphertext } = await encryptMessage(messageKey, plaintext, chatSession.myRole, chatSession.sendSeq, chatSession.sessionId);
         chatSession.sendSeq++;
         const payload = JSON.stringify({
           type: 'message',
@@ -142,32 +166,61 @@ function startKeepAlive() {
           ciphertext
         });
         socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
-      }).catch(err => console.error("KeepAlive error:", err));
+      } catch (err) {
+        console.error("KeepAlive error:", err);
+      }
     }
-    staticInterval = setTimeout(sendKeepAlive, Math.random() * 5000 + 2000);
+    // Web Keep-Alive optimized to 10-30s random interval
+    staticInterval = setTimeout(sendKeepAlive, Math.random() * 20000 + 10000);
   }
   
   staticInterval = setTimeout(sendKeepAlive, 2000);
 }
 
-function addMessageLine(sender, text) {
+function addMessageLine(sender, text, disappearAfter = chatSession.disappearTimer) {
   const row = document.createElement('div');
-  row.className = 'message' + (sender === 'You' ? ' message-own' : '');
+  row.className = 'message' + (sender === 'You' ? ' message-own' : ' message-other');
+  
   const senderSpan = document.createElement('span');
   senderSpan.className = 'message-sender';
   senderSpan.textContent = sender + ':';
   row.appendChild(senderSpan);
-  row.appendChild(document.createTextNode(' ' + text));
+  
+  const contentNode = document.createTextNode(' ' + text);
+  row.appendChild(contentNode);
   messagesEl.appendChild(row);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
-  // Disappearing logic
-  const timerVal = parseInt(disappearTimerSelect.value, 10);
-  if (timerVal > 0) {
-    setTimeout(() => {
-      if (row.parentNode) row.parentNode.removeChild(row);
-    }, timerVal * 1000);
+  // Disappearing logic with visual countdown
+  if (disappearAfter > 0) {
+    const timerSpan = document.createElement('span');
+    timerSpan.className = 'message-timer';
+    timerSpan.textContent = `${disappearAfter}s`;
+    row.appendChild(timerSpan);
+    
+    let remaining = disappearAfter;
+    const interval = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(interval);
+        if (row.parentNode) {
+          row.classList.add('fading-out');
+          setTimeout(() => {
+            if (row.parentNode) row.parentNode.removeChild(row);
+          }, 500);
+        }
+      } else {
+        timerSpan.textContent = `${remaining}s`;
+        if (remaining <= 5) {
+          row.classList.add('expiring');
+        }
+      }
+    }, 1000);
   }
+  
+  // Freeze nodes for best effort dev tools protection
+  Object.freeze(row);
+  Object.freeze(contentNode);
 }
 
 function addStatusLine(text) {
@@ -199,14 +252,19 @@ socket.on('connect', async () => {
 socket.on('queue_created', ({ queue_id }) => {
   chatSession.myQueueId = queue_id;
   
-  if (chatSession.theirQueueId && chatSession.writeKey) {
-    // We reconnected, inform peer of our new queue
-    addStatusLine('Reconnected. Updating secure channel...');
+  if (chatSession.theirQueueId && chatSession.sendChainKey) {
+    // Host queue rotation for invite link single-use (burn-after-reading)
     const payload = JSON.stringify({
       type: 'queue_update',
       new_queue: chatSession.myQueueId
     });
     socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+    
+    // Register the new rotated queue with the peer
+    socket.emit('register_peer', {
+      my_queue: chatSession.myQueueId,
+      peer_queue: chatSession.theirQueueId
+    });
     return;
   }
 
@@ -304,8 +362,8 @@ btnAcceptInvite.addEventListener('click', async () => {
     const theirKey = await importPublicKey(chatSession.theirPublicKeyExported);
     
     const sessionKeys = await deriveSessionKeys(chatSession.myKeys.privateKey, theirKey, chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
-    chatSession.writeKey = sessionKeys.writeKey;
-    chatSession.readKey = sessionKeys.readKey;
+    chatSession.sendChainKey = sessionKeys.sendChainKey;
+    chatSession.recvChainKey = sessionKeys.recvChainKey;
     
     const isAlice = chatSession.myPublicKeyExported < chatSession.theirPublicKeyExported;
     chatSession.myRole = isAlice ? 'A' : 'B';
@@ -313,15 +371,23 @@ btnAcceptInvite.addEventListener('click', async () => {
     chatSession.sendSeq = 0;
     chatSession.recvSeq = 0;
     
-    uiSafetyNumber.textContent = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
+    chatSession.sessionId = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
+    uiSafetyNumber.textContent = chatSession.sessionId;
 
-    // Send Handshake payload to their queue
+    // Send Handshake payload to their queue (handshake is unencrypted)
     const payload = JSON.stringify({
       type: 'handshake',
       reply_queue: chatSession.myQueueId,
       public_key: chatSession.myPublicKeyExported
     });
     socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+    
+    // Register peer queue ownership for backend verification
+    socket.emit('register_peer', {
+      my_queue: chatSession.myQueueId,
+      peer_queue: chatSession.theirQueueId
+    });
+
     addStatusLine('Connected to peer. Awaiting their response...');
     history.replaceState(null, null, ' ');
     startKeepAlive();
@@ -349,8 +415,8 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
         const theirKey = await importPublicKey(chatSession.theirPublicKeyExported);
         
         const sessionKeys = await deriveSessionKeys(chatSession.myKeys.privateKey, theirKey, chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
-        chatSession.writeKey = sessionKeys.writeKey;
-        chatSession.readKey = sessionKeys.readKey;
+        chatSession.sendChainKey = sessionKeys.sendChainKey;
+        chatSession.recvChainKey = sessionKeys.recvChainKey;
         
         const isAlice = chatSession.myPublicKeyExported < chatSession.theirPublicKeyExported;
         chatSession.myRole = isAlice ? 'A' : 'B';
@@ -358,8 +424,18 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
         chatSession.sendSeq = 0;
         chatSession.recvSeq = 0;
         
-        uiSafetyNumber.textContent = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
+        chatSession.sessionId = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
+        uiSafetyNumber.textContent = chatSession.sessionId;
         
+        // Register peer queue ownership for backend verification
+        socket.emit('register_peer', {
+          my_queue: chatSession.myQueueId,
+          peer_queue: chatSession.theirQueueId
+        });
+
+        // Rotate our queue to burn the old invite link
+        socket.emit('create_queue');
+
         viewSetup.classList.remove('active');
         viewChat.style.display = 'flex';
         addStatusLine('Peer connected securely.');
@@ -378,13 +454,17 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
     }
 
     if (data.type === 'message') {
-      if (!chatSession.readKey) return;
-      const plaintext = await decryptMessage(chatSession.readKey, data.iv, data.ciphertext, chatSession.theirRole, chatSession.recvSeq);
-      
-      if (plaintext !== null) {
-        chatSession.recvSeq++;
-        try {
+      if (!chatSession.recvChainKey) return;
+      try {
+        const { messageKey, nextChainKey } = await deriveChainKeys(chatSession.recvChainKey);
+        
+        const plaintext = await decryptMessage(messageKey, data.iv, data.ciphertext, chatSession.theirRole, chatSession.recvSeq, chatSession.sessionId);
+        
+        if (plaintext !== null) {
+          chatSession.recvChainKey = nextChainKey;
+          chatSession.recvSeq++;
           const msgObj = JSON.parse(plaintext);
+          
           if (msgObj.type === 'control') {
             if (msgObj.action === 'heartbeat' || msgObj.action === 'static') return;
             if (msgObj.action === 'clear' || msgObj.action === 'obliviate') {
@@ -392,15 +472,44 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
               alert('Connection closed by peer. Chat history cleared.');
               return;
             }
+            if (msgObj.action === 'timer_set') {
+              const duration = msgObj.duration_seconds;
+              chatSession.disappearTimer = duration;
+              disappearTimerSelect.value = duration;
+              addStatusLine(`Peer set disappearing messages to ${duration > 0 ? duration + ' seconds' : 'Off'}.`);
+              
+              // Send timer_ack using send chain
+              const { messageKey: sendMsgKey, nextChainKey: nextSendChain } = await deriveChainKeys(chatSession.sendChainKey);
+              chatSession.sendChainKey = nextSendChain;
+              
+              const plaintextAck = JSON.stringify({
+                type: 'control',
+                action: 'timer_ack',
+                duration_seconds: duration,
+                mode: 'session'
+              });
+              const { iv, ciphertext } = await encryptMessage(sendMsgKey, plaintextAck, chatSession.myRole, chatSession.sendSeq, chatSession.sessionId);
+              chatSession.sendSeq++;
+              
+              const payload = JSON.stringify({ type: 'message', iv, ciphertext });
+              socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+              return;
+            }
+            if (msgObj.action === 'timer_ack') {
+              const duration = msgObj.duration_seconds;
+              chatSession.disappearTimer = duration;
+              disappearTimerSelect.value = duration;
+              addStatusLine(`Peer confirmed disappearing messages timer: ${duration > 0 ? duration + ' seconds' : 'Off'}.`);
+              return;
+            }
           } else if (msgObj.type === 'text') {
             addMessageLine('Peer', msgObj.content);
           }
-        } catch (jsonErr) {
-          console.error("Failed to parse decrypted message JSON:", jsonErr);
-          addMessageLine('Peer', '[Corrupted Message Envelope]');
+        } else {
+          addMessageLine('Peer', '[Decryption Failed - Session Desynced]');
         }
-      } else {
-        addMessageLine('Peer', '[Decryption Failed - Session Desynced]');
+      } catch (err) {
+        console.error("Message processing failed:", err);
       }
     }
   } catch (err) {
@@ -417,26 +526,57 @@ socket.on('push_queue_error', ({ queue_id, error }) => {
 formEl.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = inputEl.value;
-  // Ensure message is not empty or whitespace-only
-  if (!text.trim() || !chatSession.writeKey || !chatSession.theirQueueId) return;
+  if (!text.trim() || !chatSession.sendChainKey || !chatSession.theirQueueId) return;
 
-  const plaintext = JSON.stringify({ type: 'text', content: text });
-  const { iv, ciphertext } = await encryptMessage(chatSession.writeKey, plaintext, chatSession.myRole, chatSession.sendSeq);
-  chatSession.sendSeq++;
-  const payload = JSON.stringify({
-    type: 'message',
-    iv,
-    ciphertext
-  });
-  socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+  try {
+    const { messageKey, nextChainKey } = await deriveChainKeys(chatSession.sendChainKey);
+    chatSession.sendChainKey = nextChainKey;
 
-  addMessageLine('You', text);
-  inputEl.value = '';
+    const plaintext = JSON.stringify({ type: 'text', content: text });
+    const { iv, ciphertext } = await encryptMessage(messageKey, plaintext, chatSession.myRole, chatSession.sendSeq, chatSession.sessionId);
+    chatSession.sendSeq++;
+    
+    const payload = JSON.stringify({
+      type: 'message',
+      iv,
+      ciphertext
+    });
+    socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+
+    addMessageLine('You', text);
+    inputEl.value = '';
+  } catch (err) {
+    console.error("Encryption/Transmission failed:", err);
+  }
 });
 
-// -----------------------------------------------------------------
-// Clipboard Auto-Clearing
-// -----------------------------------------------------------------
+// Dropdown change listener to negotiate timer with peer
+disappearTimerSelect.addEventListener('change', async () => {
+  const val = parseInt(disappearTimerSelect.value, 10);
+  chatSession.disappearTimer = val;
+  
+  if (chatSession.sendChainKey && chatSession.theirQueueId) {
+    try {
+      const { messageKey, nextChainKey } = await deriveChainKeys(chatSession.sendChainKey);
+      chatSession.sendChainKey = nextChainKey;
+      
+      const plaintext = JSON.stringify({
+        type: 'control',
+        action: 'timer_set',
+        duration_seconds: val,
+        mode: 'session'
+      });
+      const { iv, ciphertext } = await encryptMessage(messageKey, plaintext, chatSession.myRole, chatSession.sendSeq, chatSession.sessionId);
+      chatSession.sendSeq++;
+      
+      const payload = JSON.stringify({ type: 'message', iv, ciphertext });
+      socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+});
+
 // -----------------------------------------------------------------
 // Logout Functionality
 // -----------------------------------------------------------------
