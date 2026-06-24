@@ -17,12 +17,30 @@ if DATABASE_URL:
     except ImportError:
         pass
 
+_connection_pool = None
+
 def get_connection():
+    global _connection_pool
     if DATABASE_URL:
         import psycopg2
-        return psycopg2.connect(DATABASE_URL)
+        from psycopg2 import pool
+        if _connection_pool is None:
+            _connection_pool = pool.ThreadedConnectionPool(
+                minconn=2, maxconn=10, dsn=DATABASE_URL
+            )
+        return _connection_pool.getconn()
     else:
-        return sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
+        return conn
+
+def release_connection(conn):
+    global _connection_pool
+    if DATABASE_URL and _connection_pool:
+        _connection_pool.putconn(conn)
+    else:
+        conn.close()
 
 def init_db():
     conn = get_connection()
@@ -34,7 +52,7 @@ def init_db():
         )
     ''')
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 def user_exists(username):
     conn = get_connection()
@@ -42,7 +60,7 @@ def user_exists(username):
     placeholder = '%s' if DATABASE_URL else '?'
     c.execute(f'SELECT 1 FROM users WHERE username = {placeholder}', (username.lower(),))
     result = c.fetchone()
-    conn.close()
+    release_connection(conn)
     return result is not None
 
 def register_user(username, password):
@@ -70,7 +88,7 @@ def register_user(username, password):
         success = False
         print(f"Registration DB error: {e}")
     finally:
-        conn.close()
+        release_connection(conn)
         
     if success:
         return {"success": True}
@@ -87,7 +105,7 @@ def login_user(username, password):
     placeholder = '%s' if DATABASE_URL else '?'
     c.execute(f'SELECT password_hash FROM users WHERE username = {placeholder}', (username_lower,))
     row = c.fetchone()
-    conn.close()
+    release_connection(conn)
     
     if not row:
         # Dummy check to prevent timing side-channel

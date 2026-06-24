@@ -24,10 +24,34 @@ async function loginUser() {
   }
 }
 
+function validatePassword(p) {
+  if (p.length < 8) return 'Password must be at least 8 characters.';
+  let cats = 0;
+  if (/[A-Z]/.test(p)) cats++;
+  if (/[a-z]/.test(p)) cats++;
+  if (/[0-9]/.test(p)) cats++;
+  if (/[^A-Za-z0-9]/.test(p)) cats++;
+  if (cats < 3) return 'Use 3+ of: uppercase, lowercase, digits, symbols.';
+  return null;
+}
+
 async function registerUser() {
   const u = document.getElementById('reg-username').value.trim();
   const p = document.getElementById('reg-password').value.trim();
   if (!u || !p) return;
+
+  if (u.length < 3 || u.length > 50 || !/^[a-zA-Z0-9_-]+$/.test(u)) {
+    document.getElementById('reg-error').innerText = 'Username must be 3-50 chars and contain only alphanumeric, underscores or hyphens.';
+    document.getElementById('reg-success').innerText = '';
+    return;
+  }
+
+  const pwdError = validatePassword(p);
+  if (pwdError) {
+    document.getElementById('reg-error').innerText = pwdError;
+    document.getElementById('reg-success').innerText = '';
+    return;
+  }
 
   const res = await fetch('/register', {
     method: 'POST',

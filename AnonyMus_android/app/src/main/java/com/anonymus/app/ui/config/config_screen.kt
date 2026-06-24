@@ -1,13 +1,16 @@
 package com.anonymus.app.ui.config
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.anonymus.app.data.ChatManager
+import com.anonymus.app.LocalChatManager
 import com.anonymus.app.data.NsdHelper
 import com.anonymus.app.data.PreferencesHelper
 
@@ -16,18 +19,29 @@ import com.anonymus.app.data.PreferencesHelper
 fun ConfigScreen(onConfigSaved: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { PreferencesHelper(context) }
+    val chatManager = LocalChatManager.current
 
     var host by remember { mutableStateOf(prefs.host ?: "10.0.2.2") }
     var port by remember { mutableStateOf(prefs.port.toString()) }
     var trustSelfSigned by remember { mutableStateOf(prefs.trustSelfSigned) }
+    var biometricLock by remember { mutableStateOf(prefs.biometricLock) }
     var isScanning by remember { mutableStateOf(false) }
     var hasFingerprint by remember(host) { mutableStateOf(prefs.hasFingerprint(host)) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     val nsdHelper = remember { 
         NsdHelper(context) { discoveredIp ->
             host = discoveredIp
             isScanning = false
         }
+    }
+
+    fun isValidServerConfig(host: String, port: String): Boolean {
+        val portNum = port.toIntOrNull() ?: return false
+        if (portNum < 1 || portNum > 65535) return false
+        if (host.isBlank()) return false
+        if (host.contains("..") || host.contains("\n") || host.contains("\r")) return false
+        return host.matches(Regex("^[a-zA-Z0-9._-]+$"))
     }
 
     Scaffold(
@@ -45,24 +59,37 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (validationError != null) {
+                Text(validationError!!, color = MaterialTheme.colorScheme.error)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             OutlinedTextField(
                 value = host,
-                onValueChange = { host = it },
+                onValueChange = { 
+                    host = it
+                    validationError = null
+                },
                 label = { Text("Server Host / IP") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = port,
-                onValueChange = { port = it },
+                onValueChange = { 
+                    port = it
+                    validationError = null
+                },
                 label = { Text("Port") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
+            
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -74,11 +101,32 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
                 Text("Trust Self-Signed Certificates")
             }
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = biometricLock,
+                    onCheckedChange = { biometricLock = it }
+                )
+                Text("Enable Biometric App Lock")
+            }
+
             if (hasFingerprint) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                val fingerprint = prefs.serverCertFingerprint
+                if (fingerprint != null) {
+                    Text(
+                        text = "Pinned Certificate Hash (TOFU):\n$fingerprint",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
                 Button(
                     onClick = {
                         prefs.clearFingerprint(host)
+                        prefs.serverCertFingerprint = null
                         hasFingerprint = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -109,12 +157,18 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
 
             Button(
                 onClick = {
+                    if (!isValidServerConfig(host, port)) {
+                        validationError = "Invalid server host, IP address, or port format."
+                        return@Button
+                    }
+                    
                     prefs.host = host
                     prefs.port = port.toIntOrNull() ?: 5000
                     prefs.trustSelfSigned = trustSelfSigned
+                    prefs.biometricLock = biometricLock
 
                     // Auto-connect once config is saved
-                    ChatManager.connect()
+                    chatManager.connect()
                     onConfigSaved()
                 },
                 modifier = Modifier.fillMaxWidth()

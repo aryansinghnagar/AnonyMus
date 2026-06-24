@@ -17,15 +17,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.selection.SelectionContainer
 import com.anonymus.app.BuildConfig
-import com.anonymus.app.data.ChatManager
+import com.anonymus.app.LocalChatManager
 import com.anonymus.app.data.ConnectionStatus
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
 @Composable
 fun SetupScreen(onNavigateToChat: () -> Unit) {
-    val connectionStatus by ChatManager.connectionStatus.collectAsState()
-    val isSessionActive by ChatManager.isSessionActive.collectAsState()
+    val chatManager = LocalChatManager.current
+    val connectionStatus by chatManager.connectionStatus.collectAsState()
+    val isSessionActive by chatManager.isSessionActive.collectAsState()
     val context = LocalContext.current
     var pastedLink by remember { mutableStateOf("") }
     var pasteError by remember { mutableStateOf<String?>(null) }
@@ -71,14 +72,14 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
                 return@Column
             }
 
-            if (ChatManager.myQueueId == null || ChatManager.myPublicKeyExported == null) {
+            if (chatManager.myQueueId == null || chatManager.myPublicKeyExported == null) {
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Generating keys...")
                 return@Column
             }
 
-            val inviteUrl = "${BuildConfig.URL_SCHEME}://${BuildConfig.URL_HOST_JOIN}?q=${ChatManager.myQueueId}&k=${android.net.Uri.encode(ChatManager.myPublicKeyExported)}"
+            val inviteUrl = "${BuildConfig.URL_SCHEME}://${BuildConfig.URL_HOST_JOIN}?q=${chatManager.myQueueId}&k=${android.net.Uri.encode(chatManager.myPublicKeyExported)}"
             
             Text("Your secure invite link:", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
@@ -112,7 +113,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
             if (qrBitmap != null) {
                 Image(
                     bitmap = qrBitmap.asImageBitmap(),
-                    contentDescription = "QR Code",
+                    contentDescription = "QR Code containing invite link for secure chat connection",
                     modifier = Modifier.size(200.dp)
                 )
             }
@@ -151,7 +152,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
                     isConnecting = true
                     val parsed = parseInviteLink(pastedLink)
                     if (parsed != null) {
-                        ChatManager.acceptInvite(parsed.first, parsed.second)
+                        chatManager.acceptInvite(parsed.first, parsed.second)
                     } else {
                         pasteError = "Invalid invite link format."
                         isConnecting = false

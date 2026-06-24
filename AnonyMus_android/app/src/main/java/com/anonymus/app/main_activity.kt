@@ -4,30 +4,70 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import com.anonymus.app.data.ChatManager
+import com.anonymus.app.data.PreferencesHelper
 import com.anonymus.app.theme.AnonyMusTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+
+    private lateinit var chatManager: ChatManager
+    private lateinit var prefs: PreferencesHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Anti-Forensics Phase 3: Screen Security (Block screenshots & tab previews)
+        // Anti-Forensics: Screen Security (Block screenshots & tab previews)
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
         )
 
-        ChatManager.initialize(applicationContext)
+        chatManager = (application as AnonyMusApp).chatManager
+        prefs = PreferencesHelper(this)
 
         // Handle cold start deep link
         handleIntent(intent)
 
+        // Enforce Biometric Lock if enabled
+        if (prefs.biometricLock) {
+            val executor = ContextCompat.getMainExecutor(this)
+            val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    showMainContent()
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    finish()
+                }
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                }
+            })
+
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock AnonyMus")
+                .setSubtitle("Authenticate to access your sessions")
+                .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .build()
+
+            biometricPrompt.authenticate(promptInfo)
+        } else {
+            showMainContent()
+        }
+    }
+
+    private fun showMainContent() {
         setContent {
             AnonyMusTheme {
-                AppNavigation()
+                CompositionLocalProvider(LocalChatManager provides chatManager) {
+                    AppNavigation()
+                }
             }
         }
     }
@@ -53,7 +93,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        // Phase 5: Auto-clear clipboard after 30 seconds in background
+        // Auto-clear clipboard after 30 seconds in background
         clipboardClearHandler.postDelayed(clipboardClearRunnable, 30000)
     }
 
@@ -76,8 +116,8 @@ class MainActivity : ComponentActivity() {
                 val q = data.getQueryParameter("q")
                 val k = data.getQueryParameter("k")
                 if (q != null && k != null) {
-                    ChatManager.connect() // Ensure we are connected
-                    ChatManager.acceptInvite(q, k)
+                    chatManager.connect() // Ensure we are connected
+                    chatManager.acceptInvite(q, k)
                 }
             }
         }

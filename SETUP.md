@@ -1,171 +1,126 @@
-# Layman's Setup Guide — AnonyMus Centralized Server
+# Setup Guide — AnonyMus Centralized Server & Clients
 
-Welcome to AnonyMus! This guide is written for beginners to help you set up and run the centralized chat server. Just follow these steps carefully.
-
----
-
-## Step 1: Install Python (The Engine)
-
-AnonyMus runs on Python. You need to install Python on your computer.
-
-### For Windows Users:
-1. Open your web browser and go to [python.org/downloads](https://www.python.org/downloads/).
-2. Click the yellow button that says **Download Python (3.12 or newer)**.
-3. Once the installer downloads, double-click it to run it.
-4. > [!IMPORTANT]
-   > On the first screen of the installer, check the box at the bottom that says **"Add python.exe to PATH"**. If you skip this, the setup will fail!
-5. Click **Install Now** and wait for it to finish.
-
-### For macOS Users:
-1. Open your browser and go to [python.org/downloads](https://www.python.org/downloads/).
-2. Click the download button for macOS.
-3. Open the downloaded `.pkg` file and click through the installer.
-
-### For Linux Users:
-Open your terminal and run:
-- **Ubuntu/Debian:** `sudo apt update && sudo apt install -y python3 python3-pip python3-venv`
-- **Fedora/RHEL:** `sudo dnf install python3 python3-pip`
+This guide details how to install, configure, and launch the AnonyMus zero-knowledge relay server and connect using the Web or Android clients.
 
 ---
 
-## Step 2: Download the AnonyMus Code
+## 1. Relay Server Installation
 
-1. Download the AnonyMus files. If you are using Git, run:
+### Prerequisites
+- **Python 3.11+**
+- **Git**
+- **Docker & Docker Compose** (Optional, for containerized run)
+
+### Local Virtualenv Setup
+
+1. **Clone the Repository:**
    ```bash
    git clone https://github.com/aryansinghnagar/AnonyMus.git
+   cd AnonyMus
    ```
-   *(If you don't use Git, you can download the project as a `.zip` file from GitHub, extract it on your Desktop, and open the folder).*
+
+2. **Create and Activate a Virtual Environment:**
+   - **Windows (PowerShell):**
+     ```powershell
+     python -m venv venv
+     .\venv\Scripts\Activate.ps1
+     ```
+     *(Note: If you receive an execution policy error, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process` first, then run the activation script again).*
+   - **macOS / Linux:**
+     ```bash
+     python3 -m venv venv
+     source venv/bin/activate
+     ```
+
+3. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Environment Configuration:**
+   - Copy the `.env.example` file and rename it to `.env`.
+   - Open `.env` in a text editor and customize the parameters:
+     ```text
+     FLASK_SECRET_KEY=your-secure-random-key-here
+     FLASK_DEBUG=False
+     DISABLE_SSL=False
+     ```
+     *(Note: Keep `DISABLE_SSL=False` to automatically generate self-signed SSL/TLS certificates and serve the web client securely over HTTPS).*
+
+5. **Start the Relay Server:**
+   ```bash
+   python server.py
+   ```
+   The server will start and output the local HTTPS URL (default: `https://127.0.0.1:5000`). Navigate to this address in your web browser to access the chat web client.
 
 ---
 
-## Step 3: Open the Terminal or PowerShell
+## 2. Docker Deployment
 
-You need to run a few commands to get everything started.
+To launch the server along with dedicated PostgreSQL and Redis instances in isolated Docker containers:
 
-- **On Windows:** Press the **Windows Key**, type `PowerShell`, and press **Enter**.
-- **On macOS:** Press **Cmd + Space**, type `Terminal`, and press **Enter**.
-- **On Linux:** Press **Ctrl + Alt + T**.
-
-Next, you need to point your terminal to the folder where you saved AnonyMus. Type `cd` followed by a space, and drag-and-drop the AnonyMus folder from your file manager into the terminal window. It should look something like:
-```powershell
-cd "C:\Users\YourName\Desktop\AnonyMus"
-```
-Press **Enter**.
+1. **Build and start the container group:**
+   ```bash
+   docker-compose up --build
+   ```
+2. **Accessing the server:**
+   The Flask app container is exposed on port `5000` on your host machine.
 
 ---
 
-## Step 4: Create and Start Your Virtual Environment
+## 3. Hosting as a Tor Hidden Service
 
-A virtual environment is a clean, isolated container on your computer where the app's packages will live.
+Hosting your server as a Tor Hidden Service (`.onion`) hides the server's IP address, protects client metadata, and bypasses router NAT firewalls without port forwarding.
 
-### 1. Create the container:
-Type this command and press **Enter**:
-```bash
-python -m venv venv
-```
-*(Wait 10 seconds for it to finish)*
-
-### 2. Turn on the container:
-- **On Windows (PowerShell):**
-  ```powershell
-  .\venv\Scripts\Activate.ps1
-  ```
-  *(If you get a red security error, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process` first, then run the activate command again).*
-- **On macOS / Linux:**
-  ```bash
-  source venv/bin/activate
-  ```
-
-Once activated, you will see `(venv)` at the beginning of your terminal line.
-
----
-
-## Step 5: Install the App's Requirements
-
-Type this command and press **Enter**:
-```bash
-pip install -r requirements.txt
-```
-*(This will download the Flask web server, cryptographic libraries, and other dependencies. It takes about 30 seconds).*
-
----
-
-## Step 6: Configure Environment Variables
-
-The server uses an environment configuration file for credentials and security keys.
-
-1. In the AnonyMus folder, find the file named `.env.example`.
-2. Duplicate or copy it, and rename the new copy to `.env`.
-3. Open the `.env` file in a text editor (like Notepad).
-4. Fill in or edit the fields (or leave them as default for local testing). Make sure `FLASK_SECRET_KEY` is a long random string of letters and numbers for safety.
-
----
-
-## Step 7: Run the Centralized Server!
-
-Type this command and press **Enter**:
-```bash
-python server.py
-```
-
-### What happens now?
-- The Flask server will start.
-- It will print a line like:
-  `* Running on http://127.0.0.1:5000`
-
-Copy `http://127.0.0.1:5000` and paste it into your browser to access the chat login screen!
-
----
-
-## Step 8: (Optional) Host as a Tor Hidden Service
-
-If you want people to connect to your server anonymously from outside your local network without doing complex router setup (port forwarding):
-
-1. **Install Tor on your computer:**
+1. **Install Tor:**
    - **Debian/Ubuntu:** `sudo apt install tor`
    - **macOS:** `brew install tor`
-   - **Windows:** Download the **Tor Expert Bundle** or the **Tor Browser** from [torproject.org](https://www.torproject.org/).
+   - **Windows:** Download the **Tor Expert Bundle** or **Tor Browser** from [torproject.org](https://www.torproject.org/).
 
-2. **Configure Tor (`torrc`):**
-   Open the Tor configuration file (called `torrc`) in a text editor:
-   - **Debian/Ubuntu:** Located at `/etc/tor/torrc`
-   - **macOS:** Located at `/usr/local/etc/tor/torrc` or `/opt/homebrew/etc/tor/torrc`
-   - **Windows (Tor Browser):** Located at `[Tor Browser Folder]\Browser\TorBrowser\Data\Tor\torrc`
-   - **Windows (Tor Expert Bundle):** Located at `[Installation Directory]\Data\Tor\torrc` (or create a file named `torrc` in your installation folder).
+2. **Configure Tor Service (`torrc`):**
+   Append the configuration to your `torrc` file:
+   - **Linux / macOS (`/etc/tor/torrc`):**
+     ```text
+     HiddenServiceDir /var/lib/tor/anonymus_hidden_service/
+     HiddenServicePort 80 127.0.0.1:5000
+     ```
+   - **Windows:**
+     ```text
+     HiddenServiceDir C:/Users/Public/anonymus_hidden_service/
+     HiddenServicePort 80 127.0.0.1:5000
+     ```
 
-   Append the configuration lines at the bottom of the file depending on your operating system:
-
-   **For Linux / macOS:**
+3. **Configure AnonyMus for Tor:**
+   Since Tor Hidden Services provide E2E encryption out of the box, you must disable the application's internal TLS to prevent handshake conflicts. Set this env var in your `.env` file:
    ```text
-   HiddenServiceDir /var/lib/tor/anonymus_hidden_service/
-   HiddenServicePort 80 127.0.0.1:5000
+   DISABLE_SSL=True
    ```
+   Restart the Flask server (`python server.py`) for this to take effect.
 
-   **For Windows:**
-   ```text
-   HiddenServiceDir C:/Users/Public/anonymus_hidden_service/
-   HiddenServicePort 80 127.0.0.1:5000
-   ```
-   *(Note: On Windows, using a path under `C:/Users/Public/` avoids folder permission errors. Ensure you use forward slashes `/` as shown above).*
+4. **Restart Tor:**
+   - **Linux:** `sudo systemctl restart tor`
+   - **macOS:** `brew services restart tor`
+   - **Windows:** Restart the Tor process or browser.
 
-   > [!IMPORTANT]
-   > **Disable SSL/HTTPS in AnonyMus Config:**
-   > By default, the AnonyMus Flask server runs securely over HTTPS. However, Tor Hidden Services already provide end-to-end encryption by design. Running HTTPS on top of Tor is redundant and will cause SSL/TLS handshake errors when Tor forwards the connection.
-   > 
-   > Open the `.env` file in your `AnonyMus` folder and add or modify the following line:
-   > ```text
-   > DISABLE_SSL=True
-   > ```
-   > Save the file and restart the AnonyMus server (`python server.py`) for this to take effect. If you don't do this, the Tor Browser will be unable to connect.
+5. **Get your Address:**
+   Read the hostname generated by Tor:
+   - **Linux/macOS:** `sudo cat /var/lib/tor/anonymus_hidden_service/hostname`
+   - **Windows:** Open `C:\Users\Public\anonymus_hidden_service\hostname` in Notepad.
+   Share this `.onion` address with your chat peer.
 
-3. **Restart Tor:**
-   - **Debian/Ubuntu:** Run `sudo systemctl restart tor`
-   - **macOS:** Run `brew services restart tor`
-   - **Windows:** Completely close and reopen the Tor Browser, or restart the Tor command prompt window/service.
+---
 
-4. **Find your address:**
-   Tor will generate a unique `.onion` address for your server. Read the address inside the generated `hostname` file:
-   - **Linux / macOS:** Run `sudo cat /var/lib/tor/anonymus_hidden_service/hostname`
-   - **Windows:** Open the folder `C:\Users\Public\anonymus_hidden_service\` in File Explorer and open the `hostname` file with Notepad.
+## 4. Android Client Setup
 
-   Provide this `.onion` address to your friends. They can open it using the **Tor Browser** to access your chat server securely and anonymously!
+The Android client is built with Kotlin and Jetpack Compose and is located inside the `/AnonyMus_android` directory.
+
+### Build and Install
+1. Open the `/AnonyMus_android` folder in **Android Studio**.
+2. Sync the project with Gradle.
+3. Build and run the app on a physical device or emulator.
+
+### Configuration
+1. **Server Host / IP**: Enter the IP address of the running Flask relay server.
+2. **mDNS Auto-Discovery**: If you are on the same local Wi-Fi network, click **Auto-Detect Local Server** to scan and resolve the server IP using multicast DNS (or subnet scanning).
+3. **Biometric Security**: Toggle **Enable Biometric App Lock** to restrict local access to the application using strong biometric authentication (or PIN/Pattern backup).
+4. **Certificate Verification**: When connecting over HTTPS with a self-signed certificate, the app pins the certificate on first use (TOFU). If the certificate changes, you will receive a security error. You can manually reset or clear the pinned cert hash on this screen.

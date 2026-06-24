@@ -101,4 +101,6 @@ dependencies {
   // QR Code generation
   implementation("com.google.zxing:core:3.5.3")
   implementation(libs.androidx.security.crypto)
+  implementation(libs.tink.android)
+  implementation(libs.androidx.biometric)
 }
