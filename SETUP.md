@@ -91,3 +91,34 @@ To run the decentralized P2P unit and integration tests:
 ```bash
 python -m unittest discover app_p2p/tests
 ```
+
+To run the end-to-end browser smoke test (requires Playwright):
+```bash
+# Install Playwright and chromium browser
+pip install playwright
+playwright install chromium
+
+# Run the smoke test suite
+python -m unittest app_main/tests/test_smoke.py
+```
+
+---
+
+## 6. Troubleshooting & Security Notes
+
+### A. Port Assignment Conventions
+* **Centralized Server**: By default, the centralized relay server (`app_main/server.py`) binds to port `5000` (consistent with Docker, Docker Compose, and default Gunicorn settings).
+* **Decentralized P2P UI**: In P2P mode, the local launcher GUI utility binds the web control panel to port `8080`. If port `8080` is in use, it will scan sequentially for the next available port.
+
+### B. Clipboard Auto-Clear Behavior
+* For security, the browser UI attempts to auto-clear the chat session invite link from the clipboard 30 seconds after copying.
+* Modern browsers restrict clipboard reading to secure contexts and require user approval. If clipboard read permissions are denied, the auto-clear script will log a warning to the developer console and fail silently without disrupting the application flow.
+
+### C. Self-Signed SSL Certificates & Android TOFU (Trust-On-First-Use)
+* When running the centralized server in production/local secure modes, the backend generates a self-signed RSA-2048 certificate (`cert.pem`/`key.pem`) on startup if one is not present.
+* The native Android client employs a Trust-On-First-Use (TOFU) pinning protocol. If you delete the server's certificate files and generate new ones, the client will block the WebSocket connection due to the fingerprint mismatch.
+* **Resolution**: Clear the Android app's storage/cache in System settings to reset the TOFU certificate cache, or manually distribute/trust the new root CA/certificate.
+
+### D. Local Multicast DNS (mDNS) Discovery
+* The centralized server broadcasts its local IP address over LAN using the service descriptor `_anonymus._tcp.local.`.
+* If local adapter discovery fails, verify that your host machine's firewall allows inbound UDP traffic on port `5353` (mDNS standard port) and that your local network router supports multicast packet routing.

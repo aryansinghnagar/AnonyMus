@@ -12,7 +12,7 @@ import bcrypt
 
 # Fetch database configuration from environment
 DATABASE_URL = os.environ.get('DATABASE_URL')
-DB_FILE = 'users.db'
+DB_FILE = os.environ.get('DB_FILE', 'users.db')
 
 # Pre-calculate dummy hash to mitigate timing side-channel attacks for non-existent users
 DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode('utf-8')

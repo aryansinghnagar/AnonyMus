@@ -14,7 +14,7 @@ import base64
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 # Database file location for the local P2P node
-DB_FILE = 'local_node.db'
+DB_FILE = os.environ.get('DB_FILE', 'local_node.db')
 
 # Pre-calculate dummy hash for timing attacks mitigation during credentials check
 DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode('utf-8')

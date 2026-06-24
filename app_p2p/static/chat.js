@@ -500,7 +500,7 @@ socket.on('message_delivery_failed', (data) => {
 // -----------------------------------------------------------------
 // Clear Data & Reset Session
 // -----------------------------------------------------------------
-function resetSession() {
+function resetSession(hard = false) {
   myKeys = null;
   writeKeys = {};
   readKeys = {};
@@ -508,7 +508,11 @@ function resetSession() {
   localStorage.clear();
   socket.disconnect();
   document.body.innerHTML = '';
-  window.location.replace("about:blank");
+  if (hard) {
+    window.location.replace("about:blank");
+  } else {
+    window.location.replace("/");
+  }
 }
 
 let escCount = 0;
@@ -518,9 +522,9 @@ document.addEventListener('keydown', (e) => {
     escCount++;
     clearTimeout(escTimeout);
     if (escCount >= 3) {
-      if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
+      if (confirm('Panic button triggered! Are you sure you want to hard self-destruct? All chat state will be lost immediately.')) {
         fetch('/api/reset-data', { method: 'POST' }).then(() => {
-          resetSession();
+          resetSession(true);
         });
       } else {
         escCount = 0;
@@ -533,7 +537,7 @@ document.addEventListener('keydown', (e) => {
 btnCloseChat.addEventListener('click', () => {
   if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
     fetch('/api/reset-data', { method: 'POST' }).then(() => {
-      resetSession();
+      resetSession(false);
     });
   }
 });

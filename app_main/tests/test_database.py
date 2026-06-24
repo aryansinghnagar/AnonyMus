@@ -59,5 +59,40 @@ class TestDatabaseAuth(unittest.TestCase):
         ratio = max(time_known, time_unknown) / min(time_known, time_unknown)
         self.assertLess(ratio, 5.0, "Timing difference too large, possible oracle leak")
 
+    def test_4_placeholder_selection(self):
+        from unittest.mock import MagicMock, patch
+        
+        # 1. Test when DATABASE_URL is set (Postgres-style placeholders "%s")
+        with patch('app_main.database.DATABASE_URL', 'postgresql://localhost/db'):
+            mock_conn = MagicMock()
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value = mock_cursor
+            
+            with patch('app_main.database.get_connection', return_value=mock_conn), \
+                 patch('app_main.database.release_connection') as mock_release:
+                
+                database.user_exists('bob')
+                
+                args, kwargs = mock_cursor.execute.call_args
+                self.assertIn('%s', args[0])
+                self.assertNotIn('?', args[0])
+                mock_release.assert_called_once_with(mock_conn)
+                
+        # 2. Test when DATABASE_URL is not set (SQLite-style placeholders "?")
+        with patch('app_main.database.DATABASE_URL', ''):
+            mock_conn = MagicMock()
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value = mock_cursor
+            
+            with patch('app_main.database.get_connection', return_value=mock_conn), \
+                 patch('app_main.database.release_connection') as mock_release:
+                
+                database.user_exists('bob')
+                
+                args, kwargs = mock_cursor.execute.call_args
+                self.assertIn('?', args[0])
+                self.assertNotIn('%s', args[0])
+                mock_release.assert_called_once_with(mock_conn)
+
 if __name__ == '__main__':
     unittest.main()

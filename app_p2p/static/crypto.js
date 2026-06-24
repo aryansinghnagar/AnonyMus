@@ -9,8 +9,10 @@
 function toBase64(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const len = bytes.byteLength;
+  const chunk_size = 0x8000;
+  for (let i = 0; i < len; i += chunk_size) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk_size));
   }
   return btoa(binary);
 }

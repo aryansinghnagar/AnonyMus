@@ -17,6 +17,8 @@ import time
 import re
 import threading
 import logging
+import sys
+import ipaddress
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room, disconnect
 from dotenv import load_dotenv
@@ -152,6 +154,18 @@ app.logger.addFilter(RedactingFilter())
 logging.getLogger().addFilter(RedactingFilter())
 
 
+# Configure allowed Socket.IO CORS Origins dynamically
+cors_origins_env = os.environ.get("CORS_ORIGINS")
+if cors_origins_env:
+    allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+else:
+    if debug_mode:
+        allowed_origins = "*"
+    else:
+        local_ip = get_local_ip()
+        allowed_origins = ["https://localhost", "https://127.0.0.1", f"https://{local_ip}"]
+
+
 @app.after_request
 def set_security_headers(response):
     """
@@ -161,7 +175,8 @@ def set_security_headers(response):
     X-Frame-Options, X-XSS-Protection, CSP rules, and disables route caching
     on sensitive dashboards.
     """
-    if request.is_secure:
+    is_secure = request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https'
+    if is_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
@@ -169,6 +184,19 @@ def set_security_headers(response):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     
+    # Build connect-src dynamically based on allowed origins to restrict websocket connections
+    connect_src_parts = ["'self'"]
+    if isinstance(allowed_origins, list):
+        for origin in allowed_origins:
+            connect_src_parts.append(origin)
+            if origin.startswith("https://"):
+                connect_src_parts.append(origin.replace("https://", "wss://"))
+            elif origin.startswith("http://"):
+                connect_src_parts.append(origin.replace("http://", "ws://"))
+    else:
+        connect_src_parts.append("wss: ws:")
+    connect_src = " ".join(connect_src_parts)
+
     # Restrict loading of scripts/frames, allowing socket connection over WS/WSS
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
@@ -178,7 +206,7 @@ def set_security_headers(response):
         "object-src 'none'; "
         "base-uri 'self'; "
         "frame-ancestors 'none'; "
-        "connect-src 'self' wss: ws:;"
+        f"connect-src {connect_src};"
     )
     
     # Disable caching on core views
@@ -186,18 +214,6 @@ def set_security_headers(response):
         response.headers['Cache-Control'] = 'no-store, max-age=0'
         
     return response
-
-
-# Configure allowed Socket.IO CORS Origins dynamically
-cors_origins_env = os.environ.get("CORS_ORIGINS")
-if cors_origins_env:
-    allowed_origins = cors_origins_env.split(",")
-else:
-    if debug_mode:
-        allowed_origins = "*"
-    else:
-        local_ip = get_local_ip()
-        allowed_origins = ["https://localhost", "https://127.0.0.1", f"https://{local_ip}"]
 
 redis_url = os.environ.get('REDIS_URL')
 socketio_kwargs = {
@@ -249,6 +265,8 @@ def add_queue_owner(queue_id, sid):
         try:
             r_client.sadd(f"queue_owner:{queue_id}", sid)
             r_client.expire(f"queue_owner:{queue_id}", 86400)  # 24 hour TTL
+            r_client.sadd(f"sid_queues:{sid}", queue_id)
+            r_client.expire(f"sid_queues:{sid}", 86400)
             return
         except Exception:
             pass
@@ -267,6 +285,8 @@ def add_queue_creator(queue_id, sid):
     if r_client:
         try:
             r_client.set(f"queue_creator:{queue_id}", sid, ex=86400)
+            r_client.sadd(f"sid_created_queues:{sid}", queue_id)
+            r_client.expire(f"sid_created_queues:{sid}", 86400)
             return
         except Exception:
             pass
@@ -552,17 +572,20 @@ def handle_register_peer(data):
     if not validate_session():
         emit('session_expired', {})
         disconnect()
-        return
+        return {"status": "error", "message": "session_expired"}
 
     my_queue = data.get('my_queue')
     peer_queue = data.get('peer_queue')
     if not my_queue or not peer_queue:
-        return
+        return {"status": "error", "message": "missing_fields"}
 
     # Verify requesting client owns target queue before associating permissions
     if is_queue_owner(my_queue, request.sid):
         add_queue_owner(peer_queue, request.sid)
         app.logger.debug(f"Peer queue {peer_queue[:8]} registered for owner SID={request.sid[:4]}")
+        return {"status": "success"}
+    return {"status": "error", "message": "unauthorized"}
+
 
 
 @socketio.on('push_queue')
@@ -573,23 +596,27 @@ def handle_push_queue(data):
         disconnect()
         return
 
+    queue_id = data.get('queue_id') if isinstance(data, dict) else None
+    payload = data.get('payload') if isinstance(data, dict) else None
+
     if is_rate_limited(request.sid, limit=10, window=1):
         app.logger.warning(f"Rate limit exceeded for push_queue on SID={request.sid[:4]}")
+        emit('push_queue_error', {'queue_id': queue_id, 'error': 'rate_limit_exceeded'})
         return
 
-    queue_id = data.get('queue_id')
-    payload = data.get('payload')
-    
     if not queue_id or not payload:
+        emit('push_queue_error', {'queue_id': queue_id, 'error': 'invalid_payload'})
         return
         
     if len(payload) > 100 * 1024:
         app.logger.warning(f"Payload too large from SID={request.sid[:4]}")
+        emit('push_queue_error', {'queue_id': queue_id, 'error': 'payload_too_large'})
         return
 
     # Enforce queue authorization
     if not is_queue_owner(queue_id, request.sid):
         app.logger.warning(f"Unauthorised push_queue attempt for queue_id={queue_id[:8]} from SID={request.sid[:4]}")
+        emit('push_queue_error', {'queue_id': queue_id, 'error': 'unauthorized'})
         return
 
     if not is_recipient_online(queue_id):
@@ -607,6 +634,25 @@ def handle_disconnect():
     with socket_rate_limits_lock:
         socket_rate_limits.pop(sid, None)
         
+    # Clean up Redis queue mappings if client is configured
+    if r_client:
+        try:
+            owned_queues = r_client.smembers(f"sid_queues:{sid}")
+            for q_id in owned_queues:
+                r_client.srem(f"queue_owner:{q_id}", sid)
+                if r_client.scard(f"queue_owner:{q_id}") == 0:
+                    r_client.delete(f"queue_owner:{q_id}")
+            r_client.delete(f"sid_queues:{sid}")
+            
+            created_queues = r_client.smembers(f"sid_created_queues:{sid}")
+            for q_id in created_queues:
+                creator = r_client.get(f"queue_creator:{q_id}")
+                if creator == sid:
+                    r_client.delete(f"queue_creator:{q_id}")
+            r_client.delete(f"sid_created_queues:{sid}")
+        except Exception as e:
+            app.logger.warning(f"Error cleaning up Redis state on disconnect: {e}")
+
     # Clean up local queue mapping states
     with queue_owners_lock:
         empty_queues = []
@@ -631,7 +677,7 @@ def handle_disconnect():
 
 def generate_self_signed_cert(cert_path, key_path):
     """
-    Generates a secure self-signed P-256 SSL certificate and key pair
+    Generates a secure self-signed RSA-2048 SSL certificate and key pair
     and writes them to the specified PEM filepaths.
     
     Args:
@@ -662,8 +708,8 @@ def generate_self_signed_cert(cert_path, key_path):
         x509.SubjectAlternativeName([
             x509.DNSName("localhost"),
             x509.DNSName("workspace.local"),
-            x509.IPAddress(socket.inet_aton('127.0.0.1')),
-            x509.IPAddress(socket.inet_aton(get_local_ip())),
+            x509.IPAddress(ipaddress.ip_address('127.0.0.1')),
+            x509.IPAddress(ipaddress.ip_address(get_local_ip())),
         ]),
         critical=False,
     ).sign(key, hashes.SHA256())
@@ -686,7 +732,8 @@ if __name__ == '__main__':
     disable_ssl = os.environ.get('DISABLE_SSL', 'False').lower() == 'true'
     
     # Broadcast service via local multicast DNS
-    advertise_mdns(port)
+    if os.environ.get('DISABLE_MDNS', 'False').lower() != 'true':
+        advertise_mdns(port)
     
     if not debug_mode:
         log = logging.getLogger('werkzeug')
@@ -696,20 +743,27 @@ if __name__ == '__main__':
     # Secure server interface binding context
     bind_host = '127.0.0.1' if debug_mode else '0.0.0.0'
     
+    use_reloader = debug_mode and os.environ.get('FLASK_USE_RELOADER', 'True').lower() == 'true'
+
     if disable_ssl:
         print(f"Starting Messages Server on HTTP port {port}...")
-        socketio.run(app, host=bind_host, port=port, debug=debug_mode)
+        socketio.run(app, host=bind_host, port=port, debug=debug_mode, use_reloader=use_reloader)
     else:
         project_root = os.path.dirname(os.path.abspath(__file__))
         cert_path = os.path.join(project_root, 'cert.pem')
         key_path = os.path.join(project_root, 'key.pem')
         
         if not (os.path.exists(cert_path) and os.path.exists(key_path)):
-            generate_self_signed_cert(cert_path, key_path)
+            try:
+                generate_self_signed_cert(cert_path, key_path)
+            except Exception as e:
+                print(f"FATAL ERROR: Could not generate self-signed TLS certificates: {e}")
+                print("Please ensure the 'cryptography' library is installed and working, or manually provide cert.pem and key.pem in the server directory.")
+                sys.exit(1)
         
         print(f"Starting Messages Server securely on HTTPS port {port}...")
         
         if socketio.server.eio.async_mode == 'threading':
-            socketio.run(app, host=bind_host, port=port, debug=debug_mode, ssl_context=(cert_path, key_path), allow_unsafe_werkzeug=debug_mode)
+            socketio.run(app, host=bind_host, port=port, debug=debug_mode, ssl_context=(cert_path, key_path), allow_unsafe_werkzeug=debug_mode, use_reloader=use_reloader)
         else:
-            socketio.run(app, host=bind_host, port=port, debug=debug_mode, certfile=cert_path, keyfile=key_path)
+            socketio.run(app, host=bind_host, port=port, debug=debug_mode, certfile=cert_path, keyfile=key_path, use_reloader=use_reloader)

@@ -49,6 +49,28 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(received[0]['name'], 'queue_payload')
         self.assertEqual(received[0]['args'][0]['payload'], 'test_payload')
         
+        # Test push_queue error: unauthorized queue
+        socket_client.emit('push_queue', {'queue_id': 'some-other-queue', 'payload': 'test'})
+        received = socket_client.get_received()
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0]['name'], 'push_queue_error')
+        self.assertEqual(received[0]['args'][0]['error'], 'unauthorized')
+
+        # Test push_queue error: too large payload
+        large_payload = 'a' * (100 * 1024 + 1)
+        socket_client.emit('push_queue', {'queue_id': queue_id, 'payload': large_payload})
+        received = socket_client.get_received()
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0]['name'], 'push_queue_error')
+        self.assertEqual(received[0]['args'][0]['error'], 'payload_too_large')
+
+        # Test push_queue error: invalid payload (missing payload or queue_id)
+        socket_client.emit('push_queue', {'queue_id': queue_id})
+        received = socket_client.get_received()
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0]['name'], 'push_queue_error')
+        self.assertEqual(received[0]['args'][0]['error'], 'invalid_payload')
+        
         socket_client.disconnect()
 
 if __name__ == '__main__':

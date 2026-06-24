@@ -70,7 +70,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function resetSession() {
+function resetSession(hard = false) {
   chatSession.reset();
   if (keepAliveTimeout) clearTimeout(keepAliveTimeout);
   
@@ -86,7 +86,11 @@ function resetSession() {
   const buf = new ArrayBuffer(16 * 1024 * 1024); // 16MB
   setTimeout(() => {}, 0);
 
-  window.location.replace("about:blank");
+  if (hard) {
+    window.location.replace("about:blank");
+  } else {
+    window.location.replace("/");
+  }
 }
 
 let escCount = 0;
@@ -96,8 +100,8 @@ document.addEventListener('keydown', (e) => {
     escCount++;
     clearTimeout(escTimeout);
     if (escCount >= 3) {
-      if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
-        resetSession();
+      if (confirm('Panic button triggered! Are you sure you want to hard self-destruct? All chat state will be lost immediately.')) {
+        resetSession(true);
       } else {
         escCount = 0;
       }
@@ -108,7 +112,7 @@ document.addEventListener('keydown', (e) => {
 
 btnCloseChat.addEventListener('click', () => {
   if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
-    resetSession();
+    resetSession(false);
   }
 });
 
@@ -251,17 +255,21 @@ socket.on('queue_created', ({ queue_id }) => {
   chatSession.myQueueId = queue_id;
   
   if (chatSession.theirQueueId && chatSession.sendChainKey) {
-    // Host queue rotation for invite link single-use (burn-after-reading)
-    const payload = JSON.stringify({
-      type: 'queue_update',
-      new_queue: chatSession.myQueueId
-    });
-    socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
-    
-    // Register the new rotated queue with the peer
+    // Register the new rotated queue with the peer first
     socket.emit('register_peer', {
       my_queue: chatSession.myQueueId,
       peer_queue: chatSession.theirQueueId
+    }, (response) => {
+      if (response && response.status === 'success') {
+        // Host queue rotation for invite link single-use (burn-after-reading)
+        const payload = JSON.stringify({
+          type: 'queue_update',
+          new_queue: chatSession.myQueueId
+        });
+        socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+      } else {
+        console.error('Failed to register rotated queue:', response);
+      }
     });
     return;
   }
@@ -326,18 +334,45 @@ function copyInviteLink() {
 }
 
 btnPasteConnect.addEventListener('click', () => {
-  const link = pasteInviteInput.value;
+  const link = pasteInviteInput.value.trim();
   if (!link) return;
   
   btnPasteConnect.disabled = true;
   try {
-    const normalized = link.replace("#q=", "?q=").replace("#", "?");
-    const url = new URL(normalized);
-    const q = url.searchParams.get('q');
-    const k = url.searchParams.get('k');
+    let searchParams;
+    if (link.startsWith('#') || link.startsWith('?')) {
+      searchParams = new URLSearchParams(link.substring(1));
+    } else if (link.includes('q=') && link.includes('k=')) {
+      try {
+        const url = new URL(link);
+        const hashParams = new URLSearchParams(url.hash.substring(1));
+        const qHash = hashParams.get('q');
+        const kHash = hashParams.get('k');
+        if (qHash && kHash) {
+          searchParams = hashParams;
+        } else {
+          searchParams = url.searchParams;
+        }
+      } catch (e) {
+        searchParams = new URLSearchParams(link);
+      }
+    } else {
+      const url = new URL(link, window.location.origin);
+      const hashParams = new URLSearchParams(url.hash.substring(1));
+      const qHash = hashParams.get('q');
+      const kHash = hashParams.get('k');
+      if (qHash && kHash) {
+        searchParams = hashParams;
+      } else {
+        searchParams = url.searchParams;
+      }
+    }
+    
+    const q = searchParams.get('q');
+    const k = searchParams.get('k');
     
     if (q && k) {
-      window.location.hash = `#q=${q}&k=${k}`;
+      window.location.hash = `#q=${q}&k=${encodeURIComponent(k)}`;
       window.location.reload(); 
     } else {
       alert("Invalid invite link.");
@@ -372,18 +407,23 @@ btnAcceptInvite.addEventListener('click', async () => {
     chatSession.sessionId = await computeSafetyNumber(chatSession.myPublicKeyExported, chatSession.theirPublicKeyExported);
     uiSafetyNumber.textContent = chatSession.sessionId;
 
-    // Send Handshake payload to their queue (handshake is unencrypted)
-    const payload = JSON.stringify({
-      type: 'handshake',
-      reply_queue: chatSession.myQueueId,
-      public_key: chatSession.myPublicKeyExported
-    });
-    socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
-    
-    // Register peer queue ownership for backend verification
+    // Register peer queue ownership for backend verification first, then send handshake
     socket.emit('register_peer', {
       my_queue: chatSession.myQueueId,
       peer_queue: chatSession.theirQueueId
+    }, (response) => {
+      if (response && response.status === 'success') {
+        // Send Handshake payload to their queue (handshake is unencrypted)
+        const payload = JSON.stringify({
+          type: 'handshake',
+          reply_queue: chatSession.myQueueId,
+          public_key: chatSession.myPublicKeyExported
+        });
+        socket.emit('push_queue', { queue_id: chatSession.theirQueueId, payload });
+      } else {
+        console.error('Failed to register peer queue:', response);
+        addStatusLine('Failed to register peer queue: ' + (response ? response.message : 'unknown error'));
+      }
     });
 
     addStatusLine('Connected to peer. Awaiting their response...');
@@ -447,6 +487,11 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
 
     if (data.type === 'queue_update') {
        chatSession.theirQueueId = data.new_queue;
+       // Register peer queue ownership for backend verification so we are authorized to push to it
+       socket.emit('register_peer', {
+         my_queue: chatSession.myQueueId,
+         peer_queue: chatSession.theirQueueId
+       });
        addStatusLine('Peer updated secure channel.');
        return;
     }
@@ -518,6 +563,14 @@ socket.on('queue_payload', async ({ queue_id, payload }) => {
 socket.on('push_queue_error', ({ queue_id, error }) => {
   if (error === 'recipient_offline') {
     addStatusLine('Message delivery failed: Peer is offline.');
+  } else if (error === 'rate_limit_exceeded') {
+    addStatusLine('Message delivery failed: Rate limit exceeded.');
+  } else if (error === 'payload_too_large') {
+    addStatusLine('Message delivery failed: Message too large.');
+  } else if (error === 'unauthorized') {
+    addStatusLine('Message delivery failed: Unauthorized queue access.');
+  } else {
+    addStatusLine(`Message delivery failed: ${error}`);
   }
 });
 
