@@ -1,3 +1,4 @@
+(() => {
 const socket = io({ transports: ['websocket'] });
 
 // Local UI State
@@ -34,11 +35,11 @@ const inputEl = document.getElementById('message-input');
 const uiSafetyNumber = document.getElementById('ui-safety-number');
 const disappearTimerSelect = document.getElementById('disappear-timer');
 
-const btnElvenCloak = document.getElementById('btn-elven-cloak');
-const viewElvenCloak = document.getElementById('view-elven-cloak');
-const btnElvenCloakExit = document.getElementById('btn-elven-cloak-exit');
-const btnInfinitySnap = document.getElementById('btn-infinity-snap');
-const btnObliviate = document.getElementById('btn-obliviate');
+const btnCalculator = document.getElementById('btn-calculator');
+const viewCalculator = document.getElementById('view-calculator');
+const btnCalculatorExit = document.getElementById('btn-calculator-exit');
+const btnCloseChat = document.getElementById('btn-close-chat');
+const btnClearCache = document.getElementById('btn-clear-cache');
 
 // -----------------------------------------------------------------
 // Visibility & Security Blur
@@ -381,7 +382,7 @@ async function denyIncomingRequest() {
 formEl.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = inputEl.value;
-  if (!text || !activeContact || !writeKeys[activeContact.onion_address]) return;
+  if (!text.trim() || !activeContact || !writeKeys[activeContact.onion_address]) return;
 
   const onion = activeContact.onion_address;
   const isAlice = myPublicKeyExported < activeContact.peer_public_key;
@@ -487,9 +488,9 @@ socket.on('message_delivery_failed', (data) => {
 });
 
 // -----------------------------------------------------------------
-// Obliviate & Panic Snapshot
+// Clear Data & Reset Session
 // -----------------------------------------------------------------
-function triggerInfinitySnap() {
+function resetSession() {
   myKeys = null;
   writeKeys = {};
   readKeys = {};
@@ -507,9 +508,9 @@ document.addEventListener('keydown', (e) => {
     escCount++;
     clearTimeout(escTimeout);
     if (escCount >= 3) {
-      if (confirm('Trigger Infinity Snap? All local chat history and keys will be permanently deleted.')) {
-        fetch('/api/obliviate', { method: 'POST' }).then(() => {
-          triggerInfinitySnap();
+      if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
+        fetch('/api/reset-data', { method: 'POST' }).then(() => {
+          resetSession();
         });
       } else {
         escCount = 0;
@@ -519,27 +520,27 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-btnInfinitySnap.addEventListener('click', () => {
-  if (confirm('Trigger Infinity Snap? All local data will be instantly deleted.')) {
-    fetch('/api/obliviate', { method: 'POST' }).then(() => {
-      triggerInfinitySnap();
+btnCloseChat.addEventListener('click', () => {
+  if (confirm('Are you sure you want to close the connection? All chat state will be lost immediately.')) {
+    fetch('/api/reset-data', { method: 'POST' }).then(() => {
+      resetSession();
     });
   }
 });
 
-btnObliviate.addEventListener('click', () => {
-  if (confirm('Cast Obliviate? This permanently deletes contacts and local messages.')) {
-    fetch('/api/obliviate', { method: 'POST' }).then(() => {
+btnClearCache.addEventListener('click', () => {
+  if (confirm('Clear connection cache? This will permanently delete contacts and local messages.')) {
+    fetch('/api/reset-data', { method: 'POST' }).then(() => {
       loadContactsList();
       switchPanel('welcome');
-      alert("Memory wiped. Local contacts and logs erased.");
+      alert("Application cache cleared.");
     });
   }
 });
 
 // Calculator stealth cover
-btnElvenCloak.addEventListener('click', () => { viewElvenCloak.style.display = 'flex'; });
-btnElvenCloakExit.addEventListener('click', () => { viewElvenCloak.style.display = 'none'; });
+btnCalculator.addEventListener('click', () => { viewCalculator.style.display = 'flex'; });
+btnCalculatorExit.addEventListener('click', () => { viewCalculator.style.display = 'none'; });
 
 // -----------------------------------------------------------------
 // App Init & Startup
@@ -552,11 +553,25 @@ async function initApp() {
   myOnionAddress = info.onion_address;
   myLocalUsername = info.local_username;
 
+  let lastCopiedOnion = null;
   myOnionDisplay.textContent = myOnionAddress || "Loading Tor...";
   myOnionDisplay.addEventListener('click', () => {
     if (myOnionAddress) {
-      navigator.clipboard.writeText(myOnionAddress);
-      alert("Onion address copied to clipboard!");
+      lastCopiedOnion = myOnionAddress;
+      navigator.clipboard.writeText(myOnionAddress).then(() => {
+        alert("Onion address copied to clipboard!");
+        setTimeout(async () => {
+          try {
+            const currentText = await navigator.clipboard.readText();
+            if (currentText === lastCopiedOnion) {
+              await navigator.clipboard.writeText('');
+              console.log("Clipboard auto-cleared for security.");
+            }
+          } catch (err) {
+            console.warn("Clipboard auto-clear failed:", err);
+          }
+        }, 30000);
+      }).catch(err => console.error("Failed to copy onion address:", err));
     }
   });
 
@@ -579,3 +594,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = '/';
   });
 });
+})();

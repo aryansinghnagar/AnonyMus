@@ -222,7 +222,7 @@ def launch_tor():
         raise RuntimeError("Tor failed to bootstrap.")
         
     onion_address = get_onion_address()
-    print(f"Your AnonyMus Onion Address: {onion_address}")
+    print(f"Your User ID (Onion Address): {onion_address}")
     return onion_address, SOCKS_PORT, PEER_PORT
 
 if __name__ == "__main__":
