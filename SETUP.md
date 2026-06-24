@@ -60,7 +60,7 @@ To run the server locally:
 ```bash
 python server.py
 ```
-By default, the server runs on `http://127.0.0.1:8080`.
+By default, the server runs on `http://127.0.0.1:5000`.
 
 ---
 
@@ -70,7 +70,7 @@ To spin up the centralized relay using Docker Compose (which configures the Flas
 ```bash
 docker-compose up --build -d
 ```
-The Flask relay will expose port `8080` to the host machine.
+The Flask relay will expose port `5000` to the host machine.
 
 ---
 
