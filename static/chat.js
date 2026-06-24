@@ -57,7 +57,7 @@ const btnCalculatorExit = document.getElementById('btn-calculator-exit');
 const btnCloseChat = document.getElementById('btn-close-chat');
 const btnClearCache = document.getElementById('btn-clear-cache');
 
-let staticInterval = null;
+let keepAliveTimeout = null;
 
 // -----------------------------------------------------------------
 // Screen Security & Panic Action
@@ -72,14 +72,12 @@ document.addEventListener('visibilitychange', () => {
 
 function resetSession() {
   chatSession.reset();
-  if (staticInterval) clearTimeout(staticInterval);
+  if (keepAliveTimeout) clearTimeout(keepAliveTimeout);
   
   socket.disconnect();
   document.body.innerHTML = '';
   
   // Best-effort key material sanitization
-  chatSession.writeKey = null;
-  chatSession.readKey = null;
   chatSession.myKeys = null;
   chatSession.sendChainKey = null;
   chatSession.recvChainKey = null;
@@ -149,7 +147,7 @@ btnCalculatorExit.addEventListener('click', () => {
 });
 
 function startKeepAlive() {
-  if (staticInterval) clearTimeout(staticInterval);
+  if (keepAliveTimeout) clearTimeout(keepAliveTimeout);
   
   async function sendKeepAlive() {
     if (chatSession.sendChainKey && chatSession.theirQueueId) {
@@ -171,10 +169,10 @@ function startKeepAlive() {
       }
     }
     // Web Keep-Alive optimized to 10-30s random interval
-    staticInterval = setTimeout(sendKeepAlive, Math.random() * 20000 + 10000);
+    keepAliveTimeout = setTimeout(sendKeepAlive, Math.random() * 20000 + 10000);
   }
   
-  staticInterval = setTimeout(sendKeepAlive, 2000);
+  keepAliveTimeout = setTimeout(sendKeepAlive, 2000);
 }
 
 function addMessageLine(sender, text, disappearAfter = chatSession.disappearTimer) {

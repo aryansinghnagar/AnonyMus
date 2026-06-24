@@ -90,4 +90,18 @@ class CryptoProviderTest {
         
         assertEquals(plaintext, dec)
     }
+
+    @Test
+    fun testCrossProviderKat() {
+        val tinkProvider = TinkCryptoProvider()
+        val jceProvider = JceCryptoProvider()
+        
+        val fixedRootKey = ByteArray(32) { i -> i.toByte() }
+        
+        val tinkChain = tinkProvider.deriveChainKeys(fixedRootKey)
+        val jceChain = jceProvider.deriveChainKeys(fixedRootKey)
+        
+        assertArrayEquals(tinkChain.first, jceChain.first) // messageKey
+        assertArrayEquals(tinkChain.second, jceChain.second) // nextChainKey
+    }
 }

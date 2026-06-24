@@ -6,10 +6,10 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - FLASK_SECRET_KEY=generate-a-secure-random-key-in-production
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:?FLASK_SECRET_KEY must be set}
       - FLASK_DEBUG=False
       - DISABLE_SSL=True  # Usually disabled behind reverse proxy/Docker networking
-      - DATABASE_URL=postgresql://anonymus:anonymus_pass@db:5432/anonymus_db
+      - DATABASE_URL=postgresql://anonymus:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/anonymus_db
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
@@ -22,10 +22,10 @@ services:
     image: postgres:15-alpine
     environment:
       - POSTGRES_USER=anonymus
-      - POSTGRES_PASSWORD=anonymus_pass
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       - POSTGRES_DB=anonymus_db
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
@@ -33,7 +33,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: always
 
 volumes:
