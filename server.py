@@ -40,10 +40,10 @@ if not secret_key:
 app.secret_key = secret_key
 
 app.config.update(
-    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SECURE=not os.environ.get('DISABLE_SSL', 'False').lower() == 'true',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Strict',
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024  # 1MB limit for requests
+    MAX_CONTENT_LENGTH=1 * 1024 * 1024
 )
 
 limiter = Limiter(
@@ -86,7 +86,6 @@ def advertise_mdns(port):
         except Exception as e:
             print(f"mDNS advertisement not active: {e}")
             
-    import threading
     t = threading.Thread(target=run, daemon=True)
     t.start()
 
@@ -111,7 +110,8 @@ logging.getLogger().addFilter(RedactingFilter())
 # Security Headers
 @app.after_request
 def set_security_headers(response):
-    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '0'
@@ -179,6 +179,7 @@ database.init_db()
 
 # Queue Ownership mapping & locks
 queue_owners = {}
+queue_creators = {}
 queue_owners_lock = threading.Lock()
 
 def add_queue_owner(queue_id, sid):
@@ -192,6 +193,16 @@ def add_queue_owner(queue_id, sid):
     with queue_owners_lock:
         queue_owners.setdefault(queue_id, set()).add(sid)
 
+def add_queue_creator(queue_id, sid):
+    if r_client:
+        try:
+            r_client.set(f"queue_creator:{queue_id}", sid, ex=86400)
+            return
+        except Exception:
+            pass
+    with queue_owners_lock:
+        queue_creators[queue_id] = sid
+
 def is_queue_owner(queue_id, sid):
     if r_client:
         try:
@@ -201,26 +212,41 @@ def is_queue_owner(queue_id, sid):
     with queue_owners_lock:
         return queue_id in queue_owners and sid in queue_owners[queue_id]
 
+def is_recipient_online(queue_id):
+    creator_sid = None
+    if r_client:
+        try:
+            creator_sid = r_client.get(f"queue_creator:{queue_id}")
+        except Exception:
+            pass
+    if not creator_sid:
+        with queue_owners_lock:
+            creator_sid = queue_creators.get(queue_id)
+    if not creator_sid:
+        return False
+    with socket_connect_times_lock:
+        return creator_sid in socket_connect_times
+
 # Rate limiting for sockets
 socket_rate_limits = {}
 socket_rate_limits_lock = threading.Lock()
 
-def is_rate_limited(username, limit=5, window=1):
+def is_rate_limited(sid, limit=5, window=1):
     now = time.time()
     with socket_rate_limits_lock:
-        if username not in socket_rate_limits:
-            socket_rate_limits[username] = []
+        if sid not in socket_rate_limits:
+            socket_rate_limits[sid] = []
         
         # Clean up old timestamps
-        socket_rate_limits[username] = [t for t in socket_rate_limits[username] if now - t < window]
+        socket_rate_limits[sid] = [t for t in socket_rate_limits[sid] if now - t < window]
         
-        is_limited = len(socket_rate_limits[username]) >= limit
+        is_limited = len(socket_rate_limits[sid]) >= limit
         if not is_limited:
-            socket_rate_limits[username].append(now)
+            socket_rate_limits[sid].append(now)
             
         # Clean up empty dictionary keys to prevent memory leak
-        if not socket_rate_limits[username]:
-            del socket_rate_limits[username]
+        if not socket_rate_limits[sid]:
+            del socket_rate_limits[sid]
             
         return is_limited
 
@@ -233,7 +259,8 @@ def validate_session():
     if 'username' not in session:
         return False
     # Enforce maximum connection lifetime (8 hours)
-    connect_time = socket_connect_times.get(request.sid)
+    with socket_connect_times_lock:
+        connect_time = socket_connect_times.get(request.sid)
     if connect_time and (time.time() - connect_time > 8 * 3600):
         app.logger.warning(f"WebSocket session expired (8h limit) for SID={request.sid}")
         return False
@@ -356,13 +383,13 @@ def handle_create_queue():
         disconnect()
         return
 
-    username = session.get('username', request.sid)
-    if is_rate_limited(username, limit=5, window=10):
-        app.logger.warning(f"Rate limit exceeded for create_queue on User={username}")
+    if is_rate_limited(request.sid, limit=5, window=10):
+        app.logger.warning(f"Rate limit exceeded for create_queue on SID={request.sid[:4]}")
         return
 
     queue_id = str(uuid.uuid4())
     add_queue_owner(queue_id, request.sid)
+    add_queue_creator(queue_id, request.sid)
     join_room(queue_id)
     app.logger.debug(f"Queue room {queue_id} joined by SID={request.sid[:4]}")
     
@@ -392,9 +419,8 @@ def handle_push_queue(data):
         disconnect()
         return
 
-    username = session.get('username', request.sid)
-    if is_rate_limited(username, limit=10, window=1):
-        app.logger.warning(f"Rate limit exceeded for push_queue on User={username}")
+    if is_rate_limited(request.sid, limit=10, window=1):
+        app.logger.warning(f"Rate limit exceeded for push_queue on SID={request.sid[:4]}")
         return
 
     queue_id = data.get('queue_id')
@@ -404,7 +430,7 @@ def handle_push_queue(data):
         return
         
     if len(payload) > 100 * 1024:
-        app.logger.warning(f"Payload too large from User={username}")
+        app.logger.warning(f"Payload too large from SID={request.sid[:4]}")
         return
 
     # Verify sender is authorized for target queue room
@@ -412,8 +438,7 @@ def handle_push_queue(data):
         app.logger.warning(f"Unauthorised push_queue attempt for queue_id={queue_id[:8]} from SID={request.sid[:4]}")
         return
 
-    participants = socketio.server.manager.get_participants(request.namespace, queue_id)
-    if not list(participants):
+    if not is_recipient_online(queue_id):
         emit('push_queue_error', {'queue_id': queue_id, 'error': 'recipient_offline'})
         return
     emit('queue_payload', {'queue_id': queue_id, 'payload': payload}, to=queue_id)
@@ -426,7 +451,7 @@ def handle_disconnect():
     with socket_rate_limits_lock:
         socket_rate_limits.pop(sid, None)
         
-    # Clean up local queue owners
+    # Clean up local queue owners and creators
     with queue_owners_lock:
         empty_queues = []
         for q_id, sids in queue_owners.items():
@@ -436,6 +461,10 @@ def handle_disconnect():
                 empty_queues.append(q_id)
         for q_id in empty_queues:
             del queue_owners[q_id]
+            
+        expired_queues = [q for q, creator in queue_creators.items() if creator == sid]
+        for q in expired_queues:
+            del queue_creators[q]
 
     app.logger.debug(f"Client disconnected. SID={sid[:4]}")
 
