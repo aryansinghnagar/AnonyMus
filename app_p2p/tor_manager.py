@@ -19,8 +19,11 @@ import socket
 
 # Configuration version and bundle extraction paths
 TOR_VERSION = "15.0.16"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BIN_DIR = os.path.join(BASE_DIR, "bin")
+if getattr(sys, 'frozen', False):
+    APP_ROOT = os.path.dirname(sys.executable)
+else:
+    APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BIN_DIR = os.path.join(APP_ROOT, "bin")
 TOR_DIR = os.path.join(BIN_DIR, "tor")
 TOR_DATA_DIR = os.path.join(BIN_DIR, "tor_data")
 TOR_SERVICE_DIR = os.path.join(BIN_DIR, "tor_service")
