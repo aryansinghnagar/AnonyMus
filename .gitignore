@@ -44,6 +44,7 @@ desktop.ini
 # ---------------------- Planning docs (optional) -------------
 implementation_plan.md
 privacy-chat-plan.md
+ANONYMUS_UNIFIED_MERGE_PLAN.md
 
 # Tor runtime state and service secrets
 bin/tor_data/
