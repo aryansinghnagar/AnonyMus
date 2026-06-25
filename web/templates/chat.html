@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace Mail</title>
+  <meta name="robots" content="noindex, nosnippet">
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-mode="{{ mode }}">
+  <div class="app">
+
+    <header class="topbar">
+      <div class="logo-container">
+        <!-- Minimal icon -->
+        <span style="font-size: 16px;">✉️</span>
+        <h1>Workspace Mail</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-settings" class="btn btn-icon btn-settings" aria-label="Settings" title="Settings">⚙️ Settings</button>
+        <button id="btn-calculator" class="btn btn-icon btn-calculator" aria-label="Calculator" title="Calculator">Calc</button>
+        <button id="btn-clear-cache" class="btn btn-icon btn-clear-cache" aria-label="Clear Cache" title="Clear Cache">Clear</button>
+        <button id="btn-close-chat" class="btn btn-icon btn-close-chat" aria-label="Close Chat" title="Close Chat">Close</button>
+        <button id="btn-logout" class="btn btn-logout">Logout</button>
+      </div>
+    </header>
+
+    <div id="warning-banner" class="warning-banner"></div>
+
+    <div class="main">
+      
+      <!-- P2P SIDEBAR: Directory -->
+      <aside class="sidebar sidebar-p2p mode-p2p-only">
+        <div class="sidebar-section">
+          <h3 class="sidebar-title">User ID</h3>
+          <div id="my-onion-display" class="onion-display-box" title="Click to copy">Loading...</div>
+        </div>
+
+        <div class="sidebar-section sidebar-section-divider">
+          <h3 class="sidebar-title">Add Contact</h3>
+          <input type="text" id="contact-nickname" class="input-p2p" placeholder="Nickname" autocomplete="off">
+          <input type="text" id="contact-onion" class="input-p2p" placeholder="xxxx.onion" autocomplete="off">
+          <button id="btn-add-contact" class="btn-p2p">Add Peer</button>
+        </div>
+
+        <div class="sidebar-section sidebar-section-divider sidebar-section-contacts">
+          <h3 class="sidebar-title">Directory</h3>
+          <ul id="contacts-list" class="contacts-list-p2p">
+            <!-- Dynamically populated contacts -->
+          </ul>
+        </div>
+      </aside>
+
+      <!-- CHAT WRAPPER AREA -->
+      <div class="chat-container">
+
+        <!-- ================= RELAY VIEWS ================= -->
+        <!-- VIEW: SETUP (No URL Hash) -->
+        <div id="view-setup" class="view-container mode-relay-only active">
+          <h2>Start Chat</h2>
+          <p>Generate an invite link to share.</p>
+          <div id="qrcode" style="margin: 1rem auto; display: flex; justify-content: center;"></div>
+          <p>Share this link to invite a peer. The link expires upon closing.</p>
+          <div class="invite-link-box" id="invite-link-display">Generating...</div>
+          <button id="btn-copy-invite" class="btn" aria-label="Copy Link">Copy Invite Link</button>
+
+          <hr style="margin: 2rem 0; border: 1px solid var(--chat-border);">
+          
+          <h3>Or Enter Invite Link</h3>
+          <input type="text" id="paste-invite-input" placeholder="Paste invite link..." autocomplete="off">
+          <button class="btn" id="btn-paste-connect">Connect</button>
+
+          <p style="margin-top: 2rem; color: #9ca3af;">Waiting for connection...</p>
+        </div>
+
+        <!-- VIEW: JOIN (URL Hash Present) -->
+        <div id="view-join" class="view-container mode-relay-only">
+          <h2>Inbound Invitation</h2>
+          <p>You have been invited to start a chat session.</p>
+          <button class="btn" id="btn-accept-invite">Accept & Connect</button>
+        </div>
+
+        <!-- ================= P2P VIEWS ================= -->
+        <!-- Welcome Screen (Default) -->
+        <div id="view-welcome" class="view-container mode-p2p-only active">
+          <h2>Workspace Messaging</h2>
+          <p>Select a contact from the directory to begin messaging.</p>
+        </div>
+
+        <!-- Pending Incoming Acceptance Screen -->
+        <div id="view-pending-incoming" class="view-container mode-p2p-only">
+          <h2>Inbound Contact Request</h2>
+          <p id="pending-request-text"></p>
+          <div class="pending-actions-p2p">
+            <button id="btn-accept-incoming" class="btn">Accept</button>
+            <button id="btn-deny-incoming" class="btn">Deny</button>
+          </div>
+        </div>
+
+        <!-- Pending Outgoing Screen -->
+        <div id="view-pending-outgoing" class="view-container mode-p2p-only">
+          <h2>Connecting...</h2>
+          <p>Waiting for network response to establish session.</p>
+          <div class="pending-status-p2p">Status: Awaiting acceptance...</div>
+        </div>
+
+        <!-- ================= SHARED ACTIVE CHAT PANE ================= -->
+        <section id="view-chat" class="chat-area" style="display: none;">
+          <div class="header-controls">
+            <div id="chatting-with-name" class="mode-p2p-only">Chatting with: ...</div>
+            <div>Verification: <span class="safety-number" id="ui-safety-number">...</span></div>
+            <div class="disappear-control">
+              Keep Messages: 
+              <select id="disappear-timer">
+                <option value="0">Off (Session)</option>
+                <option value="15">15 Seconds</option>
+                <option value="60">1 Minute</option>
+                <option value="300">5 Minutes</option>
+                <option value="1800">30 Minutes</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="messages" id="messages"></div>
+
+          <form class="message-form" id="message-form">
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+            <button type="submit" id="send-btn">Send</button>
+          </form>
+          <div class="mode-p2p-only" style="font-size: 0.8rem; color: #6b7280; text-align: center; margin-top: 0.25rem;">
+            Relayed ephemerally. Messages are only stored in local browser memory.
+          </div>
+        </section>
+
+      </div>
+
+      <!-- VIEW: CALCULATOR (STEALTH COVER) -->
+      <div id="view-calculator" class="view-cloak-overlay">
+        <div class="calc-container">
+          <div class="calc-header">
+            <span>Calculator</span>
+            <span>Standard</span>
+          </div>
+          <div class="calc-display-history"></div>
+          <input type="text" class="calc-display" value="0" disabled>
+          <div class="calc-keypad">
+            <button class="calc-btn calc-btn-op">%</button>
+            <button class="calc-btn calc-btn-op">CE</button>
+            <button class="calc-btn calc-btn-op">C</button>
+            <button class="calc-btn calc-btn-op">⌫</button>
+
+            <button class="calc-btn calc-btn-op">1/x</button>
+            <button class="calc-btn calc-btn-op">x²</button>
+            <button class="calc-btn calc-btn-op">√x</button>
+            <button class="calc-btn calc-btn-op">÷</button>
+
+            <button class="calc-btn">7</button>
+            <button class="calc-btn">8</button>
+            <button class="calc-btn">9</button>
+            <button class="calc-btn calc-btn-op">×</button>
+
+            <button class="calc-btn">4</button>
+            <button class="calc-btn">5</button>
+            <button class="calc-btn">6</button>
+            <button class="calc-btn calc-btn-op">−</button>
+
+            <button class="calc-btn">1</button>
+            <button class="calc-btn">2</button>
+            <button class="calc-btn">3</button>
+            <button class="calc-btn calc-btn-op">+</button>
+
+            <button class="calc-btn">+/-</button>
+            <button class="calc-btn">0</button>
+            <button class="calc-btn">.</button>
+            <button id="btn-calculator-exit" class="calc-btn calc-btn-eq" aria-label="Exit Calculator">=</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Settings Modal Overlay -->
+  <div id="settings-modal" class="settings-modal-overlay" style="display: none;">
+    <div class="settings-container">
+      <div class="settings-header">
+        <h2>System Settings</h2>
+        <button id="btn-close-settings" class="btn-close">&times;</button>
+      </div>
+      <div class="settings-body">
+        <h3>Transport Profile Configuration</h3>
+        <p style="font-size: 0.85rem; color: #605e5c; margin-bottom: 1.5rem;">
+          Select the active communication profile. Switching profiles will terminate active sessions and zeroize session keys.
+        </p>
+        <div class="mode-options">
+          <label class="mode-option">
+            <input type="radio" name="transport-mode" value="relay">
+            <div class="mode-option-desc">
+              <strong>Centralized Relay (Standard)</strong>
+              <span>Zero-knowledge client-server message queue relay. Works over local networks and internet.</span>
+            </div>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="transport-mode" value="p2p">
+            <div class="mode-option-desc">
+              <strong>Decentralized P2P (Diagnostic)</strong>
+              <span>Onion-wrapped direct routing over the Tor network. Provides operational anonymity.</span>
+            </div>
+          </label>
+        </div>
+        <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 8px;">
+          <button id="btn-cancel-settings" class="btn">Cancel</button>
+          <button id="btn-apply-settings" class="btn btn-primary" style="background: #0078d4; color: white; border: none;">Apply & Restart</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Server-injected runtime config
+    window.ANONYMUS_MODE = "{{ mode }}";
+  </script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WU1yM05A/bfrt//B30PeoR2bO2sEkt2A5Q12ZkKGVFqOSwgy7s4A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="/static/crypto.js"></script>
+  <script src="/static/mode_toggle.js"></script>
+  <script src="/static/chat.js"></script>
+</body>
+</html>
