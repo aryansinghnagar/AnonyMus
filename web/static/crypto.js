@@ -1,16 +1,19 @@
 /**
- * crypto.js — End-to-end encryption for the Zero-Knowledge Chat App.
+ * crypto.js — End-to-end encryption for AnonyMus (Unified Architecture).
+ * Supports ECDH, HKDF-SHA256 symmetric key ratcheting, and AES-256-GCM message encryption.
  */
 
 // ---------------------------------------------------------------------------
-// Helpers — binary <-> base64 conversion
+// Helpers — binary <-> base64 conversion (chunked to prevent stack overflows)
 // ---------------------------------------------------------------------------
 
 function toBase64(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const len = bytes.byteLength;
+  const chunk_size = 0x8000;
+  for (let i = 0; i < len; i += chunk_size) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk_size));
   }
   return btoa(binary);
 }
@@ -168,11 +171,13 @@ async function deriveSessionKeys(myPrivateKey, theirPublicKey, myPubKeyB64, thei
 // ---------------------------------------------------------------------------
 
 async function computeSafetyNumber(myPubKeyB64, theirPubKeyB64) {
+  // Sort them to ensure both parties compute the exact same hash
   const sorted = [myPubKeyB64, theirPubKeyB64].sort();
   const data = new TextEncoder().encode(sorted[0] + sorted[1]);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   
+  // Use all 256 bits formatted as hex chunks
   const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   let chunks = [];
   for (let i = 0; i < hex.length; i += 8) {
@@ -182,7 +187,7 @@ async function computeSafetyNumber(myPubKeyB64, theirPubKeyB64) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. AES-GCM — encrypting and decrypting messages
+// 5. AES-GCM — encrypting and decrypting messages with Length-Prefixed Padding
 // ---------------------------------------------------------------------------
 
 const BLOCK_SIZE = 512;
@@ -255,7 +260,7 @@ async function decryptMessage(key, ivBase64, ciphertextBase64, role, seqNum, ses
     const textBytes = new Uint8Array(decryptedBuffer, 4, textLen);
     return new TextDecoder().decode(textBytes);
   } catch (err) {
-    console.error('decryptMessage: decryption failed', err);
+    console.error("Decryption error:", err);
     return null;
   }
 }

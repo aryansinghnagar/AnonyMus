@@ -24,7 +24,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
   }
 }
 
-const cryptoJsPath = path.join(__dirname, '..', 'static', 'crypto.js');
+const cryptoJsPath = path.join(__dirname, '..', '..', '..', 'web', 'static', 'crypto.js');
 const cryptoCode = fs.readFileSync(cryptoJsPath, 'utf8');
 
 // Load crypto.js into the global context
