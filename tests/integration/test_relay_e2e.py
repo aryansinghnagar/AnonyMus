@@ -2,12 +2,13 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Ensure project root directory is in path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 os.environ['DATABASE_URL'] = ''
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key'
 
-import server
-import database
+from transports.relay import server
+from transports.relay import database
 database.DB_FILE = 'test_users_integration.db'
 
 class TestIntegration(unittest.TestCase):

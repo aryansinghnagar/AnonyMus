@@ -50,5 +50,20 @@
   </div>
 
   <script src="/static/login.js"></script>
+  <script>
+    {% if register_only %}
+    document.addEventListener('DOMContentLoaded', () => {
+      // Toggle to register view directly
+      const regView = document.getElementById('register-view');
+      const loginView = document.getElementById('login-view');
+      if (regView && loginView) {
+        loginView.style.display = 'none';
+        regView.style.display = 'block';
+      }
+      const toLogin = document.getElementById('link-to-login');
+      if (toLogin) toLogin.style.display = 'none';
+    });
+    {% endif %}
+  </script>
 </body>
 </html>
