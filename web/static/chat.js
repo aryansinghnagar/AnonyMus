@@ -2586,6 +2586,26 @@ async function initApp() {
         };
       }
     }
+
+    const btnShowPairing = document.getElementById('btn-show-pairing');
+    if (btnShowPairing) btnShowPairing.addEventListener('click', initDevicePairing);
+
+    const btnPushPairing = document.getElementById('btn-push-pairing');
+    if (btnPushPairing) {
+      btnPushPairing.addEventListener('click', () => {
+        document.getElementById('push-sync-modal').style.display = 'flex';
+      });
+    }
+
+    const btnCancelPushSync = document.getElementById('btn-cancel-push-sync');
+    if (btnCancelPushSync) {
+      btnCancelPushSync.addEventListener('click', () => {
+        document.getElementById('push-sync-modal').style.display = 'none';
+      });
+    }
+
+    const btnSubmitPushSync = document.getElementById('btn-submit-push-sync');
+    if (btnSubmitPushSync) btnSubmitPushSync.addEventListener('click', submitPushSync);
   }
 }
 
@@ -3455,6 +3475,60 @@ async function submitUnlockProfile() {
   } catch (err) {
     console.error(err);
     alert("Incorrect passphrase.");
+  }
+}
+
+async function initDevicePairing() {
+  try {
+    const res = await fetch('/api/sync/pair', { method: 'POST' });
+    if (res.status !== 200) {
+      alert("Failed to initialize pairing broker.");
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('pairing-info-section').style.display = 'block';
+      document.getElementById('pairing-payload-text').textContent = JSON.stringify(data, null, 2);
+    } else {
+      alert("Error: " + data.error);
+    }
+  } catch (err) {
+    alert("Pairing request failed: " + err);
+  }
+}
+
+async function submitPushSync() {
+  const payloadStr = document.getElementById('push-pairing-payload').value.trim();
+  if (!payloadStr) {
+    alert("Please paste the partner pairing payload.");
+    return;
+  }
+  
+  let payload;
+  try {
+    payload = JSON.parse(payloadStr);
+  } catch (e) {
+    alert("Invalid credentials format. Must be JSON.");
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/sync/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await res.json();
+    if (res.status === 200 && data.success) {
+      alert("Database backup successfully synchronized with partner device!");
+      document.getElementById('push-sync-modal').style.display = 'none';
+      document.getElementById('push-pairing-payload').value = '';
+    } else {
+      alert("Sync failed: " + (data.error || data.message));
+    }
+  } catch (err) {
+    alert("Network sync failed: " + err);
   }
 }
 
