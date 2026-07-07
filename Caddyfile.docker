@@ -1,0 +1,8 @@
+﻿# Caddyfile for Docker deployment — replace {$RELAY_DOMAIN} with your domain in .env
+{$RELAY_DOMAIN} {
+    reverse_proxy relay:5001
+    encode gzip
+    log {
+        output stdout
+    }
+}

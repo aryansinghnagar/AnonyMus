@@ -1,0 +1,122 @@
+# =============================================================================
+# AnonyMus Relay — Docker Compose Configuration
+# Usage:
+#   docker compose up -d              # Start relay with Caddy TLS (set DOMAIN)
+#   docker compose --profile onion up -d  # Start with Tor hidden service
+# =============================================================================
+
+version: "3.9"
+
+x-relay-env: &relay-env
+  RELAY_MODE: relay
+  RELAY_PORT: "5001"
+  FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY in .env}
+  RELAY_DOMAIN: ${RELAY_DOMAIN:-}
+  RELAY_AS_ONION: ${RELAY_AS_ONION:-false}
+  REDIS_URL: redis://redis:6379/0
+
+services:
+  # ── AnonyMus relay ──────────────────────────────────────────────────────────
+  relay:
+    image: python:3.11-slim
+    container_name: anonymus-relay
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+      - relay-data:/app/data
+    environment:
+      <<: *relay-env
+    command: >
+      sh -c "pip install --quiet -r requirements.txt &&
+             python server.py --relay-only"
+    expose:
+      - "5001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Redis (in-memory message store) ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: anonymus-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Caddy (TLS termination, clearnet mode) ───────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: anonymus-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+    depends_on:
+      - relay
+    profiles:
+      - clearnet
+
+  # ── Tor (onion-only mode) ────────────────────────────────────────────────────
+  tor:
+    image: torproject/tor:latest
+    container_name: anonymus-tor
+    restart: unless-stopped
+    volumes:
+      - tor-data:/var/lib/tor
+      - ./torrc.docker:/etc/tor/torrc:ro
+    networks:
+      - internal
+    depends_on:
+      - relay
+    profiles:
+      - onion
+
+  # ── Coturn (TURN/STUN server for WebRTC NAT traversal) ────────────────────────
+  coturn:
+    image: coturn/coturn:latest
+    container_name: anonymus-coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
+    command:
+      - -n
+      - --log-file=stdout
+      - --lt-cred-mech
+      - --user=anonymus:turnpassword
+      - --realm=anonymus.chat
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:
+  tor-data:

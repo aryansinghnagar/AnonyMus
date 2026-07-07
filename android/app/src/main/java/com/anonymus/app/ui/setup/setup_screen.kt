@@ -204,7 +204,7 @@ private fun generateQrCode(text: String): Bitmap? {
         }
         bitmap
     } catch (e: Exception) {
-        e.printStackTrace()
+        android.util.Log.e("SetupScreen", "Failed to generate QR code")
         null
     }
 }

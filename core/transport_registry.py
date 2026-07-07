@@ -26,12 +26,20 @@ class TransportRegistry:
         current = self._transports[self._active_mode]
         target = self._transports[new_mode]
 
-        # 1. Handoff session state
-        current.handoff(target)
-        # 2. Stop current transport
-        current.stop()
-        # 3. Start target transport
-        target.start(new_config)
+        # 1. Start target transport first (standby)
+        try:
+            target.start(new_config)
+        except Exception as e:
+            print(f"Failed to start target transport {new_mode}: {e}")
+            return False
+
+        # 2. Handoff session state and stop current transport
+        try:
+            current.handoff(target)
+            current.stop()
+        except Exception as e:
+            print(f"Error during handoff or stopping active transport: {e}")
+            # Target is already running, proceed with mode swap anyway
 
         self._active_mode = new_mode
         # Set environment variable so child processes/subprocesses inherit the configuration

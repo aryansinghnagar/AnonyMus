@@ -1,23 +1,27 @@
+import os
 from flask import request
 
 def set_security_headers(response):
     """
     Flask hook to enforce browser security headers.
-    
-    Sets Strict-Transport-Security (HTTPS only), X-Content-Type-Options,
-    X-Frame-Options, X-XSS-Protection, CSP rules, and disables route caching
-    on sensitive dashboards.
     """
-    if request.is_secure:
+    # 1. HSTS (Strict-Transport-Security) - support reverse proxies
+    if request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https':
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        
+    # 2. Frame & Content Sniffing Protection
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '0'
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     
-    # Restrict loading of scripts/frames, allowing socket connection over WS/WSS
-    # Also support cdnjs for qrcode.js (relay mode dependency)
+    # 3. Cross-Origin Policies (COOP, COEP, CORP)
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
+    response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+    
+    # 4. Content Security Policy (CSP)
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         "script-src 'self' https://cdn.socket.io https://cdnjs.cloudflare.com; "
@@ -29,8 +33,8 @@ def set_security_headers(response):
         "connect-src 'self' ws: wss:;"
     )
     
-    # Disable caching on core views
-    if request.path in ['/login', '/register', '/chat']:
+    # 5. Disable caching on sensitive views
+    if request.path in ['/', '/login', '/register', '/chat']:
         response.headers['Cache-Control'] = 'no-store, max-age=0'
         
     return response

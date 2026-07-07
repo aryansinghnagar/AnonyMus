@@ -12,15 +12,18 @@ from transports.p2p import server as server
 class TestIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        database.DB_FILE = 'test_users_integration.db'
         if os.path.exists(database.DB_FILE):
             os.remove(database.DB_FILE)
         server.app.config['TESTING'] = True
+        server.app.config['WTF_CSRF_ENABLED'] = False
         cls.client = server.app.test_client()
         database.init_db()
         database.register_local_user('testuser', 'password')
         
     @classmethod
     def tearDownClass(cls):
+        database.DB_FILE = 'test_users_integration.db'
         if os.path.exists(database.DB_FILE):
             os.remove(database.DB_FILE)
 

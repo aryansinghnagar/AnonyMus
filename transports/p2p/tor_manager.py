@@ -118,6 +118,70 @@ def find_tor_binary(search_path):
     return None
 
 
+import hashlib
+
+def calculate_sha256(filepath):
+    sha256 = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+def fetch_expected_sha256(tor_version, filename):
+    urls = [
+        f"https://dist.torproject.org/torbrowser/{tor_version}/sha256sums-unsigned-builds.txt",
+        f"https://dist.torproject.org/torbrowser/{tor_version}/sha256sums.txt"
+    ]
+    for url in urls:
+        try:
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+            with urllib.request.urlopen(req) as response:
+                content = response.read().decode('utf-8')
+            for line in content.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    h, f = parts[0], parts[1]
+                    if f.lstrip('*') == filename:
+                        return h
+        except Exception:
+            continue
+    raise RuntimeError(f"Could not retrieve checksum for {filename} from Tor Project distribution server.")
+
+def verify_gpg_signature(archive_path, signature_path):
+    import shutil
+    import subprocess
+    
+    gpg_bin = shutil.which("gpg")
+    if not gpg_bin:
+        return False
+        
+    try:
+        print("Importing Tor Project signing key...")
+        subprocess.run(
+            [gpg_bin, "--keyserver", "keys.openpgp.org", "--recv-keys", "EF6E286DDA85EA2A4BA7DE684E2C6E8793298290"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20
+        )
+        
+        print("Verifying GPG signature...")
+        res = subprocess.run(
+            [gpg_bin, "--verify", signature_path, archive_path],
+            capture_output=True, text=True, timeout=20
+        )
+        if res.returncode == 0:
+            print("GPG signature verification passed.")
+            return True
+        else:
+            raise ValueError(f"Tor Expert Bundle GPG signature is INVALID! Verification failed:\n{res.stderr}")
+    except subprocess.SubprocessError as e:
+        print(f"GPG subprocess error (keyserver offline?): {e}. Falling back to SHA-256.")
+        return False
+
 def download_and_extract_tor():
     """
     Downloads Tor Expert Bundle if not present locally and extracts it safely.
@@ -145,6 +209,44 @@ def download_and_extract_tor():
         )
         with urllib.request.urlopen(req) as response, open(temp_archive, 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
+        
+        # Try GPG validation if GPG is available
+        import shutil as local_shutil
+        gpg_bin = local_shutil.which("gpg")
+        gpg_verified = False
+        if gpg_bin:
+            temp_sig = temp_archive + ".asc"
+            print("Downloading Tor Expert Bundle GPG signature...")
+            try:
+                sig_req = urllib.request.Request(
+                    TOR_URL + ".asc",
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                )
+                with urllib.request.urlopen(sig_req) as response, open(temp_sig, 'wb') as out_file:
+                    local_shutil.copyfileobj(response, out_file)
+                gpg_verified = verify_gpg_signature(temp_archive, temp_sig)
+            except Exception as e:
+                print(f"Failed to fetch/verify GPG signature: {e}")
+            finally:
+                if os.path.exists(temp_sig):
+                    os.remove(temp_sig)
+        
+        # Verify integrity using SHA-256 if GPG was not verified
+        if not gpg_verified:
+            print("Verifying archive integrity via SHA-256...")
+            archive_name = os.path.basename(TOR_URL)
+            expected_hash = fetch_expected_sha256(TOR_VERSION, archive_name)
+            actual_hash = calculate_sha256(temp_archive)
+            if actual_hash != expected_hash:
+                raise ValueError(
+                    f"Tor Expert Bundle checksum mismatch!\n"
+                    f"Expected: {expected_hash}\n"
+                    f"Actual:   {actual_hash}"
+                )
+            print("Integrity verification passed.")
+        else:
+            print("Integrity verification passed via GPG.")
+
         print("Download complete. Extracting archive...")
         
         # Safely extract archive verifying directories to prevent directory traversal attacks
@@ -178,35 +280,117 @@ def download_and_extract_tor():
     return extracted_binary
 
 
+TOR_SERVICES_PARENT_DIR = os.path.join(BIN_DIR, "hidden_services")
+
 def write_torrc(socks_port, control_port, peer_port):
     """
-    Writes custom configuration settings (torrc) for the Onion Hidden Service.
-    
-    Args:
-        socks_port (int): Port for outbound SOCKS5 proxy routing.
-        control_port (int): Tor control API port.
-        peer_port (int): Port index of local Flask server for inbound traffic.
+    Writes custom configuration settings (torrc) for all Onion Hidden Services.
     """
+    os.makedirs(TOR_SERVICES_PARENT_DIR, exist_ok=True)
+    
+    # Migrate old tor_service to hidden_services/main if it exists
+    main_service_dir = os.path.join(TOR_SERVICES_PARENT_DIR, "main")
+    if not os.path.exists(main_service_dir):
+        if os.path.exists(TOR_SERVICE_DIR):
+            try:
+                shutil.copytree(TOR_SERVICE_DIR, main_service_dir)
+            except Exception:
+                os.makedirs(main_service_dir, exist_ok=True)
+        else:
+            os.makedirs(main_service_dir, exist_ok=True)
+            
+    # Find all hidden service directories
+    subdirs = []
+    if os.path.exists(TOR_SERVICES_PARENT_DIR):
+        for name in os.listdir(TOR_SERVICES_PARENT_DIR):
+            path = os.path.join(TOR_SERVICES_PARENT_DIR, name)
+            if os.path.isdir(path):
+                subdirs.append(path)
+                
     torrc_content = f"""SocksPort 127.0.0.1:{socks_port}
 ControlPort 127.0.0.1:{control_port}
 CookieAuthentication 1
 DataDirectory {TOR_DATA_DIR.replace(os.sep, '/')}
-HiddenServiceDir {TOR_SERVICE_DIR.replace(os.sep, '/')}
+"""
+    for s_dir in subdirs:
+        torrc_content += f"""HiddenServiceDir {s_dir.replace(os.sep, '/')}
 HiddenServicePort 80 127.0.0.1:{peer_port}
 """
+        
     with open(TOR_RC_PATH, "w") as f:
         f.write(torrc_content)
-    print(f"Wrote torrc configuration to {TOR_RC_PATH}")
+    print(f"Wrote torrc configuration with {len(subdirs)} services to {TOR_RC_PATH}")
+
+
+def reload_tor_config(control_port):
+    """Sends the SIGNAL RELOAD command over the Tor control port using Cookie Authentication."""
+    cookie_path = os.path.join(TOR_DATA_DIR, "control_auth_cookie")
+    if not os.path.exists(cookie_path):
+        raise FileNotFoundError("Tor control auth cookie not found.")
+        
+    with open(cookie_path, "rb") as f:
+        cookie_bytes = f.read()
+    cookie_hex = cookie_bytes.hex().upper()
+    
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect(("127.0.0.1", control_port))
+        s.recv(1024)  # Read banner
+        
+        # Authenticate
+        s.sendall(f"AUTHENTICATE {cookie_hex}\r\n".encode())
+        resp = s.recv(1024).decode()
+        if "250" not in resp:
+            raise RuntimeError(f"Tor control authentication failed: {resp}")
+            
+        # Signal reload
+        s.sendall(b"SIGNAL RELOAD\r\n")
+        resp = s.recv(1024).decode()
+        if "250" not in resp:
+            raise RuntimeError(f"Tor configuration reload failed: {resp}")
+        print("Tor configuration reloaded successfully!")
+    finally:
+        s.close()
+
+
+def add_onion_service(service_name: str) -> str:
+    """
+    Configures and spins up a new hidden service dynamically.
+    
+    Args:
+        service_name (str): Unique subfolder identifier.
+        
+    Returns:
+        str: Generated .onion address.
+    """
+    service_dir = os.path.join(TOR_SERVICES_PARENT_DIR, service_name)
+    os.makedirs(service_dir, exist_ok=True)
+    
+    # Update configuration file and trigger Tor reload
+    write_torrc(SOCKS_PORT, CONTROL_PORT, PEER_PORT)
+    reload_tor_config(CONTROL_PORT)
+    
+    # Wait for the hostname to be generated by Tor
+    hostname_path = os.path.join(service_dir, "hostname")
+    for _ in range(30):
+        if os.path.exists(hostname_path):
+            with open(hostname_path, "r") as f:
+                onion = f.read().strip()
+                if onion:
+                    return onion
+        time.sleep(1)
+    raise FileNotFoundError(f"Tor failed to generate hostname for {service_name}")
 
 
 def get_onion_address():
     """
-    Monitors Hidden Service directory to extract generated hostname.
+    Monitors the main Hidden Service directory to extract its generated hostname.
     
     Returns:
         str: Generated onion service address.
     """
-    hostname_path = os.path.join(TOR_SERVICE_DIR, "hostname")
+    main_dir = os.path.join(TOR_SERVICES_PARENT_DIR, "main")
+    hostname_path = os.path.join(main_dir, "hostname")
     for _ in range(30):  # Wait up to 30 seconds for hostname generation
         if os.path.exists(hostname_path):
             with open(hostname_path, "r") as f:
@@ -214,10 +398,10 @@ def get_onion_address():
                 if onion:
                     return onion
         time.sleep(1)
-    raise FileNotFoundError("Tor failed to generate Onion service hostname.")
+    raise FileNotFoundError("Tor failed to generate main Onion service hostname.")
 
 
-def launch_tor():
+def launch_tor(peer_port=None):
     """
     Spawns background Tor service, monitoring logs to block until bootstrap completes.
     
@@ -229,7 +413,10 @@ def launch_tor():
     # Resolve unused network ports dynamically
     SOCKS_PORT = find_free_port(9050)
     CONTROL_PORT = find_free_port(9051)
-    PEER_PORT = find_free_port(8080)
+    if peer_port is not None:
+        PEER_PORT = peer_port
+    else:
+        PEER_PORT = find_free_port(8080)
     
     tor_binary = download_and_extract_tor()
     write_torrc(SOCKS_PORT, CONTROL_PORT, PEER_PORT)

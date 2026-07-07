@@ -12,12 +12,14 @@ database.DB_FILE = 'test_users.db'
 class TestDatabaseAuth(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        database.DB_FILE = 'test_users.db'
         if os.path.exists(database.DB_FILE):
             os.remove(database.DB_FILE)
         database.init_db()
 
     @classmethod
     def tearDownClass(cls):
+        database.DB_FILE = 'test_users.db'
         if os.path.exists(database.DB_FILE):
             os.remove(database.DB_FILE)
 
@@ -56,6 +58,34 @@ class TestDatabaseAuth(unittest.TestCase):
         # The difference should be relatively small
         ratio = max(time_known, time_unknown) / min(time_known, time_unknown)
         self.assertLess(ratio, 5.0, "Timing difference too large, possible oracle leak")
+
+    def test_4_login_lockout(self):
+        # Reset any active lockout or attempts
+        database.set_config('failed_login_attempts', '0')
+        database.set_config('lockout_until', '')
+
+        # 4 failed attempts should not trigger lockout
+        for _ in range(4):
+            res = database.login_local_user('alice', 'wrongpassword')
+            self.assertEqual(res.get('error'), 'Wrong credentials.')
+
+        # 5th failed attempt should trigger lockout
+        res = database.login_local_user('alice', 'wrongpassword')
+        self.assertEqual(res.get('error'), 'Wrong credentials.')
+        self.assertEqual(database.get_config('failed_login_attempts'), '5')
+        self.assertIsNotNone(database.get_config('lockout_until'))
+
+        # Subsequent attempts should return locked message
+        res = database.login_local_user('alice', 'wrongpassword')
+        self.assertIn("Account is locked", res.get('error'))
+
+        # Resetting/logging in successfully resets attempts
+        database.set_config('failed_login_attempts', '0')
+        database.set_config('lockout_until', '')
+        res = database.login_local_user('alice', 'password123')
+        self.assertTrue(res.get('success'))
+        self.assertEqual(database.get_config('failed_login_attempts'), '0')
+
 
 if __name__ == '__main__':
     unittest.main()

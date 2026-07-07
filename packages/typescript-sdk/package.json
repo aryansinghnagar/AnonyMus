@@ -1,0 +1,20 @@
+{
+  "name": "@anonymus/client",
+  "version": "1.0.0",
+  "description": "TypeScript client library for AnonyMus decentralized and secure communication protocol",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6",
+    "@types/node": "^20.4.5"
+  },
+  "author": "AnonyMus Developers",
+  "license": "GPL-3.0"
+}

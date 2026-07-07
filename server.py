@@ -14,8 +14,38 @@ from transports.p2p.adapter import P2PTransport
 # Create dispatcher app
 dispatcher_app = Flask(__name__)
 
+_PLACEHOLDER_SECRETS = {
+    "your-secure-random-key-here",
+    "diagnostics_ephemeral_control_key_2026",
+    "changeme",
+    "",
+}
+if os.environ.get("FLASK_SECRET_KEY", "") in _PLACEHOLDER_SECRETS:
+    raise RuntimeError(
+        "Refusing to start: FLASK_SECRET_KEY is missing, empty, or a known placeholder. "
+        "Please configure a secure unique key in your environment."
+    )
+
+from core.gunicorn_check import assert_single_worker
+assert_single_worker()
+
+
+def is_authorized_admin():
+    # 1. Allow if from localhost
+    remote_ip = request.remote_addr
+    if remote_ip in ('127.0.0.1', '::1', 'localhost'):
+        return True
+    # 2. Allow if matching admin secret
+    admin_secret = os.environ.get("ANONYMUS_ADMIN_SECRET")
+    if admin_secret and request.headers.get("X-Admin-Secret") == admin_secret:
+        return True
+    return False
+
 @dispatcher_app.route('/api/mode', methods=['GET', 'POST'])
 def handle_mode():
+    if not is_authorized_admin():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
     if request.method == 'POST':
         data = request.get_json() or {}
         new_mode = data.get('mode')
@@ -25,7 +55,8 @@ def handle_mode():
         port = int(os.environ.get("PORT", 5000))
         config = {
             "PORT": port,
-            "ANONYMUS_MDNS": os.environ.get("ANONYMUS_MDNS", "false")
+            "ANONYMUS_MDNS": os.environ.get("ANONYMUS_MDNS", "false"),
+            "SOCKS_PORT": int(os.environ.get("SOCKS_PORT", 9050))
         }
         
         success = registry.switch_mode(new_mode, config)
@@ -78,7 +109,7 @@ class UnifiedWSGIDispatcher:
         else:
             return self.p2p_wsgi(environ, start_response)
 
-wsgi_dispatcher = UnifiedWSGIDispatcher(dispatcher_app, relay_sio.wsgi_app, p2p_sio.wsgi_app)
+wsgi_dispatcher = UnifiedWSGIDispatcher(dispatcher_app, relay_sio.sockio_mw, p2p_sio.sockio_mw)
 
 # Re-expose app and socketio for external wsgi wrappers like gunicorn in docker
 app = wsgi_dispatcher
@@ -95,7 +126,8 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     config = {
         "PORT": port,
-        "ANONYMUS_MDNS": os.environ.get("ANONYMUS_MDNS", "false")
+        "ANONYMUS_MDNS": os.environ.get("ANONYMUS_MDNS", "false"),
+        "SOCKS_PORT": int(os.environ.get("SOCKS_PORT", 9050))
     }
     
     print(f"Booting AnonyMus in active mode: {mode}")
