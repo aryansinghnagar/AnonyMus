@@ -121,7 +121,8 @@ class NetworkDiagnosticsApp:
         self.settings = {
             "mode": "relay",
             "port": 5000,
-            "disguise": False
+            "disguise": False,
+            "flask_secret_key": ""
         }
         if os.path.exists(self.config_file):
             try:
@@ -130,6 +131,18 @@ class NetworkDiagnosticsApp:
                     self.settings.update(saved)
             except Exception:
                 pass
+        
+        # Ensure we have a valid, dynamically generated secret key
+        import secrets
+        _PLACEHOLDER_SECRETS = {
+            "your-secure-random-key-here",
+            "diagnostics_ephemeral_control_key_2026",
+            "changeme",
+            "",
+        }
+        if not self.settings.get("flask_secret_key") or self.settings.get("flask_secret_key") in _PLACEHOLDER_SECRETS:
+            self.settings["flask_secret_key"] = secrets.token_urlsafe(64)
+            self.save_settings()
 
     def save_settings(self):
         """Save settings to file."""
@@ -444,7 +457,7 @@ class NetworkDiagnosticsApp:
         # Configure env variables dynamically
         os.environ['ANONYMUS_MODE'] = active_mode
         os.environ['PORT'] = str(active_port)
-        os.environ['FLASK_SECRET_KEY'] = 'diagnostics_ephemeral_control_key_2026'
+        os.environ['FLASK_SECRET_KEY'] = self.settings.get("flask_secret_key", "")
         os.environ['FLASK_DEBUG'] = 'False'
         
         self.btn_start.config(state=tk.DISABLED)

@@ -156,7 +156,7 @@ class TinkCryptoProvider : CryptoProvider {
             buffer.get(textBytes)
             String(textBytes, StandardCharsets.UTF_8)
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("TinkCryptoProvider", "Cryptographic operation failed")
             null
         }
     }

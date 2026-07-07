@@ -38,6 +38,18 @@ class PreferencesHelper(context: Context) {
         get() = prefs.getBoolean(KEY_BIOMETRIC_LOCK, false)
         set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_LOCK, value).apply()
 
+    var pushEnabled: Boolean
+        get() = prefs.getBoolean("push_enabled", false)
+        set(value) = prefs.edit().putBoolean("push_enabled", value).apply()
+
+    var pushPrivateMode: Boolean
+        get() = prefs.getBoolean("push_private_mode", false)
+        set(value) = prefs.edit().putBoolean("push_private_mode", value).apply()
+
+    var pushToken: String?
+        get() = prefs.getString("push_token", null)
+        set(value) = prefs.edit().putString("push_token", value).apply()
+
     fun isConfigured(): Boolean {
         return !host.isNullOrBlank()
     }

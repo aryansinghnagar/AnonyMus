@@ -18,7 +18,28 @@ class RedactingFilter(logging.Filter):
     def filter(self, record):
         if record.msg and isinstance(record.msg, str):
             record.msg = redact_sensitive(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                new_args = {}
+                for k, v in record.args.items():
+                    if isinstance(v, str):
+                        new_args[k] = redact_sensitive(v)
+                    else:
+                        new_args[k] = v
+                record.args = new_args
+            elif isinstance(record.args, (list, tuple)):
+                new_args = []
+                for v in record.args:
+                    if isinstance(v, str):
+                        new_args.append(redact_sensitive(v))
+                    else:
+                        new_args.append(v)
+                record.args = tuple(new_args) if isinstance(record.args, tuple) else new_args
         return True
+
+import builtins
+
+_original_print = builtins.print
 
 def setup_logging(app=None):
     """Registers the RedactingFilter onto root and Flask loggers."""
@@ -26,3 +47,9 @@ def setup_logging(app=None):
     logging.getLogger().addFilter(redactor)
     if app:
         app.logger.addFilter(redactor)
+        
+    def secured_print(*args, **kwargs):
+        msg = " ".join(str(arg) for arg in args)
+        _original_print(redact_sensitive(msg), **kwargs)
+        
+    builtins.print = secured_print

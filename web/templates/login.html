@@ -5,8 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Workspace Portal</title>
   <meta name="robots" content="noindex, nosnippet">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link rel="icon" type="image/png" href="/static/logo.png">
   <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        let [resource, config] = args;
+        if (!config) config = {};
+        if (!config.headers) config.headers = {};
+        const method = (config.method || 'GET').toUpperCase();
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+          const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          if (csrfMeta) {
+            const csrfToken = csrfMeta.getAttribute('content');
+            if (csrfToken) {
+              config.headers['X-CSRFToken'] = csrfToken;
+            }
+          }
+        }
+        return originalFetch(resource, config);
+      };
+    })();
+  </script>
 </head>
 <body>
   <div class="app">

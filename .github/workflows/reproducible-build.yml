@@ -1,0 +1,59 @@
+name: Reproducible Build Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-reproducibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image (First Pass)
+        run: |
+          docker build --no-cache -t anonymus-build1 -f build/Dockerfile .
+
+      - name: Extract Files from First Build
+        run: |
+          docker create --name cont1 anonymus-build1
+          mkdir -p /tmp/build1
+          docker cp cont1:/app /tmp/build1/app
+          docker rm cont1
+
+      - name: Build Docker Image (Second Pass)
+        run: |
+          docker build --no-cache -t anonymus-build2 -f build/Dockerfile .
+
+      - name: Extract Files from Second Build
+        run: |
+          docker create --name cont2 anonymus-build2
+          mkdir -p /tmp/build2
+          docker cp cont2:/app /tmp/build2/app
+          docker rm cont2
+
+      - name: Compare Build Outputs
+        run: |
+          # Remove pyc/cache files which may contain non-deterministic timestamps
+          find /tmp/build1/app -name "__pycache__" -exec rm -rf {} +
+          find /tmp/build2/app -name "__pycache__" -exec rm -rf {} +
+          
+          # Compute recursive hash directory manifest
+          cd /tmp/build1/app && find . -type f -exec sha256sum {} + | sort > /tmp/manifest1.txt
+          cd /tmp/build2/app && find . -type f -exec sha256sum {} + | sort > /tmp/manifest2.txt
+          
+          # Compare manifests
+          if diff /tmp/manifest1.txt /tmp/manifest2.txt > /dev/null; then
+            echo "SUCCESS: Build outputs are perfectly identical and reproducible!"
+            exit 0
+          else
+            echo "ERROR: Reproducible build check failed! Differences detected:"
+            diff -u /tmp/manifest1.txt /tmp/manifest2.txt
+            exit 1
+          fi

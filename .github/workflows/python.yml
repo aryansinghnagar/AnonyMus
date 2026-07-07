@@ -1,4 +1,4 @@
-name: CI
+name: Python CI
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  backend-test:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -21,27 +21,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pip-audit
 
     - name: Run Python unit tests
       run: |
         python -m unittest discover tests
 
-  android-test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
-
-    - name: Make gradlew executable
-      run: chmod +x AnonyMus_android/gradlew
-
-    - name: Run Android unit tests
+    - name: Run security audit with pip-audit
       run: |
-        cd AnonyMus_android
-        ./gradlew test
+        pip-audit

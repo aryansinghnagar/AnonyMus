@@ -1,0 +1,4 @@
+﻿# Tor configuration for Docker onion-only relay deployment
+SocksPort 0
+HiddenServiceDir /var/lib/tor/anonymus_relay
+HiddenServicePort 80 relay:5001

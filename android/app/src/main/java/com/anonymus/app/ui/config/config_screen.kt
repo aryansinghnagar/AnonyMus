@@ -1,5 +1,9 @@
 package com.anonymus.app.ui.config
 
+import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.anonymus.app.LocalChatManager
 import com.anonymus.app.data.NsdHelper
 import com.anonymus.app.data.PreferencesHelper
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,9 +30,21 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
     var port by remember { mutableStateOf(prefs.port.toString()) }
     var trustSelfSigned by remember { mutableStateOf(prefs.trustSelfSigned) }
     var biometricLock by remember { mutableStateOf(prefs.biometricLock) }
+    var pushEnabled by remember { mutableStateOf(prefs.pushEnabled) }
+    var pushPrivateMode by remember { mutableStateOf(prefs.pushPrivateMode) }
     var isScanning by remember { mutableStateOf(false) }
     var hasFingerprint by remember(host) { mutableStateOf(prefs.hasFingerprint(host)) }
     var validationError by remember { mutableStateOf<String?>(null) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            pushEnabled = true
+        } else {
+            pushEnabled = false
+        }
+    }
 
     val nsdHelper = remember { 
         NsdHelper(context) { discoveredIp ->
@@ -112,6 +129,40 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
                 Text("Enable Biometric App Lock")
             }
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = pushEnabled,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                pushEnabled = true
+                            }
+                        } else {
+                            pushEnabled = false
+                        }
+                    }
+                )
+                Text("Enable Background Notifications")
+            }
+
+            if (pushEnabled) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(
+                        checked = pushPrivateMode,
+                        onCheckedChange = { pushPrivateMode = it }
+                    )
+                    Text("Hide Notification Details (Private Mode)")
+                }
+            }
+
             if (hasFingerprint) {
                 Spacer(modifier = Modifier.height(12.dp))
                 val fingerprint = prefs.serverCertFingerprint
@@ -166,6 +217,36 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
                     prefs.port = port.toIntOrNull() ?: 5000
                     prefs.trustSelfSigned = trustSelfSigned
                     prefs.biometricLock = biometricLock
+                    prefs.pushEnabled = pushEnabled
+                    prefs.pushPrivateMode = pushPrivateMode
+
+                    // Start/Stop Push Service and Schedule Keep-Alive
+                    val serviceIntent = Intent(context, com.anonymus.app.service.PushService::class.java)
+                    if (pushEnabled) {
+                        serviceIntent.action = com.anonymus.app.service.PushService.ACTION_START
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("ConfigScreen", "Failed to start foreground service: ${e.message}")
+                        }
+
+                        val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.anonymus.app.service.PushWorker>(
+                            30, TimeUnit.MINUTES
+                        ).build()
+                        androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                            "PushServiceKeepAlive",
+                            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                            workRequest
+                        )
+                    } else {
+                        serviceIntent.action = com.anonymus.app.service.PushService.ACTION_STOP
+                        context.startService(serviceIntent)
+                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("PushServiceKeepAlive")
+                    }
 
                     // Auto-connect once config is saved
                     chatManager.connect()

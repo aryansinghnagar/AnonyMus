@@ -50,6 +50,8 @@ android {
     packaging {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // JNA ships duplicate native libs — pick one
+        pickFirsts += "**/libjnidispatch.so"
       }
     }
 }
@@ -103,4 +105,11 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   implementation(libs.tink.android)
   implementation(libs.androidx.biometric)
+
+  // NaCl box (XSalsa20-Poly1305) — outer transport layer for Double Ratchet v2
+  implementation("com.goterl:lazysodium-android:5.1.0@aar")
+  implementation("net.java.dev.jna:jna:5.14.0@aar")
+
+  // WorkManager for background polling / push service keep-alive
+  implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

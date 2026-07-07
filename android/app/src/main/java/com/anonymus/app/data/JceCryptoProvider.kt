@@ -109,7 +109,7 @@ class JceCryptoProvider : CryptoProvider {
             buffer.get(textBytes)
             String(textBytes, StandardCharsets.UTF_8)
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("JceCryptoProvider", "Cryptographic operation failed")
             null
         }
     }

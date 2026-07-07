@@ -21,7 +21,7 @@ from flask import Flask, request, jsonify, render_template, session, redirect, u
 from flask_socketio import SocketIO, emit, join_room, disconnect
 from dotenv import load_dotenv
 
-import transports.relay.database as database
+# database decommissioned
 
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -42,30 +42,67 @@ STATIC_DIR = os.path.join(APP_ROOT, "web", "static")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 
+from core.gunicorn_check import assert_single_worker
+assert_single_worker()
+
+if os.environ.get('ANONYMUS_ENV', '').lower() == 'production' and os.environ.get('FLASK_DEBUG', '').lower() == 'true':
+    raise RuntimeError("Security Violation: FLASK_DEBUG=true is active while ANONYMUS_ENV=production. Refusing to boot.")
+
+from core.logging import setup_logging
+setup_logging(app)
+
 @app.context_processor
 def inject_mode():
     return dict(mode="relay")
 
+@app.before_request
+def handle_options_preflight():
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+
+@app.after_request
+def add_cors_headers(response):
+    if request.path.startswith('/file/') or request.path.startswith('/p2p/file/'):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
 # Enforce secure session key setup
+_PLACEHOLDER_SECRETS = {
+    "your-secure-random-key-here",
+    "diagnostics_ephemeral_control_key_2026",
+    "changeme",
+    "",
+}
 secret_key = os.environ.get('FLASK_SECRET_KEY')
 debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-if not secret_key:
+if not secret_key or secret_key in _PLACEHOLDER_SECRETS:
     if not debug_mode:
-        raise RuntimeError("FLASK_SECRET_KEY environment variable is required in production mode!")
+        raise RuntimeError("A secure FLASK_SECRET_KEY environment variable is required in production mode!")
     app.logger.warning("=" * 80)
-    app.logger.warning("WARNING: FLASK_SECRET_KEY environment variable is missing!")
+    app.logger.warning("WARNING: FLASK_SECRET_KEY environment variable is missing or insecure!")
     app.logger.warning("Using ephemeral key. Sessions will NOT persist across restarts/workers!")
     app.logger.warning("=" * 80)
     secret_key = os.urandom(32).hex()
 app.secret_key = secret_key
 
 # Apply session cookie and payload constraints
+from datetime import timedelta
 app.config.update(
     SESSION_COOKIE_SECURE=not os.environ.get('DISABLE_SSL', 'False').lower() == 'true',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Strict',
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024  # Enforce 1MB maximum payload size
+    MAX_CONTENT_LENGTH=1 * 1024 * 1024,  # Enforce 1MB maximum payload size
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8)
 )
+
+from flask_wtf.csrf import CSRFProtect
+csrf = CSRFProtect(app)
 
 # Initialize HTTP endpoint rate limiter (uses Redis backend if configured)
 limiter = Limiter(
@@ -162,48 +199,16 @@ app.logger.addFilter(RedactingFilter())
 logging.getLogger().addFilter(RedactingFilter())
 
 
-@app.after_request
-def set_security_headers(response):
-    """
-    Flask hook to enforce browser security headers.
-    
-    Sets Strict-Transport-Security (HTTPS only), X-Content-Type-Options,
-    X-Frame-Options, X-XSS-Protection, CSP rules, and disables route caching
-    on sensitive dashboards.
-    """
-    if request.is_secure:
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['X-XSS-Protection'] = '0'
-    response.headers['Referrer-Policy'] = 'no-referrer'
-    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
-    
-    # Restrict loading of scripts/frames, allowing socket connection over WS/WSS
-    response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; "
-        "script-src 'self' https://cdn.socket.io; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
-        "object-src 'none'; "
-        "base-uri 'self'; "
-        "frame-ancestors 'none'; "
-        "connect-src 'self' wss: ws:;"
-    )
-    
-    # Disable caching on core views
-    if request.path in ['/login', '/register', '/chat']:
-        response.headers['Cache-Control'] = 'no-store, max-age=0'
-        
-    return response
+from core.security_headers import setup_security_headers
+setup_security_headers(app)
 
 
 # Configure allowed Socket.IO CORS Origins dynamically
 cors_origins_env = os.environ.get("CORS_ORIGINS")
 if cors_origins_env:
-    allowed_origins = cors_origins_env.split(",")
+    allowed_origins = [orig.strip() for orig in cors_origins_env.split(",") if orig.strip()]
 else:
-    if debug_mode:
+    if debug_mode and os.environ.get('ANONYMUS_ENV', '').lower() != 'production':
         allowed_origins = "*"
     else:
         local_ip = get_local_ip()
@@ -236,13 +241,20 @@ if redis_url:
     except Exception as e:
         app.logger.warning(f"Could not initialize Redis client, falling back to memory: {e}")
 
-# Ensure database tables exist
-database.init_db()
+# Database init decommissioned (blind relay mode)
 
 # Queue state management maps & lock primitives (for single worker fallback)
 queue_owners = {}
 queue_creators = {}
 queue_owners_lock = threading.Lock()
+
+# Offline store-and-forward buffer (queue_id -> list of payloads)
+# Messages are buffered here when the recipient is offline and flushed on reconnect.
+# Redis list `offline_queue:<queue_id>` is used when r_client is configured.
+offline_queue = {}
+offline_queue_lock = threading.Lock()
+MAX_OFFLINE_QUEUE = 500   # max buffered messages per queue
+OFFLINE_QUEUE_TTL = 86400  # 24 hours TTL in Redis
 
 
 def add_queue_owner(queue_id, sid):
@@ -318,6 +330,8 @@ def is_recipient_online(queue_id):
     if r_client:
         try:
             creator_sid = r_client.get(f"queue_creator:{queue_id}")
+            if creator_sid:
+                return r_client.sismember("online_sids", creator_sid)
         except Exception:
             pass
     if not creator_sid:
@@ -332,6 +346,57 @@ def is_recipient_online(queue_id):
 # In-memory WebSocket client rate limiter structures
 socket_rate_limits = {}
 socket_rate_limits_lock = threading.Lock()
+
+
+def enqueue_offline(queue_id: str, payload: str):
+    """
+    Stores an undeliverable message payload in the offline buffer.
+    
+    Uses a Redis list when available, otherwise an in-memory dict.
+    Enforces a per-queue cap of MAX_OFFLINE_QUEUE messages to bound memory usage.
+    """
+    if r_client:
+        try:
+            key = f"offline_queue:{queue_id}"
+            r_client.rpush(key, payload)
+            r_client.ltrim(key, -MAX_OFFLINE_QUEUE, -1)  # keep latest N
+            r_client.expire(key, OFFLINE_QUEUE_TTL)
+            return
+        except Exception as e:
+            app.logger.warning(f"Redis enqueue_offline failed: {e}")
+    with offline_queue_lock:
+        if queue_id not in offline_queue:
+            offline_queue[queue_id] = []
+        offline_queue[queue_id].append(payload)
+        # Trim to cap
+        if len(offline_queue[queue_id]) > MAX_OFFLINE_QUEUE:
+            offline_queue[queue_id] = offline_queue[queue_id][-MAX_OFFLINE_QUEUE:]
+
+
+def flush_offline_queue(queue_id: str, sid: str):
+    """
+    Delivers all buffered offline messages to the now-online recipient.
+    
+    Drains the Redis list (or in-memory buffer) and emits each payload as a
+    `queue_payload` event to the recipient's socket, then deletes the buffer.
+    """
+    payloads = []
+    if r_client:
+        try:
+            key = f"offline_queue:{queue_id}"
+            payloads = r_client.lrange(key, 0, -1)
+            r_client.delete(key)
+        except Exception as e:
+            app.logger.warning(f"Redis flush_offline_queue failed: {e}")
+    if not payloads:
+        with offline_queue_lock:
+            payloads = offline_queue.pop(queue_id, [])
+    
+    for payload in payloads:
+        socketio.emit('queue_payload', {'queue_id': queue_id, 'payload': payload}, to=sid)
+    
+    if payloads:
+        app.logger.debug(f"Flushed {len(payloads)} offline message(s) to SID={sid[:4]} for queue={queue_id[:8]}")
 
 
 def is_rate_limited(sid, limit=5, window=1):
@@ -370,71 +435,7 @@ socket_connect_times = {}
 socket_connect_times_lock = threading.Lock()
 
 
-def validate_session():
-    """
-    Validates active cookie session data and forces disconnection
-    if connection exceeds 8 hours to refresh key states.
-    
-    Returns:
-        bool: True if session remains valid, False if invalid/expired.
-    """
-    if 'username' not in session:
-        return False
-    
-    with socket_connect_times_lock:
-        connect_time = socket_connect_times.get(request.sid)
-    if connect_time and (time.time() - connect_time > 8 * 3600):
-        app.logger.warning(f"WebSocket session expired (8h limit) for SID={request.sid}")
-        return False
-    return True
-
-
-def validate_username(username):
-    """
-    Validates username pattern and length.
-    
-    Args:
-        username (str): Target username.
-        
-    Returns:
-        str: Error message, or None if validation passes.
-    """
-    if not username:
-        return "Username is required."
-    if len(username) < 3 or len(username) > 50:
-        return "Username must be between 3 and 50 characters."
-    if not re.match(r"^[a-zA-Z0-9_-]+$", username):
-        return "Username can only contain letters, numbers, underscores, and hyphens."
-    return None
-
-
-def validate_password(password):
-    """
-    Enforces strong password composition boundaries.
-    
-    Requires minimum 8 characters, maximum 128 characters, and complexity containing
-    characters from at least 3 categories (uppercase, lowercase, digits, special characters).
-    
-    Args:
-        password (str): Target password.
-        
-    Returns:
-        str: Error message, or None if validation passes.
-    """
-    if not password:
-        return "Password is required."
-    if len(password) < 8:
-        return "Password must be at least 8 characters long."
-    if len(password) > 128:
-        return "Password must be at most 128 characters long."
-    categories = 0
-    if re.search(r'[A-Z]', password): categories += 1
-    if re.search(r'[a-z]', password): categories += 1
-    if re.search(r'[0-9]', password): categories += 1
-    if re.search(r'[^A-Za-z0-9]', password): categories += 1
-    if categories < 3:
-        return "Password must contain characters from at least 3 of: uppercase, lowercase, digits, special characters."
-    return None
+# Session/User validation logic decommissioned for zero-identifier queue mode
 
 
 # ==========================================
@@ -443,18 +444,14 @@ def validate_password(password):
 
 @app.route('/', methods=['GET'])
 def index():
-    """Renders main entrance view or redirects to chat panel if authenticated."""
-    if 'username' in session:
-        return redirect(url_for('chat'))
-    return render_template('login.html')
+    """Renders chat panel directly (no authentication)."""
+    return render_template('chat.html')
 
 
 @app.route('/chat', methods=['GET'])
 def chat():
-    """Renders chat dashboard view for authenticated users."""
-    if 'username' not in session:
-        return redirect(url_for('index'))
-    return render_template('chat.html')
+    """Redirects to index since chat is at root now."""
+    return redirect(url_for('index'))
 
 
 @app.route('/health', methods=['GET'])
@@ -466,69 +463,24 @@ def health():
     }), 200
 
 
-@app.route('/register', methods=['POST'])
-@limiter.limit("5 per minute")
-def register():
-    """Handles secure user account registration."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request"}), 400
-        
-    username = data.get('username')
-    password = data.get('password')
-    
-    user_err = validate_username(username)
-    if user_err:
-        return jsonify({"error": user_err}), 400
-
-    pwd_err = validate_password(password)
-    if pwd_err:
-        return jsonify({"error": pwd_err}), 400
-        
-    res = database.register_user(username, password)
-    return jsonify(res)
-
-
-@app.route('/login', methods=['POST'])
-@limiter.limit("10 per minute")
-def login():
-    """Handles secure authentication, clearing session tokens to mitigate fixation attacks."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request"}), 400
-        
-    username = data.get('username')
-    password = data.get('password')
-    
-    res = database.login_user(username, password)
-    if res.get('success'):
-        # Session fixation protection: regenerate session ID
-        session.clear()
-        session['username'] = username
-    return jsonify(res)
-
-
-@app.route('/logout', methods=['POST'])
-def logout():
-    """Logs out user, clearing current server sessions."""
-    session.clear()
-    return jsonify({"success": True})
-
-
 # ==========================================
 # 2. WEBSOCKET HANDLERS
 # ==========================================
 
 @socketio.on('connect')
 def handle_connect():
-    """Validates HTTP session cookie state when initiating WS connection."""
-    if 'username' not in session:
-        return False
+    """Allows anonymous client connections."""
     with socket_connect_times_lock:
         socket_connect_times[request.sid] = time.time()
         
+    if r_client:
+        try:
+            r_client.sadd("online_sids", request.sid)
+        except Exception as e:
+            app.logger.warning(f"Failed to record socket online in Redis: {e}")
+            
     truncated_sid = request.sid[:4] if request.sid else "None"
-    app.logger.debug(f"Client connected. SID={truncated_sid}, User={session['username']}")
+    app.logger.debug(f"Client connected. SID={truncated_sid}")
     
     with socket_rate_limits_lock:
         if request.sid not in socket_rate_limits:
@@ -538,11 +490,6 @@ def handle_connect():
 @socketio.on('create_queue')
 def handle_create_queue():
     """Generates a secure UUID and sets up an authorized message queue for client."""
-    if not validate_session():
-        emit('session_expired', {})
-        disconnect()
-        return
-
     if is_rate_limited(request.sid, limit=5, window=10):
         app.logger.warning(f"Rate limit exceeded for create_queue on SID={request.sid[:4]}")
         return
@@ -554,16 +501,45 @@ def handle_create_queue():
     app.logger.debug(f"Queue room {queue_id} joined by SID={request.sid[:4]}")
     
     emit('queue_created', {'queue_id': queue_id})
+    
+    # Flush any messages that arrived while this client was offline (10.C.1)
+    flush_offline_queue(queue_id, request.sid)
+
+
+@socketio.on('rejoin_queue')
+def handle_rejoin_queue(data):
+    """
+    Reclaims ownership of a previously held queue after a reconnect.
+    
+    The client persists its queue_id locally and sends it back on reconnect.
+    The relay re-registers the client as owner/creator and flushes any buffered
+    offline messages (10.C.1 delete-on-delivery store-and-forward).
+    
+    Args:
+        data (dict): Must contain 'queue_id' (str) — the previously issued UUID.
+    """
+    if is_rate_limited(request.sid, limit=5, window=10):
+        app.logger.warning(f"Rate limit exceeded for rejoin_queue on SID={request.sid[:4]}")
+        return
+    
+    queue_id = data.get('queue_id', '').strip()
+    if not queue_id:
+        return
+    
+    add_queue_owner(queue_id, request.sid)
+    add_queue_creator(queue_id, request.sid)
+    join_room(queue_id)
+    app.logger.debug(f"Queue room {queue_id} rejoined by SID={request.sid[:4]}")
+    
+    emit('queue_rejoined', {'queue_id': queue_id})
+    
+    # Flush any messages buffered while offline (10.C.1)
+    flush_offline_queue(queue_id, request.sid)
 
 
 @socketio.on('register_peer')
 def handle_register_peer(data):
     """Permits an active peer to authorize exchange routing to client's queue room."""
-    if not validate_session():
-        emit('session_expired', {})
-        disconnect()
-        return
-
     my_queue = data.get('my_queue')
     peer_queue = data.get('peer_queue')
     if not my_queue or not peer_queue:
@@ -578,11 +554,6 @@ def handle_register_peer(data):
 @socketio.on('push_queue')
 def handle_push_queue(data):
     """Pushes secure E2EE payload to designated target queue."""
-    if not validate_session():
-        emit('session_expired', {})
-        disconnect()
-        return
-
     if is_rate_limited(request.sid, limit=10, window=1):
         app.logger.warning(f"Rate limit exceeded for push_queue on SID={request.sid[:4]}")
         return
@@ -602,8 +573,20 @@ def handle_push_queue(data):
         app.logger.warning(f"Unauthorised push_queue attempt for queue_id={queue_id[:8]} from SID={request.sid[:4]}")
         return
 
+    is_ephemeral = False
+    try:
+        parsed = json.loads(payload)
+        is_ephemeral = bool(parsed.get('ephemeral', False))
+    except Exception:
+        pass
+
     if not is_recipient_online(queue_id):
-        emit('push_queue_error', {'queue_id': queue_id, 'error': 'recipient_offline'})
+        if is_ephemeral:
+            # Drop ephemeral messages when offline
+            return
+        # Recipient offline — buffer for delivery on reconnect (10.C.1)
+        enqueue_offline(queue_id, payload)
+        emit('push_queue_error', {'queue_id': queue_id, 'error': 'recipient_offline_queued'})
         return
     emit('queue_payload', {'queue_id': queue_id, 'payload': payload}, to=queue_id)
 
@@ -616,6 +599,12 @@ def handle_disconnect():
         socket_connect_times.pop(sid, None)
     with socket_rate_limits_lock:
         socket_rate_limits.pop(sid, None)
+        
+    if r_client:
+        try:
+            r_client.srem("online_sids", sid)
+        except Exception as e:
+            app.logger.warning(f"Failed to remove socket online from Redis: {e}")
         
     # Clean up local queue mapping states
     with queue_owners_lock:
@@ -633,6 +622,84 @@ def handle_disconnect():
             del queue_creators[q]
 
     app.logger.debug(f"Client disconnected. SID={sid[:4]}")
+
+
+# ---------------------------------------------------------------------------
+# XFTP Chunked Encrypted File Transfer In-Memory/Redis Store (10.E.1)
+# ---------------------------------------------------------------------------
+relay_file_chunks = {}
+relay_file_chunks_lock = threading.Lock()
+
+def upload_chunk(chunk_id, data):
+    if r_client:
+        try:
+            r_client.set(f"file_chunk:{chunk_id}", data, ex=86400)  # 24h TTL
+            return True
+        except Exception as e:
+            app.logger.warning(f"Redis chunk upload failed: {e}")
+            
+    with relay_file_chunks_lock:
+        relay_file_chunks[chunk_id] = {
+            "data": data,
+            "expires_at": time.time() + 86400
+        }
+    return True
+
+def download_chunk(chunk_id):
+    if r_client:
+        try:
+            # Retrieve binary content directly
+            data = r_client.get(f"file_chunk:{chunk_id}")
+            if data:
+                r_client.delete(f"file_chunk:{chunk_id}")  # delete-on-download
+                return data
+        except Exception as e:
+            app.logger.warning(f"Redis chunk download failed: {e}")
+
+    with relay_file_chunks_lock:
+        chunk = relay_file_chunks.pop(chunk_id, None)
+        if chunk and chunk["expires_at"] >= time.time():
+            return chunk["data"]
+    return None
+
+def start_relay_chunk_cleanup_loop():
+    def run_cleanup():
+        while True:
+            time.sleep(600)
+            now = time.time()
+            with relay_file_chunks_lock:
+                expired = [k for k, v in relay_file_chunks.items() if v["expires_at"] < now]
+                for k in expired:
+                    del relay_file_chunks[k]
+    t = threading.Thread(target=run_cleanup, daemon=True)
+    t.start()
+
+start_relay_chunk_cleanup_loop()
+
+
+# ---------------------------------------------------------------------------
+# XFTP File Transfer Relay Routes
+# ---------------------------------------------------------------------------
+
+@app.route('/file/upload/<chunk_id>', methods=['POST'])
+def relay_file_upload(chunk_id):
+    """Uploads an encrypted file chunk to the relay."""
+    data = request.get_data()
+    if len(data) > 16500:
+        return jsonify({"error": "Chunk size exceeds maximum limit"}), 400
+        
+    upload_chunk(chunk_id, data)
+    return jsonify({"success": True})
+
+
+@app.route('/file/download/<chunk_id>', methods=['GET'])
+def relay_file_download(chunk_id):
+    """Downloads and deletes a file chunk from the relay."""
+    data = download_chunk(chunk_id)
+    if data is None:
+        return jsonify({"error": "Chunk not found or expired"}), 404
+        
+    return data, 200, {'Content-Type': 'application/octet-stream'}
 
 
 # ==========================================
@@ -678,16 +745,26 @@ def generate_self_signed_cert(cert_path, key_path):
         critical=False,
     ).sign(key, hashes.SHA256())
     
-    with open(key_path, "wb") as f:
+    # Write key_path securely (0600)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    mode = 0o600
+    with open(os.open(key_path, flags, mode), "wb") as f:
         f.write(key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption(),
         ))
         
-    with open(cert_path, "wb") as f:
+    # Write cert_path securely (0600)
+    with open(os.open(cert_path, flags, mode), "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
     print("SSL certificate generated successfully")
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_exception(e):
+    app.logger.exception("Unhandled exception encountered: %s", e)
+    return jsonify({"error": "An unexpected error occurred"}), 500
 
 
 if __name__ == '__main__':
@@ -695,8 +772,9 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     disable_ssl = os.environ.get('DISABLE_SSL', 'False').lower() == 'true'
     
-    # Broadcast service via local multicast DNS
-    advertise_mdns(port)
+    # Broadcast service via local multicast DNS only if ANONYMUS_MDNS is explicitly set to true
+    if os.environ.get('ANONYMUS_MDNS', 'false').lower() == 'true':
+        advertise_mdns(port)
     
     if not debug_mode:
         log = logging.getLogger('werkzeug')

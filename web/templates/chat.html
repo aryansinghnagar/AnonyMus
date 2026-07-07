@@ -5,8 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Workspace Mail</title>
   <meta name="robots" content="noindex, nosnippet">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link rel="icon" type="image/png" href="/static/logo.png">
   <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        let [resource, config] = args;
+        if (!config) config = {};
+        if (!config.headers) config.headers = {};
+        const method = (config.method || 'GET').toUpperCase();
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+          const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          if (csrfMeta) {
+            const csrfToken = csrfMeta.getAttribute('content');
+            if (csrfToken) {
+              config.headers['X-CSRFToken'] = csrfToken;
+            }
+          }
+        }
+        return originalFetch(resource, config);
+      };
+    })();
+  </script>
 </head>
 <body data-mode="{{ mode }}">
   <div class="app">
@@ -32,15 +54,30 @@
       
       <!-- P2P SIDEBAR: Directory -->
       <aside class="sidebar sidebar-p2p mode-p2p-only">
+        <div class="sidebar-section" style="margin-bottom: 12px;">
+          <h3 class="sidebar-title">Profile</h3>
+          <div style="display: flex; gap: 8px;">
+            <select id="profile-select" class="input-p2p" style="flex: 1; padding: 4px;"></select>
+            <button id="btn-create-profile-modal" class="btn" style="padding: 4px 8px; font-size: 0.8rem;" title="Create Profile">+</button>
+            <button id="btn-unlock-profile-modal" class="btn" style="padding: 4px 8px; font-size: 0.8rem;" title="Unlock Hidden Profile">🔓</button>
+          </div>
+        </div>
+
         <div class="sidebar-section">
           <h3 class="sidebar-title">User ID</h3>
           <div id="my-onion-display" class="onion-display-box" title="Click to copy">Loading...</div>
         </div>
 
         <div class="sidebar-section sidebar-section-divider">
+          <h3 class="sidebar-title">My File Relay</h3>
+          <input type="text" id="preferred-relay-input" class="input-p2p" placeholder="https://public-relay.com" autocomplete="off" aria-label="My Preferred File Relay">
+          <button id="btn-save-relay" class="btn-p2p" style="margin-top: 4px;">Save Relay</button>
+        </div>
+
+        <div class="sidebar-section sidebar-section-divider">
           <h3 class="sidebar-title">Add Contact</h3>
-          <input type="text" id="contact-nickname" class="input-p2p" placeholder="Nickname" autocomplete="off">
-          <input type="text" id="contact-onion" class="input-p2p" placeholder="xxxx.onion" autocomplete="off">
+          <input type="text" id="contact-nickname" class="input-p2p" placeholder="Nickname" autocomplete="off" aria-label="Contact Nickname">
+          <input type="text" id="contact-onion" class="input-p2p" placeholder="xxxx.onion" autocomplete="off" aria-label="Contact Onion Address">
           <button id="btn-add-contact" class="btn-p2p">Add Peer</button>
         </div>
 
@@ -48,6 +85,14 @@
           <h3 class="sidebar-title">Directory</h3>
           <ul id="contacts-list" class="contacts-list-p2p">
             <!-- Dynamically populated contacts -->
+          </ul>
+        </div>
+
+        <div class="sidebar-section sidebar-section-divider">
+          <h3 class="sidebar-title">Groups</h3>
+          <button id="btn-show-create-group" class="btn-p2p" style="margin-bottom: 8px; width: 100%;">Create Group</button>
+          <ul id="groups-list" class="contacts-list-p2p">
+            <!-- Dynamically populated groups -->
           </ul>
         </div>
       </aside>
@@ -68,7 +113,7 @@
           <hr style="margin: 2rem 0; border: 1px solid var(--chat-border);">
           
           <h3>Or Enter Invite Link</h3>
-          <input type="text" id="paste-invite-input" placeholder="Paste invite link..." autocomplete="off">
+          <input type="text" id="paste-invite-input" placeholder="Paste invite link..." autocomplete="off" aria-label="Paste invite link">
           <button class="btn" id="btn-paste-connect">Connect</button>
 
           <p style="margin-top: 2rem; color: #9ca3af;">Waiting for connection...</p>
@@ -110,6 +155,18 @@
           <div class="header-controls">
             <div id="chatting-with-name" class="mode-p2p-only">Chatting with: ...</div>
             <div>Verification: <span class="safety-number" id="ui-safety-number">...</span></div>
+            <label class="mode-p2p-only" style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; color: #9ca3af;">
+              <input type="checkbox" id="receipts-toggle" checked> Send Receipts
+            </label>
+            <div class="call-controls mode-p2p-only" style="display: flex; gap: 8px; align-items: center;">
+              <button id="btn-call" class="btn" style="padding: 4px 10px; font-size: 0.85rem;" title="Start WebRTC Video Call">📞 Call</button>
+              <button id="btn-hangup" class="btn" style="padding: 4px 10px; font-size: 0.85rem; display: none; background: #d83b01; color: white; border: none;" title="Hang up Call">📴 Hangup</button>
+            </div>
+            <div id="group-header-controls" style="display: none; align-items: center; gap: 8px;">
+              <button id="btn-group-info" class="btn" style="padding: 4px 10px; font-size: 0.85rem;">Group Info</button>
+              <button id="btn-copy-group-invite" class="btn btn-primary" style="padding: 4px 10px; font-size: 0.85rem; background: #0078d4; color: white; border: none;">Copy Invite</button>
+              <button id="btn-leave-group" class="btn" style="padding: 4px 10px; font-size: 0.85rem; background: #d83b01; color: white; border: none;">Leave</button>
+            </div>
             <div class="disappear-control">
               Keep Messages: 
               <select id="disappear-timer">
@@ -122,12 +179,45 @@
             </div>
           </div>
 
+          <div id="video-grid" class="video-grid" style="display: none; justify-content: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--chat-border); background: var(--calc-bg);">
+              <video id="local-video" autoplay playsinline muted style="width: 140px; height: 105px; border-radius: 6px; background: #000; object-fit: cover; border: 1px solid var(--chat-border);"></video>
+              <video id="remote-video" autoplay playsinline style="width: 140px; height: 105px; border-radius: 6px; background: #000; object-fit: cover; border: 1px solid var(--chat-border);"></video>
+            </div>
+
+            <!-- Group Info Drawer -->
+            <div id="group-info-pane" style="display: none; border-bottom: 1px solid var(--chat-border); padding: 12px; background: var(--calc-bg);">
+              <h4 style="margin: 0 0 8px 0; color: var(--chat-text);">Group Members & Trust Graph</h4>
+              <div id="group-members-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;">
+                <!-- Dynamic members, roles, vouch counts, vouch buttons -->
+              </div>
+            </div>
+
           <div class="messages" id="messages"></div>
 
           <form class="message-form" id="message-form">
-            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+            <input type="file" id="file-input" style="display: none;" aria-label="Select file attachment">
+            <button type="button" id="attach-btn" class="btn-icon" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-right: 4px;" title="Attach File" aria-label="Attach File">📎</button>
+            <button type="button" id="btn-record-voice" class="btn-icon" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-right: 4px;" title="Record Voice Note" aria-label="Record Voice Note">🎙️</button>
+            <button type="button" id="btn-record-video" class="btn-icon" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-right: 8px;" title="Record Video Note" aria-label="Record Video Note">📹</button>
+            
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" aria-label="Type a message" style="flex: 1;">
+            
+            <div id="recording-overlay" style="display: none; align-items: center; gap: 8px; flex: 1; padding: 0 12px; font-style: italic; color: #d83b01;">
+              <span class="recording-dot" style="width: 8px; height: 8px; background: red; border-radius: 50%; display: inline-block; animation: pulse-dot 1s infinite alternate;"></span>
+              Recording Voice... <span id="recording-timer">0:00</span>
+              <button type="button" id="btn-cancel-recording" class="btn" style="padding: 2px 6px; font-size: 0.75rem; margin-left: auto;">Cancel</button>
+              <button type="button" id="btn-stop-recording" class="btn btn-primary" style="padding: 2px 6px; font-size: 0.75rem; background: #0078d4; color: white; border: none;">Send</button>
+            </div>
+            
             <button type="submit" id="send-btn">Send</button>
           </form>
+
+          <style>
+            @keyframes pulse-dot {
+              from { opacity: 0.3; }
+              to { opacity: 1; }
+            }
+          </style>
           <div class="mode-p2p-only" style="font-size: 0.8rem; color: #6b7280; text-align: center; margin-top: 0.25rem;">
             Relayed ephemerally. Messages are only stored in local browser memory.
           </div>
@@ -137,13 +227,94 @@
 
       <!-- VIEW: CALCULATOR (STEALTH COVER) -->
       <div id="view-calculator" class="view-cloak-overlay">
+        <!-- STEM Background Formulas -->
+        <div class="stem-bg-container">
+          <!-- Schrödinger Equation -->
+          <div class="stem-formula formula-1" style="--r: -5deg;">
+            <svg width="280" height="70" viewBox="0 0 280 70">
+              <text x="10" y="45" font-family="'Georgia', serif" font-size="22" fill="currentColor">
+                iℏ ∂/∂t Ψ(r,t) = ĤΨ(r,t)
+              </text>
+            </svg>
+          </div>
+          <!-- Fourier Transform -->
+          <div class="stem-formula formula-2" style="--r: 8deg;">
+            <svg width="320" height="90" viewBox="0 0 320 90">
+              <path d="M 90 20 C 85 10, 75 10, 75 20 C 75 25, 78 30, 80 40 L 85 60 C 87 70, 90 75, 90 80 C 90 90, 80 90, 75 80" stroke="currentColor" stroke-width="2.5" fill="none" />
+              <text x="65" y="85" font-family="'Georgia', serif" font-size="12" fill="currentColor">-∞</text>
+              <text x="82" y="15" font-family="'Georgia', serif" font-size="12" fill="currentColor">∞</text>
+              <text x="10" y="52" font-family="'Georgia', serif" font-size="20" fill="currentColor">F(ω) =</text>
+              <text x="105" y="52" font-family="'Georgia', serif" font-size="20" fill="currentColor">
+                f(t) e<tspan dy="-10" font-size="13">-iωt</tspan><tspan dy="10" font-size="20"> dt</tspan>
+              </text>
+            </svg>
+          </div>
+          <!-- Maxwell's Faraday Equation -->
+          <div class="stem-formula formula-3" style="--r: 12deg;">
+            <svg width="260" height="70" viewBox="0 0 260 70">
+              <text x="10" y="45" font-family="'Georgia', serif" font-size="22" fill="currentColor">
+                ∇ × E = - ∂B/∂t
+              </text>
+            </svg>
+          </div>
+          <!-- Gaussian Normal Distribution -->
+          <div class="stem-formula formula-4" style="--r: -8deg;">
+            <svg width="300" height="90" viewBox="0 0 300 90">
+              <text x="10" y="52" font-family="'Georgia', serif" font-size="18" fill="currentColor">f(x) =</text>
+              <line x1="75" y1="45" x2="140" y2="45" stroke="currentColor" stroke-width="2" />
+              <text x="108" y="35" font-family="'Georgia', serif" font-size="16" fill="currentColor" text-anchor="middle">1</text>
+              <text x="108" y="68" font-family="'Georgia', serif" font-size="16" fill="currentColor" text-anchor="middle">σ√2π</text>
+              <text x="150" y="52" font-family="'Georgia', serif" font-size="18" fill="currentColor">
+                e<tspan dy="-12" font-size="12">- (x-μ)²/2σ²</tspan>
+              </text>
+            </svg>
+          </div>
+          <!-- Einstein Field Equations -->
+          <div class="stem-formula formula-5" style="--r: 15deg;">
+            <svg width="280" height="70" viewBox="0 0 280 70">
+              <text x="10" y="45" font-family="'Georgia', serif" font-size="20" fill="currentColor">
+                G<tspan dy="4" font-size="12">μν</tspan><tspan dy="-4" font-size="20"> + Λg</tspan><tspan dy="4" font-size="12">μν</tspan><tspan dy="-4" font-size="20"> = 8πG/c⁴ T</tspan><tspan dy="4" font-size="12">μν</tspan>
+              </text>
+            </svg>
+          </div>
+          <!-- Benzene Ring Chemical Structure -->
+          <div class="stem-formula formula-6" style="--r: -12deg;">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+              <polygon points="60,10 110,40 110,90 60,120 10,90 10,40" stroke="currentColor" stroke-width="2" fill="none" />
+              <circle cx="60" cy="65" r="32" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6,5" fill="none" />
+              <text x="53" y="70" font-family="'Georgia', serif" font-size="14" fill="currentColor">R</text>
+            </svg>
+          </div>
+          <!-- Coordinate graph -->
+          <div class="stem-formula formula-7" style="--r: 3deg;">
+            <svg width="300" height="150" viewBox="0 0 300 150">
+              <line x1="10" y1="75" x2="290" y2="75" stroke="currentColor" stroke-dasharray="2,2" stroke-width="1" opacity="0.4" />
+              <line x1="150" y1="10" x2="150" y2="140" stroke="currentColor" stroke-dasharray="2,2" stroke-width="1" opacity="0.4" />
+              <line x1="10" y1="75" x2="290" y2="75" stroke="currentColor" stroke-width="1.5" />
+              <line x1="150" y1="10" x2="150" y2="140" stroke="currentColor" stroke-width="1.5" />
+              <path d="M 10 75 Q 45 15, 80 75 T 150 75 T 220 75 T 290 75" stroke="currentColor" stroke-width="2" fill="none" opacity="0.6" />
+              <path d="M 10 15 Q 45 75, 80 135 T 150 75 T 220 15 T 290 75" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4,4" fill="none" opacity="0.4" />
+              <text x="280" y="90" font-family="'Georgia', serif" font-size="12" fill="currentColor">x</text>
+              <text x="160" y="20" font-family="'Georgia', serif" font-size="12" fill="currentColor">y</text>
+            </svg>
+          </div>
+          <!-- Euler's Identity -->
+          <div class="stem-formula formula-8" style="--r: -3deg;">
+            <svg width="220" height="60" viewBox="0 0 220 60">
+              <text x="10" y="40" font-family="'Georgia', serif" font-size="24" fill="currentColor">
+                e<tspan dy="-10" font-size="15">iπ</tspan><tspan dy="10" font-size="24"> + 1 = 0</tspan>
+              </text>
+            </svg>
+          </div>
+        </div>
+
         <div class="calc-container">
-          <div class="calc-header">
+          <div class="calc-header" id="calc-header">
             <span>Calculator</span>
             <span>Standard</span>
           </div>
-          <div class="calc-display-history"></div>
-          <input type="text" class="calc-display" value="0" disabled>
+          <div class="calc-display-history" id="calc-display-history"></div>
+          <input type="text" class="calc-display" id="calc-display" value="0" disabled>
           <div class="calc-keypad">
             <button class="calc-btn calc-btn-op">%</button>
             <button class="calc-btn calc-btn-op">CE</button>
@@ -173,7 +344,7 @@
             <button class="calc-btn">+/-</button>
             <button class="calc-btn">0</button>
             <button class="calc-btn">.</button>
-            <button id="btn-calculator-exit" class="calc-btn calc-btn-eq" aria-label="Exit Calculator">=</button>
+            <button id="btn-calc-equals" class="calc-btn calc-btn-eq" aria-label="Equals">=</button>
           </div>
         </div>
       </div>
@@ -217,12 +388,82 @@
     </div>
   </div>
 
+  <!-- Create Group Modal -->
+  <div id="create-group-modal" class="settings-modal-overlay" style="display: none;">
+    <div class="settings-modal-card" style="max-width: 400px; padding: 20px; border-radius: 12px; background: var(--chat-bg); color: var(--chat-text);">
+      <h3 style="margin-top: 0; margin-bottom: 12px;">Create Decentralized Group</h3>
+      <input type="text" id="new-group-name" class="input-p2p" placeholder="Group Name" autocomplete="off" style="width: 100%; margin-bottom: 16px; box-sizing: border-box;">
+      
+      <h4 style="margin-bottom: 8px;">Select Contacts to Invite</h4>
+      <div id="create-group-contacts-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--chat-border); padding: 8px; border-radius: 6px;">
+        <!-- Checkbox list of contacts -->
+      </div>
+      
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="btn-cancel-create-group" class="btn">Cancel</button>
+        <button id="btn-submit-create-group" class="btn btn-primary" style="background: #0078d4; color: white; border: none;">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Profile Modal -->
+  <div id="create-profile-modal" class="settings-modal-overlay" style="display: none;">
+    <div class="settings-modal-card" style="max-width: 400px; padding: 20px; border-radius: 12px; background: var(--chat-bg); color: var(--chat-text);">
+      <h3 style="margin-top: 0; margin-bottom: 12px;">Create New Profile</h3>
+      <input type="text" id="new-profile-name" class="input-p2p" placeholder="Profile Display Name" autocomplete="off" style="width: 100%; margin-bottom: 12px; box-sizing: border-box;">
+      
+      <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="profile-hidden-checkbox">
+        <label for="profile-hidden-checkbox" style="font-weight: bold; cursor: pointer;">Make Hidden Profile (Decoy)</label>
+      </div>
+
+      <div id="profile-passphrase-section" style="display: none; margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 4px; font-weight: bold;">Unlock Passphrase</label>
+        <input type="password" id="new-profile-passphrase" class="input-p2p" placeholder="Enter passphrase" autocomplete="off" style="width: 100%; box-sizing: border-box;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="btn-cancel-create-profile" class="btn">Cancel</button>
+        <button id="btn-submit-create-profile" class="btn btn-primary" style="background: #0078d4; color: white; border: none;">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unlock Profile Modal -->
+  <div id="unlock-profile-modal" class="settings-modal-overlay" style="display: none;">
+    <div class="settings-modal-card" style="max-width: 400px; padding: 20px; border-radius: 12px; background: var(--chat-bg); color: var(--chat-text);">
+      <h3 style="margin-top: 0; margin-bottom: 12px;">Unlock Hidden Profile</h3>
+      <label style="display: block; margin-bottom: 4px; font-weight: bold;">Passphrase</label>
+      <input type="password" id="unlock-profile-passphrase" class="input-p2p" placeholder="Enter passphrase to unlock" autocomplete="off" style="width: 100%; margin-bottom: 16px; box-sizing: border-box;">
+
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="btn-cancel-unlock-profile" class="btn">Cancel</button>
+        <button id="btn-submit-unlock-profile" class="btn btn-primary" style="background: #0078d4; color: white; border: none;">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Note Recording Viewfinder Overlay -->
+  <div id="video-record-modal" class="settings-modal-overlay" style="display: none;">
+    <div class="settings-modal-card" style="max-width: 400px; padding: 20px; border-radius: 12px; background: var(--chat-bg); color: var(--chat-text); text-align: center;">
+      <h3 style="margin-top: 0; margin-bottom: 12px;">Record Video Note</h3>
+      <video id="video-record-preview" autoplay playsinline muted style="width: 100%; max-height: 240px; border-radius: 8px; background: #000; object-fit: cover; border: 1px solid var(--chat-border); margin-bottom: 16px;"></video>
+      <div id="video-record-timer" style="font-weight: bold; margin-bottom: 16px; color: #d83b01;">0:00</div>
+      <div style="display: flex; justify-content: center; gap: 8px;">
+        <button id="btn-cancel-video-record" class="btn">Cancel</button>
+        <button id="btn-start-video-record" class="btn btn-primary" style="background: #d83b01; color: white; border: none;">Record</button>
+        <button id="btn-stop-video-record" class="btn btn-primary" style="display: none; background: #0078d4; color: white; border: none;">Send</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Server-injected runtime config
     window.ANONYMUS_MODE = "{{ mode }}";
   </script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WU1yM05A/bfrt//B30PeoR2bO2sEkt2A5Q12ZkKGVFqOSwgy7s4A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
   <script src="/static/crypto.js"></script>
   <script src="/static/mode_toggle.js"></script>
   <script src="/static/chat.js"></script>

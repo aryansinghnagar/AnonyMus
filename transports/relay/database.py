@@ -78,20 +78,12 @@ def release_connection(conn):
 
 def init_db():
     """
-    Initializes database schema.
-    
-    Creates the 'users' table if it does not already exist, specifying
-    username as the primary key and password_hash as a non-null string.
+    Initializes database schema by running migrations.
     """
+    from core.migrations import run_migrations
     conn = get_connection()
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password_hash TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
+    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'migrations')
+    run_migrations(conn, migrations_dir)
     release_connection(conn)
 
 
