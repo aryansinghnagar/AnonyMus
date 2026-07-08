@@ -343,33 +343,33 @@ object CryptoUtils {
         if (textLen < 0 || textLen > decrypted.size - 4) return null
         return String(decrypted, 4, textLen, Charsets.UTF_8)
     }
+}
 
-    // -----------------------------------------------------------------------
-    // Data classes
-    // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// Data classes (Package Level)
+// -----------------------------------------------------------------------
 
-    data class EncryptedPayload(val iv: String, val ciphertext: String)
+data class EncryptedPayload(val iv: String, val ciphertext: String)
 
-    data class EncryptedPayloadV2(
-        val naclNonce: String,     // "nacl_nonce"
-        val naclCiphertext: String, // "nacl_ciphertext"
-        val drDhPublic: String,    // "dr_dh_public"
-        val drSeq: Int,            // "dr_seq"
-        val drPn: Int              // "dr_pn"
-    ) {
-        fun toJsonString(): String = """{"nacl_nonce":"$naclNonce","nacl_ciphertext":"$naclCiphertext","dr_dh_public":"$drDhPublic","dr_seq":$drSeq,"dr_pn":$drPn}"""
+data class EncryptedPayloadV2(
+    val naclNonce: String,     // "nacl_nonce"
+    val naclCiphertext: String, // "nacl_ciphertext"
+    val drDhPublic: String,    // "dr_dh_public"
+    val drSeq: Int,            // "dr_seq"
+    val drPn: Int              // "dr_pn"
+) {
+    fun toJsonString(): String = """{"nacl_nonce":"$naclNonce","nacl_ciphertext":"$naclCiphertext","dr_dh_public":"$drDhPublic","dr_seq":$drSeq,"dr_pn":$drPn}"""
 
-        companion object {
-            fun fromJsonString(json: String): EncryptedPayloadV2 {
-                val obj = org.json.JSONObject(json)
-                return EncryptedPayloadV2(
-                    naclNonce = obj.getString("nacl_nonce"),
-                    naclCiphertext = obj.getString("nacl_ciphertext"),
-                    drDhPublic = obj.getString("dr_dh_public"),
-                    drSeq = obj.getInt("dr_seq"),
-                    drPn = obj.getInt("dr_pn")
-                )
-            }
+    companion object {
+        fun fromJsonString(json: String): EncryptedPayloadV2 {
+            val obj = org.json.JSONObject(json)
+            return EncryptedPayloadV2(
+                naclNonce = obj.getString("nacl_nonce"),
+                naclCiphertext = obj.getString("nacl_ciphertext"),
+                drDhPublic = obj.getString("dr_dh_public"),
+                drSeq = obj.getInt("dr_seq"),
+                drPn = obj.getInt("dr_pn")
+            )
         }
     }
 }

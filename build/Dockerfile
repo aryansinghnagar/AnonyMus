@@ -1,5 +1,4 @@
-# Use a lightweight python image pinned by digest for reproducibility
-FROM python:3.11-slim@sha256:d55f5f684c30c1d2e1b12b591b63d7e5d263914e667794273f7690558b3bf430
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
