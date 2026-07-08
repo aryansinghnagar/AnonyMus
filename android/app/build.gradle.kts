@@ -6,11 +6,11 @@ plugins {
 
 android {
     namespace = "com.anonymus.app"
-    compileSdk = 36
+    compileSdk = 34
     defaultConfig {
         applicationId = "com.anonymus.app"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
         
