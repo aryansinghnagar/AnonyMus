@@ -75,9 +75,10 @@ graph LR
 ## Documentation Index
 
 For detailed instructions and descriptions, refer to the following documents in the repository:
-- [docs/SETUP.md](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/docs/SETUP.md): System prerequisites, environment configuration, mode orchestration, database migrations, and step-by-step deployment guide.
-- [docs/FEATURES.md](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/docs/FEATURES.md): Functional specification, cryptographic protocol analysis, threat model, Tor network routing details, and client hardening mechanisms.
-- [docs/TRANSPARENCY.md](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/docs/TRANSPARENCY.md): Warrant Canary, Zero-Knowledge metadata routing principles, and request statistics.
-- [docs/RELEASE_1.0.md](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/docs/RELEASE_1.0.md): Stable v1.0.0 release announcement and architectural summary.
-- [packages/typescript-sdk/](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/packages/typescript-sdk/): Reusable TypeScript SDK (`@anonymus/client`) for building secure bots and bridges.
-- [docs/post-1.0/](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/docs/post-1.0/): Swift Double Ratchet templates, Tauri desktop bootstrap scripts, local device sync broker code, and the synchronization protocol spec.
+- [docs/guides/setup.md](file:///docs/guides/setup.md): System prerequisites, environment configuration, mode orchestration, database migrations, and step-by-step deployment guide.
+- [docs/protocols/crypto-spec.md](file:///docs/protocols/crypto-spec.md): Functional specification, cryptographic protocol analysis, threat model, Tor network routing details, and client hardening mechanisms.
+- [docs/security/transparency.md](file:///docs/security/transparency.md): Warrant Canary, Zero-Knowledge metadata routing principles, and request statistics.
+- [docs/releases/RELEASE_1.0.md](file:///docs/releases/RELEASE_1.0.md): Stable v1.0.0 release announcement and architectural summary.
+- [packages/typescript-sdk/](file:///packages/typescript-sdk/): Reusable TypeScript SDK (`@anonymus/client`) for building secure bots and bridges.
+- [docs/protocols/multi-device-sync.md](file:///docs/protocols/multi-device-sync.md): Multi-device synchronization protocol specification.
+- [examples/](file:///examples/): Swift Double Ratchet templates, local device sync broker code, and desktop client bootstrap scripts.

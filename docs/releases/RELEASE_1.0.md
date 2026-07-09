@@ -43,4 +43,4 @@ Visit `http://127.0.0.1:8080` in your browser to launch the web client dashboard
 ---
 
 ## 🛡️ Trust & Auditing
-AnonyMus v1.0.0 incorporates an evolution of independent security reviews. We have published our [transparency declaration](file:///c:/Users/Aryan/OneDrive/Desktop/Coding%20Projects/1-Custom%20Chat%20App/AnonyMus/docs/TRANSPARENCY.md) outlining metadata zero-knowledge guarantees and zero law-enforcement compliance stats.
+AnonyMus v1.0.0 incorporates an evolution of independent security reviews. We have published our [transparency declaration](file:///docs/security/transparency.md) outlining metadata zero-knowledge guarantees and zero law-enforcement compliance stats.
