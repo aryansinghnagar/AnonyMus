@@ -1,15 +1,15 @@
-name: JavaScript Code Quality & Testing
+name: Rust Core Validation
 
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'packages/typescript-sdk/**', '.github/workflows/js.yml']
+    paths: ['core/rust/**', 'Cargo.toml', '.github/workflows/rust.yml']
   pull_request:
     branches: [main]
   workflow_dispatch: {}
 
 concurrency:
-  group: js-${{ github.ref }}
+  group: rust-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -24,9 +24,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Preflight Check
         id: check
-        run: bash scripts/ci-preflight.sh js
+        run: bash scripts/ci-preflight.sh rust
 
-  test:
+  validate:
     needs: preflight
     if: needs.preflight.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -34,15 +34,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          node-version: '20'
+          toolchain: stable
+          components: clippy, rustfmt
 
-      - name: Install dependencies and compile
-        run: |
-          if [ -d "packages/typescript-sdk" ]; then
-            cd packages/typescript-sdk
-            npm ci
-            npm run build
-          fi
+      - name: Format Check
+        run: cargo fmt --check
+
+      - name: Cargo Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Cargo Test
+        run: cargo test
