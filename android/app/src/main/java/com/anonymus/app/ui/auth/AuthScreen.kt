@@ -122,7 +122,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            TextButton(onClick = { 
+            TextButton(onClick = {
                 isRegister = !isRegister
                 error = null
             }) {

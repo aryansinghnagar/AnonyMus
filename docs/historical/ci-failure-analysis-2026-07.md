@@ -1,7 +1,7 @@
 # AnonyMus CI Failure Analysis Report
 
-**Generated:** 2026-07-08  
-**Repository:** aryansinghnagar/AnonyMus  
+**Generated:** 2026-07-08
+**Repository:** aryansinghnagar/AnonyMus
 **Language Composition:** Python (43.5%), Kotlin (26.3%), JavaScript (20.3%), HTML (4.2%), TypeScript (2.3%), CSS (2.1%), Other (1.3%)
 
 ---
@@ -85,7 +85,7 @@ The `CryptoProvider` class (not visible in the provided files) appears to have a
 
 Lines with identical pattern in `chat_manager.kt`:
 - **Line 287-288**: In `obliviate()` method
-- **Line 367-368**: In `startAdaptiveKeepAlive()` method  
+- **Line 367-368**: In `startAdaptiveKeepAlive()` method
 - **Line 585-586**: In chain key derivation response
 - **Line 824-825**: In `sendPrivateMessage()` method
 - **Line 863-864**: In `setDisappearingTimer()` method
@@ -195,13 +195,13 @@ fun sendDeleteMessage(targetTimestamp: Long) {
 
             val encrypted = cryptoProvider.encryptMessage(msgKey, payload.toString(), myRole!!, sendSeq, sessionId)
             sendSeq++
-            
+
             val outerPayload = JSONObject().apply {
                 put("type", "message")
                 put("iv", encrypted.iv)
                 put("ciphertext", encrypted.ciphertext)
             }
-            
+
             socket?.emit("push_queue", JSONObject().apply {
                 put("queue_id", theirQueueId)
                 put("payload", outerPayload.toString())
@@ -233,13 +233,13 @@ fun sendEditMessage(targetTimestamp: Long, newText: String) {
 
             val encrypted = cryptoProvider.encryptMessage(msgKey, payload.toString(), myRole!!, sendSeq, sessionId)
             sendSeq++
-            
+
             val outerPayload = JSONObject().apply {
                 put("type", "message")
                 put("iv", encrypted.iv)
                 put("ciphertext", encrypted.ciphertext)
             }
-            
+
             socket?.emit("push_queue", JSONObject().apply {
                 put("queue_id", theirQueueId)
                 put("payload", outerPayload.toString())
@@ -289,13 +289,13 @@ private fun sendReceipt(targetTimestamp: Long, state: String) {
 
             val encrypted = cryptoProvider.encryptMessage(msgKey, payload.toString(), myRole!!, sendSeq, sessionId)
             sendSeq++
-            
+
             val outerPayload = JSONObject().apply {
                 put("type", "message")
                 put("iv", encrypted.iv)
                 put("ciphertext", encrypted.ciphertext)
             }
-            
+
             socket?.emit("push_queue", JSONObject().apply {
                 put("queue_id", theirQueueId)
                 put("payload", outerPayload.toString())
@@ -343,7 +343,7 @@ plugins {
 
 android {
     compileSdkVersion 34
-    
+
     kotlinOptions {
         jvmTarget = '17'
         languageVersion = '1.9'
@@ -386,7 +386,7 @@ cd android
 
 ### Failed Runs
 - Run ID: `28856039632`
-- Run ID: `28854818738`  
+- Run ID: `28854818738`
 - Run ID: `28852971724` (Latest with logs showing the issue)
 
 ### Error Details
@@ -396,7 +396,7 @@ cd android
 #2 [internal] load metadata for docker.io/library/python:3.11-slim@sha256:d55f5f684c30c1d2e1b12b591b63d7e5d263914e667794273f7690558b3bf430
 #2 ERROR: docker.io/library/python:3.11-slim@sha256:d55f5f684c30c1d2e1b12b591b63d7e5d263914e667794273f7690558b3bf430: not found
 
-ERROR: failed to build: failed to solve: python:3.11-slim@sha256:d55f5f684c30c1d2e1b12b591b63d7e5d263914e667794273f7690558b3b: 
+ERROR: failed to build: failed to solve: python:3.11-slim@sha256:d55f5f684c30c1d2e1b12b591b63d7e5d263914e667794273f7690558b3b:
 failed to resolve source metadata for docker.io/library/python:3.11-slim@sha256:d55f5f684c30c1d2e1b12b591b63d7e5d263914e667794273f7690558b3b
 ```
 
@@ -574,11 +574,11 @@ jobs:
           # Remove pyc/cache files which may contain non-deterministic timestamps
           find /tmp/build1/app -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find /tmp/build2/app -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-          
+
           # Compute recursive hash directory manifest
           cd /tmp/build1/app && find . -type f -exec sha256sum {} + | sort > /tmp/manifest1.txt
           cd /tmp/build2/app && find . -type f -exec sha256sum {} + | sort > /tmp/manifest2.txt
-          
+
           # Compare manifests
           if diff -q /tmp/manifest1.txt /tmp/manifest2.txt > /dev/null; then
             echo "✓ SUCCESS: Build outputs are perfectly identical and reproducible!"
@@ -608,21 +608,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Update Python digest
         run: |
           # Get the latest Python 3.11-slim digest
           NEW_DIGEST=$(docker manifest inspect python:3.11-slim --raw | \
             jq -r '.config.digest' 2>/dev/null || echo "")
-          
+
           if [ -z "$NEW_DIGEST" ]; then
             echo "Failed to fetch digest, using default"
             exit 1
           fi
-          
+
           # Update Dockerfile
           sed -i "s|FROM python:3.11-slim@sha256:[a-f0-9]*|FROM python:3.11-slim@$NEW_DIGEST|" build/Dockerfile
-          
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
@@ -702,7 +702,7 @@ diff /tmp/manifest1.txt /tmp/manifest2.txt
 
 **Error Output:**
 ```
-##[error]This request has been automatically failed because it uses a deprecated version of `actions/upload-artifact: v3`. 
+##[error]This request has been automatically failed because it uses a deprecated version of `actions/upload-artifact: v3`.
 Learn more: https://github.blog/changelog/2024-04-16-deprecation-notice-v3-of-the-artifact-actions/
 ```
 
@@ -801,7 +801,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    
+
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -827,16 +827,16 @@ jobs:
           echo "✗ SPDX JSON SBOM not generated!"
           exit 1
         fi
-        
+
         # Check if SBOM contains reasonable content
         FILE_SIZE=$(wc -c < sbom.spdx.json)
         if [ $FILE_SIZE -lt 100 ]; then
           echo "✗ SBOM appears empty or too small ($FILE_SIZE bytes)"
           exit 1
         fi
-        
+
         echo "✓ SBOM generated successfully ($FILE_SIZE bytes)"
-        
+
         # Pretty print first component
         head -n 50 sbom.spdx.json
 
@@ -871,7 +871,7 @@ jobs:
           const fs = require('fs');
           const sbom = JSON.parse(fs.readFileSync('sbom.spdx.json', 'utf8'));
           const componentCount = sbom.packages?.length || 0;
-          
+
           github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
@@ -1031,7 +1031,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
 
@@ -1121,7 +1121,7 @@ testpaths = app_main/tests
 python_files = test_*.py *_test.py
 python_classes = Test*
 python_functions = test_*
-addopts = 
+addopts =
     -v
     --tb=short
     --strict-markers
@@ -1144,7 +1144,7 @@ python_functions = test_*
 
 [coverage:run]
 source = app_main
-omit = 
+omit =
     */tests/*
     */test_*.py
     */__pycache__/*
@@ -1168,12 +1168,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30  # Fail fast if taking too long
-    
+
     strategy:
       fail-fast: false  # Don't cancel other matrix jobs if one fails
       matrix:
         python-version: ['3.11', '3.12']
-    
+
     steps:
     # ... steps ...
 ```
@@ -1193,7 +1193,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
+
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -1372,7 +1372,7 @@ If the workflow still exists, update paths:
 
 **Warning Appearing in All Workflows:**
 ```
-Node 20 is being deprecated. This workflow is running with Node 24 by default. 
+Node 20 is being deprecated. This workflow is running with Node 24 by default.
 If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable.
 ```
 
@@ -1405,7 +1405,7 @@ plugins {
 
 android {
     compileSdk 34
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

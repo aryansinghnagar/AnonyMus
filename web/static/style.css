@@ -343,7 +343,7 @@ body.blurred { filter: blur(20px); pointer-events: none; }
   width: 100vw;
   height: 100vh;
   background-color: #0b0f19;
-  background-image: 
+  background-image:
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
@@ -397,7 +397,7 @@ body.blurred { filter: blur(20px); pointer-events: none; }
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  box-shadow: 
+  box-shadow:
     0 10px 40px rgba(0, 0, 0, 0.4),
     inset 0 1px 1px rgba(255, 255, 255, 0.1);
   display: flex;

@@ -50,7 +50,7 @@ Based on an exhaustive review of the AnonyMus codebase, here is a detailed asses
 
 &#x20;  - Test bcrypt timing-attack mitigations
 
-&#x20;  
+&#x20;
 
 2\. \*\*Implement property-based testing\*\* (1-2 days):
 
@@ -546,7 +546,7 @@ def derive\_db\_key(password: str, salt: bytes = b'salt\_for\_db\_key\_anonymus'
 
 &#x20;  ONION\_REGEX = r'^\[a-z2-7]{16}\\.onion$|^\[a-z2-7]{56}\\.onion$'  # v2 and v3
 
-&#x20;  
+&#x20;
 
 &#x20;  def validate\_onion(addr):
 
@@ -666,7 +666,7 @@ response.headers\['Content-Security-Policy'] = (
 
 &#x20;  limiter = Limiter(app, key\_func=lambda: session.get('user\_id', request.remote\_addr))
 
-&#x20;  
+&#x20;
 
 &#x20;  @app.route('/login', methods=\['POST'])
 
@@ -860,7 +860,7 @@ response.headers\['Content-Security-Policy'] = (
 
 &#x20;  CREATE TABLE schema\_version (version INT PRIMARY KEY, applied\_at TIMESTAMP);
 
-&#x20;  
+&#x20;
 
 &#x20;  migrations = \[
 
@@ -1277,4 +1277,3 @@ response.headers\['Content-Security-Policy'] = (
 
 
 This analysis covers structural, cryptographic, architectural, and implementation gaps. \*\*Priority focus\*\*: tests + crypto fixes + missing client implementations. These three areas block production readiness.
-

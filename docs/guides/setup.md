@@ -9,7 +9,7 @@ This document provides technical instructions to set up, configure, and execute 
 ### Backend Relay / Node
 - **Python**: Version 3.11 or newer
 - **Operating System**: Linux, macOS, or Windows (10/11)
-- **Tor (For P2P Mode)**: 
+- **Tor (For P2P Mode)**:
   - **Windows**: The P2P transport automatically orchestrates, downloads, and runs the embedded Tor Expert Bundle.
   - **Linux / macOS**: Requires a local Tor service installed and running on default SOCKS5 port 9050.
 - **Containerization (Optional)**: Docker Engine & Docker Compose (used primarily for Centralized Relay deployment).
@@ -69,7 +69,7 @@ To start the application server using the configuration specified in `.env`:
 ```bash
 python server.py
 ```
-By default, the unified server runs on `http://127.0.0.1:5000`. 
+By default, the unified server runs on `http://127.0.0.1:5000`.
 - If `ANONYMUS_MODE=relay`, it boots the centralized relay Flask app.
 - If `ANONYMUS_MODE=p2p`, it starts the local peer node and establishes a Tor Hidden Service.
 

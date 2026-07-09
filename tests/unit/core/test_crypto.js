@@ -48,7 +48,7 @@ async function runTests() {
     console.log("Generating keys...");
     const keysA = await generateKeyPair();
     const pubA = await exportPublicKey(keysA.publicKey);
-    
+
     const keysB = await generateKeyPair();
     const pubB = await exportPublicKey(keysB.publicKey);
 
@@ -57,7 +57,7 @@ async function runTests() {
     const sn2 = await computeSafetyNumber(pubB, pubA);
     assertEqual(sn1, sn2, "Safety numbers match for both parties");
     assertEqual(sn1.length, 71, "Safety number has correct length (64 hex + 7 dashes)");
-    
+
     // Test 256-bit utilization
     if (sn1.split('-').length === 8) {
       console.log(`[PASS] Safety number utilizes all 256 bits (8 chunks of 8 hex chars)`);

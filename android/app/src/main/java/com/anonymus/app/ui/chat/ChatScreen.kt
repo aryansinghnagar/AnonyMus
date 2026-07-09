@@ -677,7 +677,7 @@ fun ChatScreen() {
                                             )
                                         }
                                     }
-                                    
+
                                     if (msg.reactions.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Row(
@@ -701,7 +701,7 @@ fun ChatScreen() {
                                             }
                                         }
                                     }
-                                    
+
                                     if (msg.remainingSeconds > 0) {
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Row(

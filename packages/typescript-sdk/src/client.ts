@@ -33,7 +33,7 @@ export class AnonyMusClient {
       transports: ['websocket'],
       autoConnect: true
     });
-    
+
     this.myKeys = await generateKeyPair();
     this.myPublicKeyExported = await exportPublicKey(this.myKeys.publicKey);
 
@@ -70,20 +70,20 @@ export class AnonyMusClient {
   public async acceptInvite(inviteUrl: string): Promise<void> {
     if (!this.socket) throw new Error("Client not connected");
     if (!this.myKeys) throw new Error("Client keys not generated");
-    
+
     const hashIdx = inviteUrl.indexOf('#');
     if (hashIdx === -1) throw new Error("Invalid invite URL");
     const hashStr = decodeURIComponent(inviteUrl.substring(hashIdx + 1));
     const inviteData = JSON.parse(hashStr);
-    
+
     this.theirQueueId = inviteData.q;
     this.theirPublicKeyExported = inviteData.k;
-    
+
     // Derive pairwise keys
     const theirKey = await importPublicKey(this.theirPublicKeyExported!);
     const sharedSecretBuffer = await computeDH(this.myKeys.privateKey, theirKey);
     const sharedSecret = new Uint8Array(sharedSecretBuffer);
-    
+
     const isAlice = this.myPublicKeyExported! < this.theirPublicKeyExported!;
     if (isAlice) {
       // Alice initiates the Double Ratchet
@@ -132,7 +132,7 @@ export class AnonyMusClient {
     });
 
     const encrypted = await encryptAESGCM(messageKey, messagePayload);
-    
+
     const outerPayload = JSON.stringify({
       type: 'message',
       iv: encrypted.iv,
@@ -187,10 +187,10 @@ export class AnonyMusClient {
         });
       } else if (type === 'message') {
         if (!this.ratchet) return;
-        
+
         const peerDhPubBytes = fromBase64(payload.dh_pub);
         const messageKey = await this.ratchet.decrypt(peerDhPubBytes, payload.seq, payload.prev_chain_len);
-        
+
         const decryptedText = await decryptAESGCM(messageKey, payload.iv, payload.ciphertext);
         const msgObj = JSON.parse(decryptedText);
 

@@ -43,11 +43,11 @@ jobs:
           # Remove pyc/cache files which may contain non-deterministic timestamps
           find /tmp/build1/app -name "__pycache__" -exec rm -rf {} +
           find /tmp/build2/app -name "__pycache__" -exec rm -rf {} +
-          
+
           # Compute recursive hash directory manifest
           cd /tmp/build1/app && find . -type f -exec sha256sum {} + | sort > /tmp/manifest1.txt
           cd /tmp/build2/app && find . -type f -exec sha256sum {} + | sort > /tmp/manifest2.txt
-          
+
           # Compare manifests
           if diff /tmp/manifest1.txt /tmp/manifest2.txt > /dev/null; then
             echo "SUCCESS: Build outputs are perfectly identical and reproducible!"

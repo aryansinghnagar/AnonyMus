@@ -1,10 +1,11 @@
 import os
-from typing import Dict
+
 from core.interfaces import TransportProvider
+
 
 class TransportRegistry:
     def __init__(self):
-        self._transports: Dict[str, TransportProvider] = {}
+        self._transports: dict[str, TransportProvider] = {}
         self._active_mode = os.environ.get("ANONYMUS_MODE", "relay").lower()
 
     def register(self, name: str, transport: TransportProvider):
@@ -45,5 +46,6 @@ class TransportRegistry:
         # Set environment variable so child processes/subprocesses inherit the configuration
         os.environ["ANONYMUS_MODE"] = new_mode
         return True
+
 
 registry = TransportRegistry()

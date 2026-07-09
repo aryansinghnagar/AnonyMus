@@ -23,7 +23,7 @@ async function runTests() {
 
   const exportedPub = await exportPublicKey(keys.publicKey);
   assert.strictEqual(typeof exportedPub, "string", "Exported public key should be base64 string");
-  
+
   const importedPub = await importPublicKey(exportedPub);
   assert.ok(importedPub, "Should successfully import public key");
 
@@ -31,7 +31,7 @@ async function runTests() {
   console.log("- Testing AES-GCM Encrypt/Decrypt...");
   const secretKey = new Uint8Array(32);
   for (let i = 0; i < 32; i++) secretKey[i] = i;
-  
+
   const plaintext = "Hello secure AnonyMus client!";
   const encrypted = await encryptAESGCM(secretKey, plaintext);
   assert.ok(encrypted.iv, "Should return initialization vector");
@@ -42,18 +42,18 @@ async function runTests() {
 
   // 3. Double Ratchet Alice/Bob simulation
   console.log("- Testing Double Ratchet Handshake and E2EE Message exchange...");
-  
+
   // Create Alice and Bob identity keys
   const aliceIdentity = await generateKeyPair();
   const bobIdentity = await generateKeyPair();
-  
+
   const alicePubExport = await exportPublicKey(aliceIdentity.publicKey);
   const bobPubExport = await exportPublicKey(bobIdentity.publicKey);
 
   // Compute shared secrets via ECDH
   const aliceSharedBuffer = await computeDH(aliceIdentity.privateKey, bobIdentity.publicKey);
   const bobSharedBuffer = await computeDH(bobIdentity.privateKey, aliceIdentity.publicKey);
-  
+
   const aliceShared = new Uint8Array(aliceSharedBuffer);
   const bobShared = new Uint8Array(bobSharedBuffer);
   assert.deepStrictEqual(aliceShared, bobShared, "Shared secrets derived from DH exchange must match");
@@ -61,10 +61,10 @@ async function runTests() {
   // Initialize ratchets
   const alicePubBytes = fromBase64(alicePubExport);
   const bobPubBytes = fromBase64(bobPubExport);
-  
+
   // Alice initializes Alice session with Bob's public key
   const aliceSession = await DoubleRatchetSession.initAlice(aliceShared, bobPubBytes);
-  
+
   // Bob initializes Bob session with Alice's public key
   const bobIdentityPrivRaw = await globalThis.crypto.subtle.exportKey('pkcs8', bobIdentity.privateKey);
   const bobSession = await DoubleRatchetSession.initBob(bobShared, new Uint8Array(bobIdentityPrivRaw));

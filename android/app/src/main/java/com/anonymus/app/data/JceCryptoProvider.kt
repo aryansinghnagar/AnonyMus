@@ -11,7 +11,7 @@ class JceCryptoProvider : CryptoProvider {
     override fun exportPublicKey(publicKey: PublicKey): String = CryptoUtils.exportPublicKey(publicKey)
     override fun importPublicKey(base64String: String): PublicKey = CryptoUtils.importPublicKey(base64String)
     override fun computeSafetyNumber(myPubKeyBase64: String, theirPubKeyBase64: String): String = CryptoUtils.computeSafetyNumber(myPubKeyBase64, theirPubKeyBase64)
-    
+
     override fun deriveSessionKeys(
         myPrivateKey: PrivateKey,
         theirPublicKey: PublicKey,
@@ -56,11 +56,11 @@ class JceCryptoProvider : CryptoProvider {
         val textBytes = plaintext.toByteArray(StandardCharsets.UTF_8)
         val textLen = textBytes.size
         val paddedLength = Math.ceil((textLen + 4).toDouble() / CryptoUtils.BLOCK_SIZE).toInt() * CryptoUtils.BLOCK_SIZE
-        
+
         val buffer = java.nio.ByteBuffer.allocate(paddedLength)
         buffer.putInt(textLen)
         buffer.put(textBytes)
-        
+
         if (paddedLength > textLen + 4) {
             val paddingBytes = ByteArray(paddedLength - textLen - 4)
             java.security.SecureRandom().nextBytes(paddingBytes)
@@ -82,7 +82,7 @@ class JceCryptoProvider : CryptoProvider {
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
             val parameterSpec = javax.crypto.spec.GCMParameterSpec(128, iv)
             val key = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
-            
+
             var decrypted: ByteArray? = null
             try {
                 cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, parameterSpec)
@@ -97,14 +97,14 @@ class JceCryptoProvider : CryptoProvider {
             }
 
             if (decrypted == null) return null
-            
+
             val buffer = java.nio.ByteBuffer.wrap(decrypted)
             val textLen = buffer.getInt()
-            
+
             if (textLen < 0 || textLen > decrypted.size - 4) {
                 return null
             }
-            
+
             val textBytes = ByteArray(textLen)
             buffer.get(textBytes)
             String(textBytes, StandardCharsets.UTF_8)

@@ -46,7 +46,7 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
         }
     }
 
-    val nsdHelper = remember { 
+    val nsdHelper = remember {
         NsdHelper(context) { discoveredIp ->
             host = discoveredIp
             isScanning = false
@@ -88,7 +88,7 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
 
             OutlinedTextField(
                 value = host,
-                onValueChange = { 
+                onValueChange = {
                     host = it
                     validationError = null
                 },
@@ -98,7 +98,7 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = port,
-                onValueChange = { 
+                onValueChange = {
                     port = it
                     validationError = null
                 },
@@ -106,7 +106,7 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -188,13 +188,13 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             if (isScanning) {
                 CircularProgressIndicator()
                 Text("Scanning local network for AnonyMus relay...")
             } else {
                 Button(
-                    onClick = { 
+                    onClick = {
                         isScanning = true
                         nsdHelper.discoverServices()
                     },
@@ -212,7 +212,7 @@ fun ConfigScreen(onConfigSaved: () -> Unit) {
                         validationError = "Invalid server host, IP address, or port format."
                         return@Button
                     }
-                    
+
                     prefs.host = host
                     prefs.port = port.toIntOrNull() ?: 5000
                     prefs.trustSelfSigned = trustSelfSigned
