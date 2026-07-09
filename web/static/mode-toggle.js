@@ -1,5 +1,5 @@
 /**
- * mode_toggle.js — Manage settings modal and runtime transport profile toggling.
+ * mode-toggle.js — Manage settings modal and runtime transport profile toggling.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
