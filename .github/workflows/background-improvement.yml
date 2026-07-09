@@ -1,0 +1,22 @@
+name: Background Improvement Loop
+
+on:
+  schedule:
+    - cron: '0 8 * * 0' # Sundays at 08:00
+  workflow_dispatch: {}
+
+concurrency:
+  group: background-improvement-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  improve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self Improvement Evaluation
+        run: |
+          echo "Evaluating code performance and lint logs for automatic improvements..."

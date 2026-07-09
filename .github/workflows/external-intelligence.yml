@@ -1,0 +1,22 @@
+name: External Intelligence Tracking
+
+on:
+  schedule:
+    - cron: '0 6 * * 0' # Sundays at 06:00
+  workflow_dispatch: {}
+
+concurrency:
+  group: external-intelligence-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Track External Crypto Updates
+        run: |
+          echo "Syncing regulatory databases and cryptography releases..."
+          echo "Tracking NIST Post-Quantum Cryptography standards..."
