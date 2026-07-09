@@ -107,7 +107,7 @@ dependencies {
   implementation(libs.androidx.biometric)
 
   // NaCl box (XSalsa20-Poly1305) — outer transport layer for Double Ratchet v2
-  implementation("com.goterl:lazysodium-android:5.1.0@aar")
+  implementation("com.goterl:lazysodium-android:5.2.0@aar")
   implementation("net.java.dev.jna:jna:5.14.0@aar")
 
   // WorkManager for background polling / push service keep-alive
