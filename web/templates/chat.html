@@ -161,6 +161,7 @@
             <div class="call-controls mode-p2p-only" style="display: flex; gap: 8px; align-items: center;">
               <button id="btn-call" class="btn" style="padding: 4px 10px; font-size: 0.85rem;" title="Start WebRTC Video Call">📞 Call</button>
               <button id="btn-hangup" class="btn" style="padding: 4px 10px; font-size: 0.85rem; display: none; background: #d83b01; color: white; border: none;" title="Hang up Call">📴 Hangup</button>
+              <button id="btn-block-contact" class="btn" style="padding: 4px 10px; font-size: 0.85rem; background: #d83b01; color: white; border: none; display: none;" title="Block this contact">🚫 Block</button>
             </div>
             <div id="group-header-controls" style="display: none; align-items: center; gap: 8px;">
               <button id="btn-group-info" class="btn" style="padding: 4px 10px; font-size: 0.85rem;">Group Info</button>
@@ -395,6 +396,26 @@
           <p style="font-size: 0.75rem; color: #605e5c; margin: 0;">Copy and paste this credentials JSON into the target device's sync input.</p>
         </div>
 
+        <hr style="border: 0; border-top: 1px solid var(--chat-border); margin: 2rem 0;">
+        <h3>Developer Supporter Badge</h3>
+        <p style="font-size: 0.85rem; color: #605e5c; margin-bottom: 1rem;">
+          Input your supporter badge cryptographic signature to enable a gold supporter badge next to your username in chats and groups.
+        </p>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <input type="text" id="supporter-badge-sig" class="input-p2p" placeholder="Enter base64 signature" style="flex: 1; font-family: monospace; font-size: 0.85rem;">
+          <button id="btn-verify-badge" class="btn" style="background: #e1dfdd; border: 1px solid #8a8886; padding: 4px 12px;">Activate Badge</button>
+        </div>
+        <p id="badge-status-message" style="font-size: 0.85rem; margin-top: 6px; display: none;"></p>
+
+        <hr style="border: 0; border-top: 1px solid var(--chat-border); margin: 2rem 0;">
+        <h3>Content Moderation & Blocking</h3>
+        <p style="font-size: 0.85rem; color: #605e5c; margin-bottom: 1rem;">
+          Manage blocked peers. Messages from blocked onion addresses will be silently discarded.
+        </p>
+        <div id="blocked-users-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 100px; overflow-y: auto; border: 1px solid var(--chat-border); padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.02);">
+          <span style="font-size: 0.85rem; color: #605e5c;">No blocked contacts.</span>
+        </div>
+
         <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 8px;">
           <button id="btn-cancel-settings" class="btn">Cancel</button>
           <button id="btn-apply-settings" class="btn btn-primary" style="background: #0078d4; color: white; border: none;">Apply & Restart</button>
@@ -424,6 +445,11 @@
       <h3 style="margin-top: 0; margin-bottom: 12px;">Create Decentralized Group</h3>
       <input type="text" id="new-group-name" class="input-p2p" placeholder="Group Name" autocomplete="off" style="width: 100%; margin-bottom: 16px; box-sizing: border-box;">
       
+      <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="new-group-is-channel" style="width: auto; margin: 0;">
+        <label for="new-group-is-channel" style="cursor: pointer; font-size: 0.9rem; color: var(--chat-text);">Create as Broadcast Channel (only creator can post)</label>
+      </div>
+
       <h4 style="margin-bottom: 8px;">Select Contacts to Invite</h4>
       <div id="create-group-contacts-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--chat-border); padding: 8px; border-radius: 6px;">
         <!-- Checkbox list of contacts -->

@@ -270,7 +270,46 @@ function addStatusLine(text) {
 }
 
 // Log chat messages helper
-function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, expiresAt = null, isHistory = false, deliveryState = 'sent') {
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+let supporterCache = {};
+
+function checkAndRenderSupporterBadge(senderSpan, onion) {
+  if (!onion) return;
+  onion = onion.toLowerCase();
+  if (supporterCache[onion] !== undefined) {
+    if (supporterCache[onion]) {
+      renderSupporterBadgeIcon(senderSpan);
+    }
+    return;
+  }
+  fetch(`/api/profile/supporter_badge/status?onion_address=${onion}`)
+    .then(res => res.json())
+    .then(data => {
+      supporterCache[onion] = data.is_supporter;
+      if (data.is_supporter) {
+        renderSupporterBadgeIcon(senderSpan);
+      }
+    });
+}
+
+function renderSupporterBadgeIcon(senderSpan) {
+  if (senderSpan.querySelector('.supporter-badge')) return;
+  const badge = document.createElement('span');
+  badge.className = 'supporter-badge';
+  badge.textContent = ' 🎗️';
+  badge.title = 'Developer Supporter';
+  badge.style.color = '#d89b00';
+  badge.style.fontWeight = 'bold';
+  senderSpan.appendChild(badge);
+}
+
+function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, expiresAt = null, isHistory = false, deliveryState = 'sent', senderOnion = null) {
   let timeLeft = 0;
   if (expiresAt) {
     timeLeft = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
@@ -291,6 +330,14 @@ function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, 
   const senderSpan = document.createElement('span');
   senderSpan.className = 'message-sender';
   senderSpan.textContent = sender;
+  
+  if (senderOnion) {
+    checkAndRenderSupporterBadge(senderSpan, senderOnion);
+  } else if (sender === 'You' || sender === 'me') {
+    checkAndRenderSupporterBadge(senderSpan, myOnionAddress);
+  } else if (activeContact) {
+    checkAndRenderSupporterBadge(senderSpan, activeContact.onion_address);
+  }
   
   const contentSpan = document.createElement('span');
   contentSpan.className = 'message-content';
@@ -339,6 +386,36 @@ function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, 
       }
     });
     msgEl.appendChild(deleteBtn);
+  } else if (!isSystem && !isHistory) {
+    const reportBtn = document.createElement('span');
+    reportBtn.className = 'message-report-btn';
+    reportBtn.innerHTML = ' 🚩';
+    reportBtn.title = 'Report message';
+    reportBtn.style.cursor = 'pointer';
+    reportBtn.style.opacity = '0.5';
+    reportBtn.style.marginLeft = '6px';
+    reportBtn.addEventListener('click', async () => {
+      const reason = prompt('Why are you reporting this message as abusive?');
+      if (reason) {
+        const hash = await sha256(text);
+        const res = await fetch('/api/groups/report_message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message_hash: hash,
+            reporter_onion: myOnionAddress,
+            reason: reason,
+            signature: 'report_attestation_' + Date.now()
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Message reported successfully. It has been hidden from your view.');
+          msgEl.style.display = 'none';
+        }
+      }
+    });
+    msgEl.appendChild(reportBtn);
   }
   
   if (!isSystem) {
@@ -755,6 +832,68 @@ let activeProfileId = 'default';
 let outgoingBatchBuffer = {};
 let batchTimeouts = {};
 
+function getBlockedOnions() {
+  try {
+    return JSON.parse(localStorage.getItem('blocked_onions') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function blockOnion(onion) {
+  const list = getBlockedOnions();
+  if (!list.includes(onion.toLowerCase())) {
+    list.push(onion.toLowerCase());
+    localStorage.setItem('blocked_onions', JSON.stringify(list));
+  }
+  renderBlockedPeersList();
+}
+
+function unblockOnion(onion) {
+  let list = getBlockedOnions();
+  list = list.filter(item => item !== onion.toLowerCase());
+  localStorage.setItem('blocked_onions', JSON.stringify(list));
+  renderBlockedPeersList();
+}
+
+function renderBlockedPeersList() {
+  const container = document.getElementById('blocked-users-list');
+  if (!container) return;
+  container.innerHTML = '';
+  const list = getBlockedOnions();
+  if (list.length === 0) {
+    container.innerHTML = '<span style="font-size: 0.85rem; color: #605e5c;">No blocked contacts.</span>';
+    return;
+  }
+  list.forEach(onion => {
+    const item = document.createElement('div');
+    item.style.display = 'flex';
+    item.style.justifyContent = 'space-between';
+    item.style.alignItems = 'center';
+    item.style.fontSize = '0.85rem';
+    item.style.padding = '2px 0';
+    
+    const span = document.createElement('span');
+    span.textContent = onion;
+    span.style.fontFamily = 'monospace';
+    span.style.wordBreak = 'break-all';
+    
+    const unblockBtn = document.createElement('button');
+    unblockBtn.className = 'btn';
+    unblockBtn.textContent = 'Unblock';
+    unblockBtn.style.padding = '2px 6px';
+    unblockBtn.style.fontSize = '0.75rem';
+    unblockBtn.style.cursor = 'pointer';
+    unblockBtn.addEventListener('click', () => {
+      unblockOnion(onion);
+    });
+    
+    item.appendChild(span);
+    item.appendChild(unblockBtn);
+    container.appendChild(item);
+  });
+}
+
 async function flushBatch(onion) {
   if (batchTimeouts[onion]) {
     clearTimeout(batchTimeouts[onion]);
@@ -925,6 +1064,32 @@ function selectContact(contact) {
   if (safetyContainer) safetyContainer.parentElement.style.display = '';
   const groupPane = document.getElementById('group-info-pane');
   if (groupPane) groupPane.style.display = 'none';
+
+  // Ensure input fields are enabled when returning to private chat
+  const msgInput = document.getElementById('message-input');
+  const sendBtn = document.getElementById('send-btn');
+  const recordVoiceBtn = document.getElementById('btn-record-voice');
+  const recordVideoBtn = document.getElementById('btn-record-video');
+  if (msgInput) {
+    msgInput.disabled = false;
+    msgInput.placeholder = "Type a message...";
+  }
+  if (sendBtn) sendBtn.disabled = false;
+  if (recordVoiceBtn) recordVoiceBtn.disabled = false;
+  if (recordVideoBtn) recordVideoBtn.disabled = false;
+
+  // Setup block contact button
+  const blockBtn = document.getElementById('btn-block-contact');
+  if (blockBtn) {
+    blockBtn.style.display = contact.status === 'accepted' ? 'inline-block' : 'none';
+    blockBtn.onclick = () => {
+      if (confirm(`Are you sure you want to block ${contact.display_name || contact.nickname}?`)) {
+        blockOnion(contact.onion_address);
+        alert(`${contact.display_name || contact.nickname} has been blocked.`);
+        loadContactsList();
+      }
+    };
+  }
   
   if (contact.status === 'pending_incoming') {
     switchPanel('pending-incoming');
@@ -1221,6 +1386,11 @@ function mountP2PSocketEvents() {
     const sender = data.sender;
     const seq = data.seq;
     
+    if (getBlockedOnions().includes(sender.toLowerCase())) {
+      console.log(`Discarding incoming message from blocked peer: ${sender}`);
+      return;
+    }
+    
     if (activeContact && activeContact.onion_address === sender) {
       const payload = typeof data.payload === 'string' ? JSON.parse(data.payload) : data;
       const isAlice = myPublicKeyExported < activeContact.peer_public_key;
@@ -1268,7 +1438,8 @@ function mountP2PSocketEvents() {
               body: JSON.stringify({
                 name: envelope.name,
                 founder_onion: envelope.founder_onion,
-                group_id: envelope.group_id
+                group_id: envelope.group_id,
+                is_channel: envelope.is_channel || 0
               })
             }).then(() => {
               const joinEnvelope = {
@@ -2223,6 +2394,54 @@ async function handleSystemLogout() {
 // App startup initializer
 async function initApp() {
   const mode = window.ANONYMUS_MODE || 'relay';
+
+  // Load blocked peers on settings display and setup verify badge button click listener
+  const btnSettings = document.getElementById('btn-settings');
+  if (btnSettings) {
+    btnSettings.addEventListener('click', () => {
+      renderBlockedPeersList();
+    });
+  }
+
+  const btnVerifyBadge = document.getElementById('btn-verify-badge');
+  if (btnVerifyBadge) {
+    btnVerifyBadge.addEventListener('click', async () => {
+      const sig = document.getElementById('supporter-badge-sig').value.trim();
+      if (!sig) return;
+      
+      const statusMsg = document.getElementById('badge-status-message');
+      statusMsg.style.display = 'block';
+      statusMsg.style.color = '#8a8886';
+      statusMsg.textContent = 'Verifying signature...';
+      
+      try {
+        const res = await fetch('/api/profile/supporter_badge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            onion_address: myOnionAddress,
+            signature: sig
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          statusMsg.style.color = '#107c41';
+          statusMsg.textContent = 'Supporter Badge Activated Successfully! ⭐';
+          supporterCache[myOnionAddress.toLowerCase()] = true;
+          // Refresh own messages
+          document.querySelectorAll('.message-own .message-sender').forEach(el => {
+            renderSupporterBadgeIcon(el);
+          });
+        } else {
+          statusMsg.style.color = '#d83b01';
+          statusMsg.textContent = data.error || 'Failed to activate badge.';
+        }
+      } catch (err) {
+        statusMsg.style.color = '#d83b01';
+        statusMsg.textContent = 'Network error verifying badge.';
+      }
+    });
+  }
   
   // Register unified logout triggers
   const btnLogout = document.getElementById('btn-logout');
@@ -2523,8 +2742,12 @@ async function initApp() {
     }
 
     socket.on('group_message_saved', (data) => {
+      if (getBlockedOnions().includes(data.sender_onion.toLowerCase())) {
+        console.log(`Discarding group message from blocked peer: ${data.sender_onion}`);
+        return;
+      }
       if (activeGroup && activeGroup.group_id === data.group_id && data.sender_onion !== myOnionAddress) {
-        addMessageLine(data.sender_nickname, data.message, data.timestamp);
+        addMessageLine(data.sender_nickname, data.message, data.timestamp, false, null, false, 'sent', data.sender_onion);
       }
     });
 
@@ -2846,7 +3069,8 @@ async function selectGroup(group) {
   if (groupLi) groupLi.classList.add('active');
   
   switchPanel('chat');
-  chattingWithName.textContent = `Group: ${group.name}`;
+  const isChannel = group.is_channel === 1;
+  chattingWithName.textContent = `${isChannel ? 'Channel' : 'Group'}: ${group.name}`;
   
   // Toggle UI elements
   document.querySelectorAll('.mode-p2p-only').forEach(el => el.style.display = 'none');
@@ -2856,6 +3080,31 @@ async function selectGroup(group) {
   if (safetyContainer) safetyContainer.parentElement.style.display = 'none';
   const groupPane = document.getElementById('group-info-pane');
   if (groupPane) groupPane.style.display = 'none';
+
+  // Enable/disable input based on channel permissions
+  const isFounder = group.founder_onion.toLowerCase() === myOnionAddress.toLowerCase();
+  const msgInput = document.getElementById('message-input');
+  const sendBtn = document.getElementById('send-btn');
+  const recordVoiceBtn = document.getElementById('btn-record-voice');
+  const recordVideoBtn = document.getElementById('btn-record-video');
+  
+  if (isChannel && !isFounder) {
+    if (msgInput) {
+      msgInput.disabled = true;
+      msgInput.placeholder = "Only the channel creator can send messages";
+    }
+    if (sendBtn) sendBtn.disabled = true;
+    if (recordVoiceBtn) recordVoiceBtn.disabled = true;
+    if (recordVideoBtn) recordVideoBtn.disabled = true;
+  } else {
+    if (msgInput) {
+      msgInput.disabled = false;
+      msgInput.placeholder = "Type a message...";
+    }
+    if (sendBtn) sendBtn.disabled = false;
+    if (recordVoiceBtn) recordVoiceBtn.disabled = false;
+    if (recordVideoBtn) recordVideoBtn.disabled = false;
+  }
   
   messagesEl.replaceChildren();
   await loadGroupMessagesHistory(group.group_id);
@@ -2966,12 +3215,14 @@ async function submitCreateGroup() {
   const selectedOnions = Array.from(document.querySelectorAll('#create-group-contacts-list input[type="checkbox"]:checked')).map(cb => cb.value);
   
   try {
+    const isChannelChecked = document.getElementById('new-group-is-channel').checked ? 1 : 0;
     const res = await fetch('/api/groups/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: name,
-        founder_onion: myOnionAddress
+        founder_onion: myOnionAddress,
+        is_channel: isChannelChecked
       })
     });
     const data = await res.json();
@@ -2997,7 +3248,8 @@ async function submitCreateGroup() {
         type: 'x.grp.invite',
         group_id: groupId,
         name: name,
-        founder_onion: myOnionAddress
+        founder_onion: myOnionAddress,
+        is_channel: isChannelChecked
       };
       for (const onion of selectedOnions) {
         await transmitPayload(JSON.stringify(inviteEnvelope), false, onion);

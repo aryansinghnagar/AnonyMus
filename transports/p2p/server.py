@@ -997,9 +997,10 @@ def api_create_group():
     name = data.get('name', '').strip()
     founder_onion = data.get('founder_onion', '').strip().lower()
     group_id = data.get('group_id') or str(uuid.uuid4())
+    is_channel = int(data.get('is_channel', 0))
     
     profile_id = session.get('active_profile_id', 'default')
-    database.create_group(group_id, name, founder_onion, profile_id=profile_id)
+    database.create_group(group_id, name, founder_onion, profile_id=profile_id, is_channel=is_channel)
     
     # Add creator as founder member
     my_username = session['username']
@@ -1045,6 +1046,12 @@ def api_group_save_message():
     message = data.get('message')
     timestamp = data.get('timestamp')
     
+    # Check if group is a channel
+    group = database.get_group(group_id)
+    if group and group.get('is_channel') == 1:
+        if sender_onion.lower() != group['founder_onion'].lower():
+            return jsonify({"error": "Unauthorized: Only channel founder can post messages."}), 403
+            
     database.save_group_message(group_id, sender_onion, sender_nickname, message, timestamp=timestamp)
     
     # Notify browser UI that group message is saved
@@ -1057,6 +1064,48 @@ def api_group_save_message():
     })
     
     return jsonify({"success": True})
+
+@app.route('/api/groups/report_message', methods=['POST'])
+@validate_json_schema({'message_hash': str, 'reporter_onion': str, 'reason': str, 'signature': str})
+def api_report_message():
+    if 'username' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    report_id = str(uuid.uuid4())
+    message_hash = data.get('message_hash')
+    reporter_onion = data.get('reporter_onion')
+    reason = data.get('reason')
+    signature = data.get('signature')
+    
+    database.save_abuse_report(report_id, message_hash, reporter_onion, reason, signature)
+    return jsonify({"success": True, "report_id": report_id})
+
+@app.route('/api/profile/supporter_badge', methods=['POST'])
+@validate_json_schema({'onion_address': str, 'signature': str})
+def api_supporter_badge():
+    if 'username' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    onion_address = data.get('onion_address').strip().lower()
+    signature = data.get('signature').strip()
+    
+    from core.crypto import verify_supporter_badge
+    is_valid = verify_supporter_badge(onion_address, signature)
+    if not is_valid:
+        return jsonify({"error": "Invalid supporter signature."}), 400
+        
+    database.save_supporter_badge(onion_address, signature)
+    return jsonify({"success": True})
+
+@app.route('/api/profile/supporter_badge/status', methods=['GET'])
+def api_supporter_badge_status():
+    if 'username' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    onion_address = request.args.get('onion_address', '').strip().lower()
+    badge = database.get_supporter_badge(onion_address)
+    if badge:
+        return jsonify({"is_supporter": True, "badge_signature": badge['badge_signature']})
+    return jsonify({"is_supporter": False})
 
 @app.route('/api/groups/<group_id>/messages', methods=['GET'])
 def api_group_get_messages(group_id):
