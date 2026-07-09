@@ -103,11 +103,11 @@ class TinkCryptoProvider : CryptoProvider {
         val textBytes = plaintext.toByteArray(StandardCharsets.UTF_8)
         val textLen = textBytes.size
         val paddedLength = Math.ceil((textLen + 4).toDouble() / CryptoUtils.BLOCK_SIZE).toInt() * CryptoUtils.BLOCK_SIZE
-        
+
         val buffer = java.nio.ByteBuffer.allocate(paddedLength)
         buffer.putInt(textLen)
         buffer.put(textBytes)
-        
+
         if (paddedLength > textLen + 4) {
             val paddingBytes = ByteArray(paddedLength - textLen - 4)
             java.security.SecureRandom().nextBytes(paddingBytes)
@@ -129,7 +129,7 @@ class TinkCryptoProvider : CryptoProvider {
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
             val parameterSpec = javax.crypto.spec.GCMParameterSpec(128, iv)
             val key = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
-            
+
             var decrypted: ByteArray? = null
             try {
                 cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, parameterSpec)
@@ -144,14 +144,14 @@ class TinkCryptoProvider : CryptoProvider {
             }
 
             if (decrypted == null) return null
-            
+
             val buffer = java.nio.ByteBuffer.wrap(decrypted)
             val textLen = buffer.getInt()
-            
+
             if (textLen < 0 || textLen > decrypted.size - 4) {
                 return null
             }
-            
+
             val textBytes = ByteArray(textLen)
             buffer.get(textBytes)
             String(textBytes, StandardCharsets.UTF_8)

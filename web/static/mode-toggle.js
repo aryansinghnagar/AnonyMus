@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCloseSettings = document.getElementById('btn-close-settings');
   const btnCancelSettings = document.getElementById('btn-cancel-settings');
   const btnApplySettings = document.getElementById('btn-apply-settings');
-  
+
   if (!btnSettings || !settingsModal) return;
 
   // Open settings
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const currentMode = window.ANONYMUS_MODE || 'relay';
     const radio = document.querySelector(`input[name="transport-mode"][value="${currentMode}"]`);
     if (radio) radio.checked = true;
-    
+
     settingsModal.style.display = 'flex';
   });
 
@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const closeSettings = () => {
     settingsModal.style.display = 'none';
   };
-  
+
   if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettings);
   if (btnCancelSettings) btnCancelSettings.addEventListener('click', closeSettings);
 

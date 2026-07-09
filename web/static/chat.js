@@ -27,11 +27,11 @@ const btnClearCache = document.getElementById('btn-clear-cache');
 const CovertCalculatorConfig = {
   // Passcodes that will instantly exit covert mode when typed followed by pressing '='
   exitPasscodes: ['1337', '80085', '7777'],
-  
+
   // Exit triggers toggle
   enableHeaderDoubleClickExit: true,
   enableEscapeKeyExit: true,
-  
+
   // Callback when exit is triggered
   defaultTriggerAction: () => {
     if (viewCalculator) viewCalculator.style.display = 'none';
@@ -154,7 +154,7 @@ function evaluateExpression() {
   const prev = parseFloat(calcState.previous);
   const curr = parseFloat(calcState.current);
   if (isNaN(prev) || isNaN(curr)) return;
-  
+
   let result = 0;
   switch (calcState.operation) {
     case '+':
@@ -251,7 +251,7 @@ function switchPanel(panelId) {
     el.classList.remove('active');
     el.style.display = 'none';
   });
-  
+
   // Show target panel
   const panel = document.getElementById('view-' + panelId);
   if (panel) {
@@ -326,11 +326,11 @@ function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, 
   const msgEl = document.createElement('div');
   msgEl.className = `message ${sender === 'You' || sender === 'me' ? 'message-own' : 'message-other'}`;
   msgEl.dataset.timestamp = timestamp;
-  
+
   const senderSpan = document.createElement('span');
   senderSpan.className = 'message-sender';
   senderSpan.textContent = sender;
-  
+
   if (senderOnion) {
     checkAndRenderSupporterBadge(senderSpan, senderOnion);
   } else if (sender === 'You' || sender === 'me') {
@@ -338,14 +338,14 @@ function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, 
   } else if (activeContact) {
     checkAndRenderSupporterBadge(senderSpan, activeContact.onion_address);
   }
-  
+
   const contentSpan = document.createElement('span');
   contentSpan.className = 'message-content';
   contentSpan.textContent = text;
-  
+
   msgEl.appendChild(senderSpan);
   msgEl.appendChild(contentSpan);
-  
+
   // Render checkmarks for outgoing messages (B4)
   if (!isSystem && (sender === 'You' || sender === 'me')) {
     const statusSpan = document.createElement('span');
@@ -417,17 +417,17 @@ function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, 
     });
     msgEl.appendChild(reportBtn);
   }
-  
+
   if (!isSystem) {
     attachReactionPicker(msgEl, timestamp, sender);
   }
-  
+
   if (timeLeft > 0) {
     const timerSpan = document.createElement('span');
     timerSpan.className = 'message-timer';
     timerSpan.textContent = `⏳ ${timeLeft}s`;
     msgEl.appendChild(timerSpan);
-    
+
     // Countdown and remove
     let countdown = timeLeft;
     const interval = setInterval(() => {
@@ -441,7 +441,7 @@ function addMessageLine(sender, text, timestamp = Date.now(), isSystem = false, 
       }
     }, 1000);
   }
-  
+
   messagesEl.appendChild(msgEl);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -612,11 +612,11 @@ function startRelayKeepAlive() {
       try {
         const { messageKey, nextChainKey } = await deriveChainKeys(relaySession.sendChainKey);
         relaySession.sendChainKey = nextChainKey;
-        
+
         const heartbeat = JSON.stringify({ type: 'control', action: 'heartbeat' });
         const { iv, ciphertext } = await encryptMessage(messageKey, heartbeat, relaySession.myRole, relaySession.sendSeq, relaySession.sessionId);
         relaySession.sendSeq++;
-        
+
         const payload = JSON.stringify({ type: 'message', iv, ciphertext });
         socket.emit('push_queue', { queue_id: relaySession.theirQueueId, payload });
       } catch (err) {
@@ -631,7 +631,7 @@ async function generateRelayInvite() {
   try {
     relaySession.myKeys = await generateKeyPair();
     relaySession.myPublicKeyExported = await exportPublicKey(relaySession.myKeys.publicKey);
-    
+
     socket.emit('create_queue');
   } catch (err) {
     console.error("Invite generation failed:", err);
@@ -643,20 +643,20 @@ async function acceptRelayInvite() {
   try {
     const inviteLink = pasteInviteInput.value.trim();
     if (!inviteLink) return;
-    
+
     const hashIdx = inviteLink.indexOf('#');
     if (hashIdx === -1) {
       alert("Invalid invite link format.");
       return;
     }
-    
+
     const hashData = JSON.parse(decodeURIComponent(inviteLink.substring(hashIdx + 1)));
     relaySession.theirQueueId = hashData.q;
     relaySession.theirPublicKeyExported = hashData.k;
-    
+
     relaySession.myKeys = await generateKeyPair();
     relaySession.myPublicKeyExported = await exportPublicKey(relaySession.myKeys.publicKey);
-    
+
     // Set up ratchets
     const theirKey = await importPublicKey(relaySession.theirPublicKeyExported);
     const sessionKeys = await deriveSessionKeys(
@@ -667,22 +667,22 @@ async function acceptRelayInvite() {
     );
     relaySession.sendChainKey = sessionKeys.sendChainKey;
     relaySession.recvChainKey = sessionKeys.recvChainKey;
-    
+
     const isAlice = relaySession.myPublicKeyExported < relaySession.theirPublicKeyExported;
     relaySession.myRole = isAlice ? 'A' : 'B';
     relaySession.theirRole = isAlice ? 'B' : 'A';
     relaySession.sendSeq = 0;
     relaySession.recvSeq = 0;
-    
+
     relaySession.sessionId = await computeSafetyNumber(relaySession.myPublicKeyExported, relaySession.theirPublicKeyExported);
     uiSafetyNumber.textContent = relaySession.sessionId;
-    
+
     // Register queues
     socket.emit('register_peer', {
       my_queue: relaySession.myQueueId,
       peer_queue: relaySession.theirQueueId
     });
-    
+
     // Notify peer of our public key
     const handshakePayload = JSON.stringify({
       type: 'handshake',
@@ -690,7 +690,7 @@ async function acceptRelayInvite() {
       public_key: relaySession.myPublicKeyExported
     });
     socket.emit('push_queue', { queue_id: relaySession.theirQueueId, payload: handshakePayload });
-    
+
     switchPanel('chat');
     addStatusLine("Connected securely to peer.");
     startRelayKeepAlive();
@@ -704,24 +704,24 @@ async function acceptRelayInvite() {
 function mountRelaySocketEvents() {
   socket.on('queue_created', ({ queue_id }) => {
     relaySession.myQueueId = queue_id;
-    
+
     // Update invite link view
     const inviteLinkDisplay = document.getElementById('invite-link-display');
     const hashObj = { q: queue_id, k: relaySession.myPublicKeyExported };
     const inviteUrl = `${window.location.origin}/#${encodeURIComponent(JSON.stringify(hashObj))}`;
-    
+
     if (inviteLinkDisplay) inviteLinkDisplay.textContent = inviteUrl;
   });
-  
+
   socket.on('queue_payload', async ({ queue_id, payload }) => {
     try {
       const data = JSON.parse(payload);
-      
+
       // Peer Handshake Acceptance
       if (data.type === 'handshake') {
         relaySession.theirQueueId = data.reply_queue;
         relaySession.theirPublicKeyExported = data.public_key;
-        
+
         const theirKey = await importPublicKey(relaySession.theirPublicKeyExported);
         const sessionKeys = await deriveSessionKeys(
           relaySession.myKeys.privateKey,
@@ -731,34 +731,34 @@ function mountRelaySocketEvents() {
         );
         relaySession.sendChainKey = sessionKeys.sendChainKey;
         relaySession.recvChainKey = sessionKeys.recvChainKey;
-        
+
         const isAlice = relaySession.myPublicKeyExported < relaySession.theirPublicKeyExported;
         relaySession.myRole = isAlice ? 'A' : 'B';
         relaySession.theirRole = isAlice ? 'B' : 'A';
         relaySession.sendSeq = 0;
         relaySession.recvSeq = 0;
-        
+
         relaySession.sessionId = await computeSafetyNumber(relaySession.myPublicKeyExported, relaySession.theirPublicKeyExported);
         uiSafetyNumber.textContent = relaySession.sessionId;
-        
+
         socket.emit('register_peer', {
           my_queue: relaySession.myQueueId,
           peer_queue: relaySession.theirQueueId
         });
-        
+
         // Burn invite
         socket.emit('create_queue');
-        
+
         switchPanel('chat');
         addStatusLine("Peer connected securely.");
         startRelayKeepAlive();
         return;
       }
-      
+
       // Decrypt inbound messages using receiver ratchet
       if (data.type === 'message') {
         if (!relaySession.recvChainKey) return;
-        
+
         const { messageKey, nextChainKey } = await deriveChainKeys(relaySession.recvChainKey);
         const plaintext = await decryptMessage(
           messageKey,
@@ -768,12 +768,12 @@ function mountRelaySocketEvents() {
           relaySession.recvSeq,
           relaySession.sessionId
         );
-        
+
         if (plaintext !== null) {
           relaySession.recvChainKey = nextChainKey;
           relaySession.recvSeq++;
           const msgObj = JSON.parse(plaintext);
-          
+
           if (msgObj.type === 'text') {
             addMessageLine('Peer', msgObj.content);
           } else if (msgObj.type === 'x.file.descr') {
@@ -872,12 +872,12 @@ function renderBlockedPeersList() {
     item.style.alignItems = 'center';
     item.style.fontSize = '0.85rem';
     item.style.padding = '2px 0';
-    
+
     const span = document.createElement('span');
     span.textContent = onion;
     span.style.fontFamily = 'monospace';
     span.style.wordBreak = 'break-all';
-    
+
     const unblockBtn = document.createElement('button');
     unblockBtn.className = 'btn';
     unblockBtn.textContent = 'Unblock';
@@ -887,7 +887,7 @@ function renderBlockedPeersList() {
     unblockBtn.addEventListener('click', () => {
       unblockOnion(onion);
     });
-    
+
     item.appendChild(span);
     item.appendChild(unblockBtn);
     container.appendChild(item);
@@ -1008,37 +1008,37 @@ async function loadContactsList() {
   try {
     const res = await fetch('/api/contacts');
     const contacts = await res.json();
-    
+
     contactsListEl.innerHTML = '';
-    
+
     for (const c of contacts) {
       // Lazy initialize keys for accepted peers
       if (c.status === 'accepted' && !chainKeys[c.onion_address]) {
         await initSessionKeysForContact(c);
       }
-      
+
       const li = document.createElement('li');
       if (activeContact && activeContact.onion_address === c.onion_address) {
         li.className = 'active';
       }
-      
+
       const nameSpan = document.createElement('span');
       nameSpan.className = 'contact-name';
       // Show display_name (incognito pseudonym) if set, else fall back to nickname
       nameSpan.textContent = c.display_name || c.nickname;
-      
+
       const addrSpan = document.createElement('span');
       addrSpan.className = 'contact-address';
       addrSpan.textContent = c.onion_address.slice(0, 20) + '…';
-      
+
       const statusSpan = document.createElement('span');
       statusSpan.className = `contact-status status-${c.status}`;
       statusSpan.textContent = c.status.replace('_', ' ');
-      
+
       li.appendChild(nameSpan);
       li.appendChild(addrSpan);
       li.appendChild(statusSpan);
-      
+
       li.addEventListener('click', () => selectContact(c));
       contactsListEl.appendChild(li);
     }
@@ -1051,11 +1051,11 @@ async function loadContactsList() {
 function selectContact(contact) {
   activeContact = contact;
   activeGroup = null;
-  
+
   // Highlight in sidebar
   document.querySelectorAll('.contacts-list-p2p li').forEach(el => el.classList.remove('active'));
   loadContactsList();
-  
+
   // Reset Group UI controls
   document.querySelectorAll('.mode-p2p-only').forEach(el => el.style.display = '');
   const groupCtrl = document.getElementById('group-header-controls');
@@ -1090,7 +1090,7 @@ function selectContact(contact) {
       }
     };
   }
-  
+
   if (contact.status === 'pending_incoming') {
     switchPanel('pending-incoming');
     pendingRequestText.replaceChildren();
@@ -1103,10 +1103,10 @@ function selectContact(contact) {
   } else if (contact.status === 'accepted') {
     switchPanel('chat');
     chattingWithName.textContent = `Chatting with: ${contact.display_name || contact.nickname}`;
-    
+
     const sessionId = sessionIds[contact.onion_address] || '...';
     uiSafetyNumber.textContent = sessionId;
-    
+
     if (contact.disappearing_ttl) {
       disappearTimerSelect.value = contact.disappearing_ttl / 1000;
     } else {
@@ -1117,7 +1117,7 @@ function selectContact(contact) {
     if (toggle) {
       toggle.checked = contact.send_receipts !== 0;
     }
-    
+
     messagesEl.innerHTML = '';
     loadMessagesHistory(contact.onion_address).then(() => {
       const mode = window.ANONYMUS_MODE || 'relay';
@@ -1146,35 +1146,35 @@ async function loadMessagesHistory(onion) {
   try {
     const res = await fetch(`/api/messages?onion=${onion}`);
     const msgs = await res.json();
-    
+
     const isAlice = myPublicKeyExported < activeContact.peer_public_key;
     const myRole = isAlice ? 'A' : 'B';
     const theirRole = isAlice ? 'B' : 'A';
-    
+
     let tempRecvSeq = 0;
     let tempSendSeq = 0;
-    
+
     // History replay uses v1 symmetric chain keys (DR sessions are live-only)
     const baseSendChain = chainKeys[onion] && chainKeys[onion].sendChainKey;
     const baseRecvChain = chainKeys[onion] && chainKeys[onion].recvChainKey;
-    
+
     let currentSendChain = baseSendChain;
     let currentRecvChain = baseRecvChain;
     const contactDisplayName = activeContact.display_name || activeContact.nickname;
-    
+
     for (const m of msgs) {
       try {
         const payload = JSON.parse(m.message);
         let decrypted = null;
-        
+
         const sessionId = sessionIds[onion];
-        
+
         // v2 DR messages are stored with nacl_ciphertext — skip live-session replay for history
         if (payload.nacl_ciphertext) {
           addMessageLine(m.sender === 'me' ? 'You' : contactDisplayName, '[Encrypted — DR v2]', m.timestamp, false, m.expires_at, true);
           continue;
         }
-        
+
         if (m.sender === 'me') {
           if (!currentSendChain) { tempSendSeq++; continue; }
           const { messageKey, nextChainKey } = await deriveChainKeys(currentSendChain);
@@ -1188,7 +1188,7 @@ async function loadMessagesHistory(onion) {
           decrypted = await decryptMessage(messageKey, payload.iv, payload.ciphertext, theirRole, tempRecvSeq, sessionId);
           tempRecvSeq++;
         }
-        
+
         if (decrypted) {
           const envelope = JSON.parse(decrypted);
           if (envelope.type === 'text') {
@@ -1228,11 +1228,11 @@ async function loadMessagesHistory(onion) {
         console.error(err);
       }
     }
-    
+
     // Save current sequence values in localStorage for the active UI session
     localStorage.setItem(`sendSeq_${onion}`, tempSendSeq);
     localStorage.setItem(`recvSeq_${onion}`, tempRecvSeq);
-    
+
   } catch (err) {
     console.error("Failed to load message history:", err);
   }
@@ -1242,14 +1242,14 @@ async function loadMessagesHistory(onion) {
 async function addContactSubmit() {
   const nickname = contactNicknameInput.value.trim();
   const onion = contactOnionInput.value.trim();
-  
+
   if (!nickname || !onion) {
     alert("Please fill in nickname and onion fields.");
     return;
   }
-  
+
   await initMyMasterKeys();
-  
+
   try {
     const res = await fetch('/api/contacts/add', {
       method: 'POST',
@@ -1277,19 +1277,19 @@ async function addContactSubmit() {
 // Accept incoming contact handshake request
 async function acceptIncomingRequest() {
   if (!activeContact) return;
-  
+
   await initMyMasterKeys();
-  
+
   // X25519 DH shared secret
   const peerPubKey = await importPublicKey(activeContact.peer_public_key);
   const sharedSecretBits = await computeDH(myKeys.privateKey, peerPubKey);
   const sharedSecretB64 = toBase64(sharedSecretBits);
-  
+
   // Initialize DR session (Bob — we received the handshake)
   const pkcs8 = await crypto.subtle.exportKey('pkcs8', myKeys.privateKey);
   const drSession = await DoubleRatchetSession.initBob(new Uint8Array(sharedSecretBits), pkcs8);
   const drStateStr = await serializeSession(drSession);
-  
+
   try {
     const res = await fetch('/api/contacts/accept', {
       method: 'POST',
@@ -1300,7 +1300,7 @@ async function acceptIncomingRequest() {
         shared_secret: sharedSecretB64
       })
     });
-    
+
     const data = await res.json();
     if (data.success) {
       // Persist DR state
@@ -1348,20 +1348,20 @@ function mountP2PSocketEvents() {
     await loadContactsList();
     addStatusLine(`New incoming contact request from ${data.nickname}`);
   });
-  
+
   socket.on('handshake_accepted', async (data) => {
     await initMyMasterKeys();
     const peerPubKey = await importPublicKey(data.peer_public_key);
-    
+
     // X25519 DH shared secret
     const sharedSecretBits = await computeDH(myKeys.privateKey, peerPubKey);
     const sharedSecretB64 = toBase64(sharedSecretBits);
-    
+
     // Initialize DR session (Alice — we sent the original handshake)
     const peerPubBytes = fromBase64(data.peer_public_key);
     const drSession = await DoubleRatchetSession.initAlice(new Uint8Array(sharedSecretBits), peerPubBytes);
     const drStateStr = await serializeSession(drSession);
-    
+
     await fetch('/api/contacts/save_secret', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1372,7 +1372,7 @@ function mountP2PSocketEvents() {
         dr_state: drStateStr
       })
     });
-    
+
     await loadContactsList();
     if (activeContact && activeContact.onion_address === data.onion_address) {
       const updated = await (await fetch('/api/contacts')).json();
@@ -1381,23 +1381,23 @@ function mountP2PSocketEvents() {
     }
     addStatusLine(`Handshake request accepted by peer.`);
   });
-  
+
   socket.on('incoming_message', async (data) => {
     const sender = data.sender;
     const seq = data.seq;
-    
+
     if (getBlockedOnions().includes(sender.toLowerCase())) {
       console.log(`Discarding incoming message from blocked peer: ${sender}`);
       return;
     }
-    
+
     if (activeContact && activeContact.onion_address === sender) {
       const payload = typeof data.payload === 'string' ? JSON.parse(data.payload) : data;
       const isAlice = myPublicKeyExported < activeContact.peer_public_key;
       const theirRole = isAlice ? 'B' : 'A';
-      
+
       let plaintext = null;
-      
+
       if (payload.nacl_ciphertext && drSessions[sender]) {
         // v2 Double Ratchet + NaCl box path
         const peerPubKey = await importPublicKey(activeContact.peer_public_key);
@@ -1415,9 +1415,9 @@ function mountP2PSocketEvents() {
         plaintext = await decryptMessage(messageKey, data.iv, data.ciphertext, theirRole, seq, sessionIds[sender]);
         if (plaintext !== null) localStorage.setItem(`recvSeq_${sender}`, seq + 1);
       }
-      
+
       if (plaintext !== null) {
-        
+
         const envelope = JSON.parse(plaintext);
         const senderDisplayName = activeContact.display_name || activeContact.nickname;
         if (envelope.type === 'text') {
@@ -1457,7 +1457,7 @@ function mountP2PSocketEvents() {
           const groupId = envelope.group_id;
           const joinerOnion = envelope.joiner_onion;
           const joinerNickname = envelope.joiner_nickname;
-          
+
           fetch('/api/groups/add_member', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1491,7 +1491,7 @@ function mountP2PSocketEvents() {
           const groupId = envelope.group_id;
           const name = envelope.group_name;
           const founder = envelope.founder_onion;
-          
+
           fetch('/api/groups/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1512,7 +1512,7 @@ function mountP2PSocketEvents() {
                   role: m.role
                 })
               });
-              
+
               const resC = await fetch('/api/contacts');
               const contacts = await resC.json();
               const hasContact = contacts.some(c => c.onion_address === m.member_onion);
@@ -1658,7 +1658,7 @@ function mountP2PSocketEvents() {
           } else if (envelope.action === 'migrate_onion') {
             const oldOnion = sender;
             const newOnion = envelope.new_onion_address;
-            
+
             // 1. Call local backend to migrate database tables
             const res = await fetch('/api/contacts/migrate', {
               method: 'POST',
@@ -1672,7 +1672,7 @@ function mountP2PSocketEvents() {
               const recvSeq = localStorage.getItem(`recvSeq_${oldOnion}`);
               if (sendSeq !== null) localStorage.setItem(`sendSeq_${newOnion}`, sendSeq);
               if (recvSeq !== null) localStorage.setItem(`recvSeq_${newOnion}`, recvSeq);
-              
+
               // Update in-memory structures
               if (chainKeys[oldOnion]) {
                 chainKeys[newOnion] = chainKeys[oldOnion];
@@ -1682,9 +1682,9 @@ function mountP2PSocketEvents() {
                 sessionIds[newOnion] = sessionIds[oldOnion];
                 delete sessionIds[oldOnion];
               }
-              
+
               localStorage.setItem(`migrated_${newOnion}`, 'true');
-              
+
               // Reply with our own pairwise address if they don't know it yet
               const contactsList = await (await fetch('/api/contacts')).json();
               const match = contactsList.find(c => c.onion_address === newOnion);
@@ -1696,7 +1696,7 @@ function mountP2PSocketEvents() {
                 });
                 await transmitPayload(replyPayload);
               }
-              
+
               // Reload interface
               await loadContactsList();
               if (activeContact && (activeContact.onion_address === oldOnion || activeContact.onion_address === newOnion)) {
@@ -1711,11 +1711,11 @@ function mountP2PSocketEvents() {
       }
     }
   });
-  
+
   socket.on('contact_status_change', () => {
     loadContactsList();
   });
-  
+
   socket.on('message_delivery_failed', () => {
     addStatusLine("Message delivery failed. Peer may be offline.");
   });
@@ -1745,12 +1745,12 @@ function mountP2PSocketEvents() {
 // Unified payload sender
 async function transmitPayload(plaintext, ephemeral = false, targetOnion = null) {
   const mode = window.ANONYMUS_MODE || 'relay';
-  
+
   if (mode === 'relay') {
     if (!relaySession.sendChainKey || !relaySession.theirQueueId) return false;
     const { messageKey, nextChainKey } = await deriveChainKeys(relaySession.sendChainKey);
     relaySession.sendChainKey = nextChainKey;
-    
+
     const { iv, ciphertext } = await encryptMessage(
       messageKey,
       plaintext,
@@ -1759,25 +1759,25 @@ async function transmitPayload(plaintext, ephemeral = false, targetOnion = null)
       relaySession.sessionId
     );
     relaySession.sendSeq++;
-    
+
     const payload = JSON.stringify({ type: 'message', iv, ciphertext, ephemeral });
     socket.emit('push_queue', { queue_id: relaySession.theirQueueId, payload });
     return true;
   } else {
     const onion = targetOnion || (activeContact && activeContact.onion_address);
     if (!onion) return false;
-    
+
     // Fetch contacts to retrieve key material for targetOnion
     const resContacts = await fetch('/api/contacts');
     const contacts = await resContacts.json();
     const contact = contacts.find(c => c.onion_address === onion);
     if (!contact || contact.status !== 'accepted') return false;
-    
+
     const isAlice = myPublicKeyExported < contact.peer_public_key;
     const myRole = isAlice ? 'A' : 'B';
-    
+
     let messagePayload;
-    
+
     if (drSessions[onion]) {
       // v2: Double Ratchet + NaCl box
       const peerPubKey = await importPublicKey(contact.peer_public_key);
@@ -1798,7 +1798,7 @@ async function transmitPayload(plaintext, ephemeral = false, targetOnion = null)
     } else {
       return false;
     }
-    
+
     if (!outgoingBatchBuffer[onion]) {
       outgoingBatchBuffer[onion] = [];
     }
@@ -1949,7 +1949,7 @@ async function downloadFileXFTP(fileName, fileSize, masterKeyB64, chunkIds, send
 async function handleFileSelect(e) {
   const file = e.target.files[0];
   if (!file) return;
-  
+
   if (file.size > 100 * 1024 * 1024) {
     alert("File is too large. Maximum supported size is 100MB.");
     return;
@@ -1957,9 +1957,9 @@ async function handleFileSelect(e) {
 
   const mode = window.ANONYMUS_MODE || 'relay';
   const fileInput = document.getElementById('file-input');
-  
+
   addStatusLine(`Uploading and encrypting "${file.name}" (0%)...`);
-  
+
   try {
     const result = await uploadFileXFTP(file, (current, total) => {
       const pct = Math.round((current / total) * 100);
@@ -2012,14 +2012,14 @@ function renderFileDownloadMessage(sender, envelope) {
 
   const msgEl = document.createElement('div');
   msgEl.className = `message ${sender === 'You' || sender === 'me' ? 'message-own' : 'message-other'}`;
-  
+
   const senderSpan = document.createElement('span');
   senderSpan.className = 'message-sender';
   senderSpan.textContent = sender;
 
   const bodyDiv = document.createElement('div');
   bodyDiv.style.marginTop = "4px";
-  
+
   if (isAudio) {
     const audioContainer = document.createElement('div');
     audioContainer.innerHTML = `🎙️ <strong>Voice Note</strong> (${displaySize})`;
@@ -2031,21 +2031,21 @@ function renderFileDownloadMessage(sender, envelope) {
     playBtn.className = "btn";
     playBtn.style.padding = "4px 8px";
     playBtn.style.fontSize = "0.85rem";
-    
+
     playBtn.addEventListener('click', async () => {
       playBtn.disabled = true;
       playBtn.textContent = "Loading...";
       try {
         const blob = await downloadFileXFTP(file_name, file_size, master_key, chunks, sender_onion, relay, null, false);
         const audioUrl = URL.createObjectURL(blob);
-        
+
         const audioPlayer = document.createElement('audio');
         audioPlayer.src = audioUrl;
         audioPlayer.controls = true;
         audioPlayer.autoplay = true;
         audioPlayer.style.display = "block";
         audioPlayer.style.marginTop = "6px";
-        
+
         audioContainer.appendChild(audioPlayer);
         playBtn.remove();
       } catch (err) {
@@ -2066,14 +2066,14 @@ function renderFileDownloadMessage(sender, envelope) {
     playBtn.className = "btn";
     playBtn.style.padding = "4px 8px";
     playBtn.style.fontSize = "0.85rem";
-    
+
     playBtn.addEventListener('click', async () => {
       playBtn.disabled = true;
       playBtn.textContent = "Loading...";
       try {
         const blob = await downloadFileXFTP(file_name, file_size, master_key, chunks, sender_onion, relay, null, false);
         const videoUrl = URL.createObjectURL(blob);
-        
+
         const videoPlayer = document.createElement('video');
         videoPlayer.src = videoUrl;
         videoPlayer.controls = true;
@@ -2082,7 +2082,7 @@ function renderFileDownloadMessage(sender, envelope) {
         videoPlayer.style.marginTop = "6px";
         videoPlayer.style.maxWidth = "280px";
         videoPlayer.style.borderRadius = "8px";
-        
+
         videoContainer.appendChild(videoPlayer);
         playBtn.remove();
       } catch (err) {
@@ -2108,7 +2108,7 @@ function renderFileDownloadMessage(sender, envelope) {
       btn.style.color = "#fff";
       btn.style.cursor = "pointer";
       btn.style.fontSize = "0.85rem";
-      
+
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         btn.style.background = "#8a8a8a";
@@ -2134,7 +2134,7 @@ function renderFileDownloadMessage(sender, envelope) {
       bodyDiv.appendChild(statusSpan);
     }
   }
-  
+
   msgEl.appendChild(senderSpan);
   msgEl.appendChild(bodyDiv);
   messagesEl.appendChild(msgEl);
@@ -2142,7 +2142,7 @@ function renderFileDownloadMessage(sender, envelope) {
 }
 
 function escapeHTML(str) {
-  return str.replace(/[&<>'"]/g, 
+  return str.replace(/[&<>'"]/g,
     tag => ({
       '&': '&amp;',
       '<': '&lt;',
@@ -2158,7 +2158,7 @@ disappearTimerSelect.addEventListener('change', async () => {
   const val = parseInt(disappearTimerSelect.value, 10);
   const mode = window.ANONYMUS_MODE || 'relay';
   const onion = mode === 'p2p' && activeContact ? activeContact.onion_address : (relaySession.theirQueueId || null);
-  
+
   if (onion) {
     await fetch('/api/messages/set_ttl', {
       method: 'POST',
@@ -2191,29 +2191,29 @@ async function startVideoCall() {
     document.getElementById('video-grid').style.display = 'flex';
     document.getElementById('btn-call').style.display = 'none';
     document.getElementById('btn-hangup').style.display = 'block';
-    
+
     const config = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'turn:anonymus.chat:3478', username: 'anonymus', credential: 'turnpassword' }
       ]
     };
-    
+
     peerConnection = new RTCPeerConnection({
       ...config,
       encodedInsertableStreams: true // Enable Insertable Streams API
     });
-    
+
     localStream.getTracks().forEach(track => {
       const sender = peerConnection.addTrack(track, localStream);
       setupSenderTransform(sender);
     });
-    
+
     peerConnection.ontrack = (event) => {
       document.getElementById('remote-video').srcObject = event.streams[0];
       setupReceiverTransform(event.receiver);
     };
-    
+
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         transmitPayload(JSON.stringify({
@@ -2222,15 +2222,15 @@ async function startVideoCall() {
         }));
       }
     };
-    
+
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
-    
+
     transmitPayload(JSON.stringify({
       type: 'webrtc_offer',
       sdp: offer.sdp
     }));
-    
+
     addStatusLine("Call initiated. Awaiting response...");
   } catch (err) {
     console.error("Error starting video call:", err);
@@ -2242,42 +2242,42 @@ async function startVideoCall() {
 async function handleWebRTCOffer(offerSdp) {
   try {
     if (peerConnection) return;
-    
+
     const accept = confirm("Incoming voice/video call request. Accept?");
     if (!accept) {
       transmitPayload(JSON.stringify({ type: 'webrtc_reject' }));
       return;
     }
-    
+
     addStatusLine("Answering video call...");
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     document.getElementById('local-video').srcObject = localStream;
     document.getElementById('video-grid').style.display = 'flex';
     document.getElementById('btn-call').style.display = 'none';
     document.getElementById('btn-hangup').style.display = 'block';
-    
+
     const config = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'turn:anonymus.chat:3478', username: 'anonymus', credential: 'turnpassword' }
       ]
     };
-    
+
     peerConnection = new RTCPeerConnection({
       ...config,
       encodedInsertableStreams: true
     });
-    
+
     localStream.getTracks().forEach(track => {
       const sender = peerConnection.addTrack(track, localStream);
       setupSenderTransform(sender);
     });
-    
+
     peerConnection.ontrack = (event) => {
       document.getElementById('remote-video').srcObject = event.streams[0];
       setupReceiverTransform(event.receiver);
     };
-    
+
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         transmitPayload(JSON.stringify({
@@ -2286,16 +2286,16 @@ async function handleWebRTCOffer(offerSdp) {
         }));
       }
     };
-    
+
     await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
-    
+
     transmitPayload(JSON.stringify({
       type: 'webrtc_answer',
       sdp: answer.sdp
     }));
-    
+
     addStatusLine("Call established.");
   } catch (err) {
     console.error("Error handling offer:", err);
@@ -2330,7 +2330,7 @@ function stopVideoCall() {
     localStream.getTracks().forEach(track => track.stop());
     localStream = null;
   }
-  
+
   document.getElementById('local-video').srcObject = null;
   document.getElementById('remote-video').srcObject = null;
   document.getElementById('video-grid').style.display = 'none';
@@ -2344,7 +2344,7 @@ function setupSenderTransform(sender) {
   const senderStreams = sender.createEncodedStreams();
   const readableStream = senderStreams.readable;
   const writableStream = senderStreams.writable;
-  
+
   const key = getCallEncryptionKey();
   const transformStream = new TransformStream({
     transform(encodedFrame, controller) {
@@ -2365,7 +2365,7 @@ function setupReceiverTransform(receiver) {
   const receiverStreams = receiver.createEncodedStreams();
   const readableStream = receiverStreams.readable;
   const writableStream = receiverStreams.writable;
-  
+
   const key = getCallEncryptionKey();
   const transformStream = new TransformStream({
     transform(encodedFrame, controller) {
@@ -2408,12 +2408,12 @@ async function initApp() {
     btnVerifyBadge.addEventListener('click', async () => {
       const sig = document.getElementById('supporter-badge-sig').value.trim();
       if (!sig) return;
-      
+
       const statusMsg = document.getElementById('badge-status-message');
       statusMsg.style.display = 'block';
       statusMsg.style.color = '#8a8886';
       statusMsg.textContent = 'Verifying signature...';
-      
+
       try {
         const res = await fetch('/api/profile/supporter_badge', {
           method: 'POST',
@@ -2442,7 +2442,7 @@ async function initApp() {
       }
     });
   }
-  
+
   // Register unified logout triggers
   const btnLogout = document.getElementById('btn-logout');
   if (btnLogout) btnLogout.addEventListener('click', handleSystemLogout);
@@ -2480,7 +2480,7 @@ async function initApp() {
       }
     });
   }
-  
+
   if (btnClearCache) {
     btnClearCache.addEventListener('click', () => {
       if (confirm("Clear local cache? Contacts and logs will be permanently deleted.")) {
@@ -2504,7 +2504,7 @@ async function initApp() {
   // Dispatch mode configurations
   if (mode === 'relay') {
     mountRelaySocketEvents();
-    
+
     // If client joins using a hash link
     const hasHash = window.location.hash.length > 1;
     if (hasHash) {
@@ -2532,27 +2532,27 @@ async function initApp() {
       const btnPasteConnect = document.getElementById('btn-paste-connect');
       if (btnPasteConnect) btnPasteConnect.addEventListener('click', acceptRelayInvite);
       const pasteInviteInput = document.getElementById('paste-invite-input');
-      
+
       generateRelayInvite();
     }
   } else {
     // P2P Mode startup
     mountP2PSocketEvents();
-    
+
     const btnAddContact = document.getElementById('btn-add-contact');
     if (btnAddContact) btnAddContact.addEventListener('click', addContactSubmit);
     const btnAcceptIncoming = document.getElementById('btn-accept-incoming');
     if (btnAcceptIncoming) btnAcceptIncoming.addEventListener('click', acceptIncomingRequest);
     const btnDenyIncoming = document.getElementById('btn-deny-incoming');
     if (btnDenyIncoming) btnDenyIncoming.addEventListener('click', denyIncomingRequest);
-    
+
     const myOnionDisplay = document.getElementById('my-onion-display');
     const infoRes = await fetch('/api/my_info');
     const info = await infoRes.json();
-    
+
     myOnionAddress = info.onion_address;
     myLocalUsername = info.local_username;
-    
+
     if (myOnionDisplay) {
       myOnionDisplay.textContent = myOnionAddress || "Loading Tor...";
       myOnionDisplay.addEventListener('click', () => {
@@ -2725,7 +2725,7 @@ async function initApp() {
             await transmitPayload(JSON.stringify(envelope), false, m.member_onion);
           }
         }
-        
+
         await fetch('/api/groups/remove_member', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -2734,7 +2734,7 @@ async function initApp() {
             member_onion: myOnionAddress
           })
         });
-        
+
         activeGroup = null;
         switchPanel('welcome');
         await loadGroupsList();
@@ -2763,7 +2763,7 @@ async function initApp() {
       const founderOnion = urlParams.get('onion');
       const groupId = urlParams.get('group_id');
       const groupName = urlParams.get('name');
-      
+
       switchPanel('join');
       const acceptBtn = document.getElementById('btn-accept-invite');
       if (acceptBtn) {
@@ -2783,7 +2783,7 @@ async function initApp() {
               })
             });
           }
-          
+
           const joinEnvelope = {
             type: 'x.grp.join_req',
             group_id: groupId,
@@ -2791,7 +2791,7 @@ async function initApp() {
             joiner_onion: myOnionAddress,
             joiner_nickname: myLocalUsername
           };
-          
+
           alert('Establishing connection and sending join request to founder...');
           let sent = false;
           for (let i = 0; i < 5; i++) {
@@ -2862,7 +2862,7 @@ function renderReactionInline(targetTimestamp, emoji, senderName) {
   badge.style.border = '1px solid rgba(255, 255, 255, 0.2)';
   badge.style.cursor = 'pointer';
   badge.style.transition = 'all 0.2s';
-  
+
   badge.addEventListener('mouseenter', () => {
     badge.style.background = 'rgba(255, 255, 255, 0.3)';
   });
@@ -2875,7 +2875,7 @@ function renderReactionInline(targetTimestamp, emoji, senderName) {
 
 function attachReactionPicker(msgEl, timestamp, sender) {
   msgEl.style.position = 'relative';
-  
+
   const reactBtn = document.createElement('button');
   reactBtn.className = 'message-react-btn';
   reactBtn.textContent = '➕';
@@ -2891,7 +2891,7 @@ function attachReactionPicker(msgEl, timestamp, sender) {
   reactBtn.style.opacity = '0';
   reactBtn.style.transition = 'opacity 0.2s';
   reactBtn.title = 'React to message';
-  
+
   msgEl.addEventListener('mouseenter', () => {
     reactBtn.style.opacity = '1';
   });
@@ -2955,13 +2955,13 @@ function attachReactionPicker(msgEl, timestamp, sender) {
     };
     setTimeout(() => document.addEventListener('click', dismiss), 0);
   });
-  
+
   msgEl.appendChild(reactBtn);
 }
 
 function updateTypingPreview(senderName, text) {
   let container = document.getElementById('typing-preview-container');
-  
+
   if (!text || text.trim() === '') {
     if (container) {
       container.remove();
@@ -3040,15 +3040,15 @@ async function loadGroupsList() {
       if (activeGroup && activeGroup.group_id === g.group_id) {
         li.className = 'active';
       }
-      
+
       const nameSpan = document.createElement('span');
       nameSpan.className = 'contact-name';
       nameSpan.textContent = g.name;
-      
+
       const descSpan = document.createElement('span');
       descSpan.className = 'contact-address';
       descSpan.textContent = "Founder: " + g.founder_onion.slice(0, 10) + '…';
-      
+
       li.appendChild(nameSpan);
       li.appendChild(descSpan);
       li.addEventListener('click', () => selectGroup(g));
@@ -3062,16 +3062,16 @@ async function loadGroupsList() {
 async function selectGroup(group) {
   activeGroup = group;
   activeContact = null;
-  
+
   // Highlight active sidebar item
   document.querySelectorAll('.contacts-list-p2p li').forEach(el => el.classList.remove('active'));
   const groupLi = Array.from(document.querySelectorAll('#groups-list li')).find(li => li.dataset.groupId === group.group_id);
   if (groupLi) groupLi.classList.add('active');
-  
+
   switchPanel('chat');
   const isChannel = group.is_channel === 1;
   chattingWithName.textContent = `${isChannel ? 'Channel' : 'Group'}: ${group.name}`;
-  
+
   // Toggle UI elements
   document.querySelectorAll('.mode-p2p-only').forEach(el => el.style.display = 'none');
   const groupCtrl = document.getElementById('group-header-controls');
@@ -3087,7 +3087,7 @@ async function selectGroup(group) {
   const sendBtn = document.getElementById('send-btn');
   const recordVoiceBtn = document.getElementById('btn-record-voice');
   const recordVideoBtn = document.getElementById('btn-record-video');
-  
+
   if (isChannel && !isFounder) {
     if (msgInput) {
       msgInput.disabled = true;
@@ -3105,7 +3105,7 @@ async function selectGroup(group) {
     if (recordVoiceBtn) recordVoiceBtn.disabled = false;
     if (recordVideoBtn) recordVideoBtn.disabled = false;
   }
-  
+
   messagesEl.replaceChildren();
   await loadGroupMessagesHistory(group.group_id);
 }
@@ -3129,10 +3129,10 @@ async function sendGroupMessage(groupId, text) {
     const res = await fetch(`/api/groups/${groupId}`);
     const data = await res.json();
     if (!data.group) return;
-    
+
     const members = data.members;
     const ts = Date.now();
-    
+
     // Save locally
     await fetch('/api/groups/save_message', {
       method: 'POST',
@@ -3145,7 +3145,7 @@ async function sendGroupMessage(groupId, text) {
         timestamp: ts
       })
     });
-    
+
     // Broadcast envelope
     const envelope = {
       type: 'x.grp.message',
@@ -3155,10 +3155,10 @@ async function sendGroupMessage(groupId, text) {
       content: text,
       timestamp: ts
     };
-    
+
     // Render locally
     addMessageLine('You', text, ts);
-    
+
     for (const m of members) {
       if (m.member_onion !== myOnionAddress) {
         await transmitPayload(JSON.stringify(envelope), false, m.member_onion);
@@ -3174,11 +3174,11 @@ async function openCreateGroupModal() {
   const modal = document.getElementById('create-group-modal');
   const contactsContainer = document.getElementById('create-group-contacts-list');
   contactsContainer.replaceChildren();
-  
+
   const res = await fetch('/api/contacts');
   const contacts = await res.json();
   const accepted = contacts.filter(c => c.status === 'accepted');
-  
+
   if (accepted.length === 0) {
     contactsContainer.textContent = "No accepted contacts to invite.";
   } else {
@@ -3189,18 +3189,18 @@ async function openCreateGroupModal() {
       label.style.gap = '8px';
       label.style.margin = '4px 0';
       label.style.color = 'var(--chat-text)';
-      
+
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.value = c.onion_address;
       checkbox.dataset.nickname = c.nickname;
-      
+
       label.appendChild(checkbox);
       label.appendChild(document.createTextNode(c.display_name || c.nickname));
       contactsContainer.appendChild(label);
     }
   }
-  
+
   modal.style.display = 'flex';
 }
 
@@ -3211,9 +3211,9 @@ async function submitCreateGroup() {
     alert("Please enter a group name.");
     return;
   }
-  
+
   const selectedOnions = Array.from(document.querySelectorAll('#create-group-contacts-list input[type="checkbox"]:checked')).map(cb => cb.value);
-  
+
   try {
     const isChannelChecked = document.getElementById('new-group-is-channel').checked ? 1 : 0;
     const res = await fetch('/api/groups/create', {
@@ -3228,7 +3228,7 @@ async function submitCreateGroup() {
     const data = await res.json();
     if (data.success) {
       const groupId = data.group_id;
-      
+
       // Save invited members locally
       for (const cb of document.querySelectorAll('#create-group-contacts-list input[type="checkbox"]:checked')) {
         await fetch('/api/groups/add_member', {
@@ -3242,7 +3242,7 @@ async function submitCreateGroup() {
           })
         });
       }
-      
+
       // Send invite E2EE payload to each member
       const inviteEnvelope = {
         type: 'x.grp.invite',
@@ -3254,7 +3254,7 @@ async function submitCreateGroup() {
       for (const onion of selectedOnions) {
         await transmitPayload(JSON.stringify(inviteEnvelope), false, onion);
       }
-      
+
       document.getElementById('create-group-modal').style.display = 'none';
       nameInput.value = '';
       await loadGroupsList();
@@ -3270,7 +3270,7 @@ async function copyGroupInviteLink(groupId) {
     const resGroup = await fetch(`/api/groups/${groupId}`);
     const data = await resGroup.json();
     const groupName = data.group.name;
-    
+
     const resToken = await fetch('/api/groups/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3291,15 +3291,15 @@ async function copyGroupInviteLink(groupId) {
 async function loadGroupInfoPane(groupId) {
   const listContainer = document.getElementById('group-members-list');
   listContainer.replaceChildren();
-  
+
   try {
     const res = await fetch(`/api/groups/${groupId}`);
     const data = await res.json();
     const members = data.members;
-    
+
     const resVouches = await fetch(`/api/groups/${groupId}/vouches`);
     const vouches = await resVouches.json();
-    
+
     for (const m of members) {
       const item = document.createElement('div');
       item.style.display = 'flex';
@@ -3308,33 +3308,33 @@ async function loadGroupInfoPane(groupId) {
       item.style.padding = '4px 8px';
       item.style.background = 'rgba(255, 255, 255, 0.05)';
       item.style.borderRadius = '4px';
-      
+
       const details = document.createElement('div');
-      
+
       const name = document.createElement('strong');
       name.textContent = m.nickname;
       name.style.color = 'var(--chat-text)';
-      
+
       const roleBadge = document.createElement('span');
       roleBadge.textContent = ` [${m.role}]`;
       roleBadge.style.fontSize = '0.75rem';
       roleBadge.style.color = '#0078d4';
-      
+
       // Vouch stats
       const memberVouches = vouches.filter(v => v.vouched_member === m.member_onion);
       const vouchCount = memberVouches.length;
-      
+
       const vouchText = document.createElement('span');
       vouchText.textContent = ` (Vouched: ${vouchCount})`;
       vouchText.style.fontSize = '0.8rem';
       vouchText.style.color = '#8a8a8a';
-      
+
       details.appendChild(name);
       details.appendChild(roleBadge);
       details.appendChild(vouchText);
-      
+
       item.appendChild(details);
-      
+
       // If not me and we haven't vouched for them yet, show Vouch button
       const hasVouched = vouches.some(v => v.vouching_member === myOnionAddress && v.vouched_member === m.member_onion);
       if (m.member_onion !== myOnionAddress && !hasVouched) {
@@ -3353,7 +3353,7 @@ async function loadGroupInfoPane(groupId) {
               vouched_member: m.member_onion
             })
           });
-          
+
           // Broadcast vouch E2EE payload to all members
           const vouchEnvelope = {
             type: 'x.grp.vouch',
@@ -3366,12 +3366,12 @@ async function loadGroupInfoPane(groupId) {
               await transmitPayload(JSON.stringify(vouchEnvelope), false, mem.member_onion);
             }
           }
-          
+
           loadGroupInfoPane(groupId);
         });
         item.appendChild(btnVouch);
       }
-      
+
       listContainer.appendChild(item);
     }
   } catch (err) {
@@ -3412,26 +3412,26 @@ async function initVoiceRecording() {
   try {
     recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     recordingChunks = [];
-    
+
     mediaRecorder = new MediaRecorder(recordingStream, { mimeType: 'audio/webm' });
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) recordingChunks.push(e.data);
     };
-    
+
     mediaRecorder.onstop = async () => {
       const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
       const file = new File([audioBlob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
       await uploadAndSendMediaMessage(file);
       cleanupRecordingStream();
     };
-    
+
     // UI changes
     document.getElementById('recording-overlay').style.display = 'flex';
     document.getElementById('message-input').style.display = 'none';
     document.getElementById('btn-record-voice').style.display = 'none';
     document.getElementById('btn-record-video').style.display = 'none';
     document.getElementById('send-btn').style.display = 'none';
-    
+
     startRecordingTimer(document.getElementById('recording-timer'));
     mediaRecorder.start();
   } catch (err) {
@@ -3482,15 +3482,15 @@ let videoChunks = [];
 async function initVideoRecording() {
   const modal = document.getElementById('video-record-modal');
   const preview = document.getElementById('video-record-preview');
-  
+
   try {
     videoRecordingStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     preview.srcObject = videoRecordingStream;
-    
+
     document.getElementById('btn-start-video-record').style.display = 'block';
     document.getElementById('btn-stop-video-record').style.display = 'none';
     document.getElementById('video-record-timer').textContent = "0:00";
-    
+
     modal.style.display = 'flex';
   } catch (err) {
     console.error("Failed to access camera/mic for video note:", err);
@@ -3504,17 +3504,17 @@ function startVideoRecording() {
   videoMediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) videoChunks.push(e.data);
   };
-  
+
   videoMediaRecorder.onstop = async () => {
     const videoBlob = new Blob(videoChunks, { type: 'video/webm' });
     const file = new File([videoBlob], `video_note_${Date.now()}.webm`, { type: 'video/webm' });
     await uploadAndSendMediaMessage(file);
     cleanupVideoRecording();
   };
-  
+
   document.getElementById('btn-start-video-record').style.display = 'none';
   document.getElementById('btn-stop-video-record').style.display = 'block';
-  
+
   startRecordingTimer(document.getElementById('video-record-timer'));
   videoMediaRecorder.start();
 }
@@ -3544,7 +3544,7 @@ function cleanupVideoRecording() {
 // Media upload and E2EE dispatch
 async function uploadAndSendMediaMessage(file) {
   addStatusLine(`Uploading media note "${file.name}"...`);
-  
+
   try {
     const result = await uploadFileXFTP(file, (current, total) => {
       const pct = Math.round((current / total) * 100);
@@ -3581,18 +3581,18 @@ async function uploadAndSendMediaMessage(file) {
 async function loadProfilesList() {
   const select = document.getElementById('profile-select');
   if (!select) return;
-  
+
   try {
     const res = await fetch('/api/profiles');
     const profiles = await res.json();
-    
+
     select.innerHTML = '';
-    
+
     const optDefault = document.createElement('option');
     optDefault.value = 'default';
     optDefault.textContent = 'Default Profile';
     select.appendChild(optDefault);
-    
+
     profiles.forEach(p => {
       if (p.profile_id !== 'default') {
         const opt = document.createElement('option');
@@ -3601,18 +3601,18 @@ async function loadProfilesList() {
         select.appendChild(opt);
       }
     });
-    
+
     const activeRes = await fetch('/api/profiles/active');
     const activeProf = await activeRes.json();
     activeProfileId = activeProf.profile_id;
-    
+
     if (activeProf.hidden) {
       const optHidden = document.createElement('option');
       optHidden.value = activeProf.profile_id;
       optHidden.textContent = `🔒 ${activeProf.display_name}`;
       select.appendChild(optHidden);
     }
-    
+
     select.value = activeProfileId;
   } catch (err) {
     console.error("Failed to load profiles:", err);
@@ -3631,12 +3631,12 @@ async function handleProfileChange(e) {
     if (data.success) {
       activeProfileId = profileId;
       addStatusLine(`Switched to profile: ${profileId === 'default' ? 'Default' : profileId}`);
-      
+
       activeContact = null;
       activeGroup = null;
       document.getElementById('chat-header-title').textContent = 'Select a peer or group to start chatting';
       document.getElementById('messages').innerHTML = '';
-      
+
       await loadContactsList();
       await loadGroupsList();
       await loadProfilesList();
@@ -3654,7 +3654,7 @@ async function submitCreateProfile() {
   const name = document.getElementById('new-profile-name').value.trim();
   const makeHidden = document.getElementById('profile-hidden-checkbox').checked;
   const passphrase = document.getElementById('new-profile-passphrase').value.trim();
-  
+
   if (!name) {
     alert("Profile display name is required.");
     return;
@@ -3663,7 +3663,7 @@ async function submitCreateProfile() {
     alert("Passphrase is required for hidden profiles.");
     return;
   }
-  
+
   try {
     const res = await fetch('/api/profiles/create', {
       method: 'POST',
@@ -3681,7 +3681,7 @@ async function submitCreateProfile() {
       document.getElementById('profile-hidden-checkbox').checked = false;
       document.getElementById('new-profile-passphrase').value = '';
       document.getElementById('profile-passphrase-section').style.display = 'none';
-      
+
       addStatusLine(`Created profile: ${name}`);
       await loadProfilesList();
     } else {
@@ -3698,7 +3698,7 @@ async function submitUnlockProfile() {
     alert("Passphrase is required.");
     return;
   }
-  
+
   try {
     const res = await fetch('/api/profiles/unlock', {
       method: 'POST',
@@ -3709,15 +3709,15 @@ async function submitUnlockProfile() {
     if (data.success) {
       document.getElementById('unlock-profile-modal').style.display = 'none';
       document.getElementById('unlock-profile-passphrase').value = '';
-      
+
       activeProfileId = data.profile.profile_id;
       addStatusLine(`Unlocked hidden profile: ${data.profile.display_name}`);
-      
+
       activeContact = null;
       activeGroup = null;
       document.getElementById('chat-header-title').textContent = 'Select a peer or group to start chatting';
       document.getElementById('messages').innerHTML = '';
-      
+
       await loadContactsList();
       await loadGroupsList();
       await loadProfilesList();
@@ -3755,7 +3755,7 @@ async function submitPushSync() {
     alert("Please paste the partner pairing payload.");
     return;
   }
-  
+
   let payload;
   try {
     payload = JSON.parse(payloadStr);
@@ -3763,14 +3763,14 @@ async function submitPushSync() {
     alert("Invalid credentials format. Must be JSON.");
     return;
   }
-  
+
   try {
     const res = await fetch('/api/sync/push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    
+
     const data = await res.json();
     if (res.status === 200 && data.success) {
       alert("Database backup successfully synchronized with partner device!");

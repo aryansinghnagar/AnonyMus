@@ -13,7 +13,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        
+
         val appName = project.findProperty("GLOBAL_APP_NAME") as? String ?: "AnonyMus"
         val urlScheme = project.findProperty("GLOBAL_URL_SCHEME") as? String ?: "anonymus"
         val urlHostJoin = project.findProperty("GLOBAL_URL_HOST_JOIN") as? String ?: "join"
@@ -99,7 +99,7 @@ dependencies {
   // Navigation
   implementation("androidx.navigation:navigation-compose:2.7.7")
   implementation(libs.socketio.client)
-  
+
   // QR Code generation
   implementation("com.google.zxing:core:3.5.3")
   implementation(libs.androidx.security.crypto)

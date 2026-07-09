@@ -51,7 +51,7 @@
     <div id="warning-banner" class="warning-banner"></div>
 
     <div class="main">
-      
+
       <!-- P2P SIDEBAR: Directory -->
       <aside class="sidebar sidebar-p2p mode-p2p-only">
         <div class="sidebar-section" style="margin-bottom: 12px;">
@@ -111,7 +111,7 @@
           <button id="btn-copy-invite" class="btn" aria-label="Copy Link">Copy Invite Link</button>
 
           <hr style="margin: 2rem 0; border: 1px solid var(--chat-border);">
-          
+
           <h3>Or Enter Invite Link</h3>
           <input type="text" id="paste-invite-input" placeholder="Paste invite link..." autocomplete="off" aria-label="Paste invite link">
           <button class="btn" id="btn-paste-connect">Connect</button>
@@ -169,7 +169,7 @@
               <button id="btn-leave-group" class="btn" style="padding: 4px 10px; font-size: 0.85rem; background: #d83b01; color: white; border: none;">Leave</button>
             </div>
             <div class="disappear-control">
-              Keep Messages: 
+              Keep Messages:
               <select id="disappear-timer">
                 <option value="0">Off (Session)</option>
                 <option value="15">15 Seconds</option>
@@ -200,16 +200,16 @@
             <button type="button" id="attach-btn" class="btn-icon" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-right: 4px;" title="Attach File" aria-label="Attach File">📎</button>
             <button type="button" id="btn-record-voice" class="btn-icon" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-right: 4px;" title="Record Voice Note" aria-label="Record Voice Note">🎙️</button>
             <button type="button" id="btn-record-video" class="btn-icon" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-right: 8px;" title="Record Video Note" aria-label="Record Video Note">📹</button>
-            
+
             <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" aria-label="Type a message" style="flex: 1;">
-            
+
             <div id="recording-overlay" style="display: none; align-items: center; gap: 8px; flex: 1; padding: 0 12px; font-style: italic; color: #d83b01;">
               <span class="recording-dot" style="width: 8px; height: 8px; background: red; border-radius: 50%; display: inline-block; animation: pulse-dot 1s infinite alternate;"></span>
               Recording Voice... <span id="recording-timer">0:00</span>
               <button type="button" id="btn-cancel-recording" class="btn" style="padding: 2px 6px; font-size: 0.75rem; margin-left: auto;">Cancel</button>
               <button type="button" id="btn-stop-recording" class="btn btn-primary" style="padding: 2px 6px; font-size: 0.75rem; background: #0078d4; color: white; border: none;">Send</button>
             </div>
-            
+
             <button type="submit" id="send-btn">Send</button>
           </form>
 
@@ -444,7 +444,7 @@
     <div class="settings-modal-card" style="max-width: 400px; padding: 20px; border-radius: 12px; background: var(--chat-bg); color: var(--chat-text);">
       <h3 style="margin-top: 0; margin-bottom: 12px;">Create Decentralized Group</h3>
       <input type="text" id="new-group-name" class="input-p2p" placeholder="Group Name" autocomplete="off" style="width: 100%; margin-bottom: 16px; box-sizing: border-box;">
-      
+
       <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
         <input type="checkbox" id="new-group-is-channel" style="width: auto; margin: 0;">
         <label for="new-group-is-channel" style="cursor: pointer; font-size: 0.9rem; color: var(--chat-text);">Create as Broadcast Channel (only creator can post)</label>
@@ -454,7 +454,7 @@
       <div id="create-group-contacts-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--chat-border); padding: 8px; border-radius: 6px;">
         <!-- Checkbox list of contacts -->
       </div>
-      
+
       <div style="display: flex; justify-content: flex-end; gap: 8px;">
         <button id="btn-cancel-create-group" class="btn">Cancel</button>
         <button id="btn-submit-create-group" class="btn btn-primary" style="background: #0078d4; color: white; border: none;">Create</button>
@@ -467,7 +467,7 @@
     <div class="settings-modal-card" style="max-width: 400px; padding: 20px; border-radius: 12px; background: var(--chat-bg); color: var(--chat-text);">
       <h3 style="margin-top: 0; margin-bottom: 12px;">Create New Profile</h3>
       <input type="text" id="new-profile-name" class="input-p2p" placeholder="Profile Display Name" autocomplete="off" style="width: 100%; margin-bottom: 12px; box-sizing: border-box;">
-      
+
       <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
         <input type="checkbox" id="profile-hidden-checkbox">
         <label for="profile-hidden-checkbox" style="font-weight: bold; cursor: pointer;">Make Hidden Profile (Decoy)</label>

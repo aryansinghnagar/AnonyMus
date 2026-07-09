@@ -143,10 +143,10 @@ class DoubleRatchetSession {
       true,
       []
     );
-    
+
     const dhOut = await computeDH(session.dhPrivateKey, session.dhRemotePublicKey);
     const derived = await hkdfDerive512(dhOut, new TextEncoder().encode("AnonyMus-DR-RootRatchet"), sharedSecret);
-    
+
     session.rootKey = new Uint8Array(derived.slice(0, 32));
     session.sendingChainKey = new Uint8Array(derived.slice(32, 64));
     session.receivingChainKey = null;
@@ -173,7 +173,7 @@ class DoubleRatchetSession {
     const derived = await hkdfDerive512(new Uint8Array(32), new TextEncoder().encode("AnonyMus-DR-ChainRatchet"), this.sendingChainKey);
     const messageKey = new Uint8Array(derived.slice(0, 32));
     this.sendingChainKey = new Uint8Array(derived.slice(32, 64));
-    
+
     const myPubBytes = new Uint8Array(await crypto.subtle.exportKey('raw', this.dhPublicKey || this.dhPrivateKey.publicKey));
     const seq = this.seqSend;
     this.seqSend += 1;
@@ -183,13 +183,13 @@ class DoubleRatchetSession {
   async decrypt(peerDhPubBytes, seq, prevChainLen) {
     const peerB64 = toBase64(peerDhPubBytes);
     const skipKey = `${peerB64}_${seq}`;
-    
+
     if (this.skippedMessageKeys[skipKey]) {
       const keyHex = this.skippedMessageKeys[skipKey];
       delete this.skippedMessageKeys[skipKey];
       return fromHex(keyHex);
     }
-    
+
     const peerDhPub = await crypto.subtle.importKey(
       'raw',
       peerDhPubBytes,
@@ -197,41 +197,41 @@ class DoubleRatchetSession {
       true,
       []
     );
-    
+
     let dhChanged = false;
     const currentRemoteBytes = this.dhRemotePublicKey ? new Uint8Array(await crypto.subtle.exportKey('raw', this.dhRemotePublicKey)) : null;
-    
+
     if (!currentRemoteBytes || !equals(currentRemoteBytes, peerDhPubBytes)) {
       await this.skipMessages(prevChainLen);
-      
+
       this.dhRemotePublicKey = peerDhPub;
       const dhOut1 = await computeDH(this.dhPrivateKey, this.dhRemotePublicKey);
       const derived1 = await hkdfDerive512(dhOut1, new TextEncoder().encode("AnonyMus-DR-RootRatchet"), this.rootKey);
       this.rootKey = new Uint8Array(derived1.slice(0, 32));
       this.receivingChainKey = new Uint8Array(derived1.slice(32, 64));
-      
+
       const keyPair = await generateKeyPair();
       this.dhPrivateKey = keyPair.privateKey;
       this.dhPublicKey = keyPair.publicKey;
-      
+
       const dhOut2 = await computeDH(this.dhPrivateKey, this.dhRemotePublicKey);
       const derived2 = await hkdfDerive512(dhOut2, new TextEncoder().encode("AnonyMus-DR-RootRatchet"), this.rootKey);
       this.rootKey = new Uint8Array(derived2.slice(0, 32));
       this.sendingChainKey = new Uint8Array(derived2.slice(32, 64));
-      
+
       this.prevChainLength = this.seqSend;
       this.seqSend = 0;
       this.seqRecv = 0;
       dhChanged = true;
     }
-    
+
     await this.skipMessages(seq);
-    
+
     const derived = await hkdfDerive512(new Uint8Array(32), new TextEncoder().encode("AnonyMus-DR-ChainRatchet"), this.receivingChainKey);
     const messageKey = new Uint8Array(derived.slice(0, 32));
     this.receivingChainKey = new Uint8Array(derived.slice(32, 64));
     this.seqRecv += 1;
-    
+
     return messageKey;
   }
 
@@ -244,7 +244,7 @@ class DoubleRatchetSession {
       const derived = await hkdfDerive512(new Uint8Array(32), new TextEncoder().encode("AnonyMus-DR-ChainRatchet"), this.receivingChainKey);
       const msgKey = new Uint8Array(derived.slice(0, 32));
       this.receivingChainKey = new Uint8Array(derived.slice(32, 64));
-      
+
       const peerPubBytes = new Uint8Array(await crypto.subtle.exportKey('raw', this.dhRemotePublicKey));
       const peerB64 = toBase64(peerPubBytes);
       const skipKey = `${peerB64}_${this.seqRecv}`;
@@ -259,7 +259,7 @@ async function serializeSession(session) {
   const privB64 = session.dhPrivateKey ? toBase64(await crypto.subtle.exportKey('pkcs8', session.dhPrivateKey)) : null;
   const pubB64 = session.dhPublicKey ? toBase64(await crypto.subtle.exportKey('raw', session.dhPublicKey)) : null;
   const remB64 = session.dhRemotePublicKey ? toBase64(await crypto.subtle.exportKey('raw', session.dhRemotePublicKey)) : null;
-  
+
   return JSON.stringify({
     dhPrivateKeyPKCS8: privB64,
     dhPublicKeyRaw: pubB64,
@@ -278,7 +278,7 @@ async function deserializeSession(jsonStr) {
   if (!jsonStr) return null;
   const data = JSON.parse(jsonStr);
   const session = new DoubleRatchetSession();
-  
+
   if (data.dhPrivateKeyPKCS8) {
     session.dhPrivateKey = await crypto.subtle.importKey(
       'pkcs8',
@@ -309,7 +309,7 @@ async function deserializeSession(jsonStr) {
   if (data.rootKeyHex) session.rootKey = fromHex(data.rootKeyHex);
   if (data.sendingChainKeyHex) session.sendingChainKey = fromHex(data.sendingChainKeyHex);
   if (data.receivingChainKeyHex) session.receivingChainKey = fromHex(data.receivingChainKeyHex);
-  
+
   session.seqSend = data.seqSend || 0;
   session.seqRecv = data.seqRecv || 0;
   session.prevChainLength = data.prevChainLength || 0;
@@ -349,17 +349,17 @@ function constructAAD(role, seqNum, sessionId, protocolVersion = 2) {
     view.setUint32(1, seqNum, false);
     return aad;
   }
-  
+
   const aad = new Uint8Array(1 + 4 + 16 + 1);
   aad[0] = role.charCodeAt(0);
   const view = new DataView(aad.buffer);
   view.setUint32(1, seqNum, false);
-  
+
   const encoder = new TextEncoder();
   const sessionBytes = encoder.encode(sessionId || "");
   const truncatedSession = new Uint8Array(16);
   truncatedSession.set(sessionBytes.slice(0, 16));
-  
+
   aad.set(truncatedSession, 5);
   aad[21] = protocolVersion;
   return aad;
@@ -367,12 +367,12 @@ function constructAAD(role, seqNum, sessionId, protocolVersion = 2) {
 
 async function encryptMessageV2(drSession, plaintext, role, sessionId, myPrivateKeyObj, peerPublicKeyObj) {
   const { messageKey, myPubBytes, seq, prevChainLen } = await drSession.encrypt();
-  
+
   // 1. Inner AES-GCM Encryption
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const textBytes = new TextEncoder().encode(plaintext);
   const textLen = textBytes.length;
-  
+
   const PADDED_SIZE = 16384;
   let paddedLength = PADDED_SIZE;
   if (textLen + 4 > paddedLength) {
@@ -382,7 +382,7 @@ async function encryptMessageV2(drSession, plaintext, role, sessionId, myPrivate
   const view = new DataView(paddedBuffer.buffer);
   view.setUint32(0, textLen, false);
   paddedBuffer.set(textBytes, 4);
-  
+
   if (paddedLength > textLen + 4) {
     const paddingBytes = new Uint8Array(paddedLength - textLen - 4);
     crypto.getRandomValues(paddingBytes);
@@ -413,7 +413,7 @@ async function encryptMessageV2(drSession, plaintext, role, sessionId, myPrivate
   const pkcs8 = await crypto.subtle.exportKey('pkcs8', myPrivateKeyObj);
   const myRawPriv = getRawPrivateKey(pkcs8);
   const peerRawPub = new Uint8Array(await crypto.subtle.exportKey('raw', peerPublicKeyObj));
-  
+
   const boxNonce = crypto.getRandomValues(new Uint8Array(24));
   const boxCiphertext = nacl.box(innerPayload, boxNonce, peerRawPub, myRawPriv);
 
@@ -469,11 +469,11 @@ async function decryptMessageV2(drSession, payload, role, sessionId, myPrivateKe
 
   const view = new DataView(decryptedBuffer);
   const textLen = view.getUint32(0, false);
-  
+
   if (textLen > decryptedBuffer.byteLength - 4) {
     return null;
   }
-  
+
   const textBytes = new Uint8Array(decryptedBuffer, 4, textLen);
   return new TextDecoder().decode(textBytes);
 }
@@ -508,7 +508,7 @@ async function decryptMessage(keyOrSession, ivBase64, ciphertextBase64, role, se
       const view = new DataView(decryptedBuffer);
       const textLen = view.getUint32(0, false);
       if (textLen > decryptedBuffer.byteLength - 4) return null;
-      
+
       const textBytes = new Uint8Array(decryptedBuffer, 4, textLen);
       return new TextDecoder().decode(textBytes);
     }
@@ -636,4 +636,3 @@ async function decryptChunk(encryptedBytes, rawKey) {
     ciphertext
   );
 }
-

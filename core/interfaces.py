@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Any
+
 
 class TransportProvider(ABC):
     """Contract every AnonyMus transport (relay, p2p) must satisfy."""
 
     @abstractmethod
-    def start(self, config: Dict[str, Any]) -> None:
+    def start(self, config: dict[str, Any]) -> None:
         """Boot the transport (start server, init Tor, register mDNS, etc.)."""
 
     @abstractmethod
@@ -21,9 +22,9 @@ class TransportProvider(ABC):
         """Gracefully transfer session state to another transport (for mode switch)."""
 
     @abstractmethod
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         """Return transport health metrics (bootstrap %, queue depth, etc.)."""
 
     @abstractmethod
-    def describe(self) -> Dict[str, str]:
+    def describe(self) -> dict[str, str]:
         """Return static metadata: mode name, version, capabilities."""

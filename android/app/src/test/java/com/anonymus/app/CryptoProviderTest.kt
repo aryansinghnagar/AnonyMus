@@ -10,19 +10,19 @@ class CryptoProviderTest {
     @Test
     fun testJceCryptoParity() {
         val provider = JceCryptoProvider()
-        
+
         // Key Generation
         val keyPairA = provider.generateKeyPair()
         val keyPairB = provider.generateKeyPair()
-        
+
         val pubA = provider.exportPublicKey(keyPairA.public)
         val pubB = provider.exportPublicKey(keyPairB.public)
-        
+
         // Safety numbers match
         val sn1 = provider.computeSafetyNumber(pubA, pubB)
         val sn2 = provider.computeSafetyNumber(pubB, pubA)
         assertEquals(sn1, sn2)
-        
+
         // Session Key Derivation
         val sessionKeysA = provider.deriveSessionKeys(
             keyPairA.private,
@@ -36,35 +36,35 @@ class CryptoProviderTest {
             pubB,
             pubA
         )
-        
+
         // Chain key derivation
         val chainA = provider.deriveChainKeys(sessionKeysA.writeKey)
         val chainB = provider.deriveChainKeys(sessionKeysB.readKey)
-        
+
         // Encryption / Decryption
         val plaintext = "Hello World!"
         val enc = provider.encryptMessage(chainA.first, plaintext, "A", 0, sn1)
         val dec = provider.decryptMessage(chainB.first, enc.iv, enc.ciphertext, "A", 0, sn1)
-        
+
         assertEquals(plaintext, dec)
     }
 
     @Test
     fun testTinkCryptoParity() {
         val provider = TinkCryptoProvider()
-        
+
         // Key Generation
         val keyPairA = provider.generateKeyPair()
         val keyPairB = provider.generateKeyPair()
-        
+
         val pubA = provider.exportPublicKey(keyPairA.public)
         val pubB = provider.exportPublicKey(keyPairB.public)
-        
+
         // Safety numbers match
         val sn1 = provider.computeSafetyNumber(pubA, pubB)
         val sn2 = provider.computeSafetyNumber(pubB, pubA)
         assertEquals(sn1, sn2)
-        
+
         // Session Key Derivation
         val sessionKeysA = provider.deriveSessionKeys(
             keyPairA.private,
@@ -78,16 +78,16 @@ class CryptoProviderTest {
             pubB,
             pubA
         )
-        
+
         // Chain key derivation
         val chainA = provider.deriveChainKeys(sessionKeysA.writeKey)
         val chainB = provider.deriveChainKeys(sessionKeysB.readKey)
-        
+
         // Encryption / Decryption
         val plaintext = "Hello World!"
         val enc = provider.encryptMessage(chainA.first, plaintext, "A", 0, sn1)
         val dec = provider.decryptMessage(chainB.first, enc.iv, enc.ciphertext, "A", 0, sn1)
-        
+
         assertEquals(plaintext, dec)
     }
 
@@ -95,12 +95,12 @@ class CryptoProviderTest {
     fun testCrossProviderKat() {
         val tinkProvider = TinkCryptoProvider()
         val jceProvider = JceCryptoProvider()
-        
+
         val fixedRootKey = ByteArray(32) { i -> i.toByte() }
-        
+
         val tinkChain = tinkProvider.deriveChainKeys(fixedRootKey)
         val jceChain = jceProvider.deriveChainKeys(fixedRootKey)
-        
+
         assertArrayEquals(tinkChain.first, jceChain.first) // messageKey
         assertArrayEquals(tinkChain.second, jceChain.second) // nextChainKey
     }

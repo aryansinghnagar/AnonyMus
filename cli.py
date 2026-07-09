@@ -3,26 +3,30 @@ Terminal CLI Client for AnonyMus (P2P Architecture).
 Provides a command-line REPL shell using cmd.Cmd and the AnonyMus Python SDK.
 """
 
+import cmd
+import getpass
 import os
 import sys
-import cmd
 import time
-import getpass
+
 from core.sdk import AnonyMusClient
 
 ASCII_ART = r"""
-    ___                            __  ___           
-   /   |  ____  ____  ____  __  __/  |/  /_  _______ 
-  / /| | / __ \/ __ \/ __ \/ / / / /|_/ / / / / ___/ 
- / ___ |/ / / / /_/ / / / / /_/ / /  / / /_/ (__  )  
-/_/  |_/_/ /_/\____/_/ /_/\__, /_/  /_/\__,_/____/   
-                         /____/                      
+    ___                            __  ___
+   /   |  ____  ____  ____  __  __/  |/  /_  _______
+  / /| | / __ \/ __ \/ __ \/ / / / /|_/ / / / / ___/
+ / ___ |/ / / / /_/ / / / / /_/ / /  / / /_/ (__  )
+/_/  |_/_/ /_/\____/_/ /_/\__, /_/  /_/\__,_/____/
+                         /____/
              Terminal Client v0.9.0-beta
 """
 
+
 class AnonyMusShell(cmd.Cmd):
-    intro = 'Welcome to the AnonyMus Terminal Client. Type help or ? to list commands.\n'
-    prompt = '(anonymus) '
+    intro = (
+        "Welcome to the AnonyMus Terminal Client. Type help or ? to list commands.\n"
+    )
+    prompt = "(anonymus) "
 
     def __init__(self, client):
         super().__init__()
@@ -32,7 +36,9 @@ class AnonyMusShell(cmd.Cmd):
 
     def _on_incoming_message(self, sender, text, timestamp):
         # Format timestamp
-        local_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp / 1000.0))
+        local_time = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(timestamp / 1000.0)
+        )
         sys.stdout.write(f"\n[{local_time}] Incoming from {sender}:\n  {text}\n")
         sys.stdout.write(self.prompt)
         sys.stdout.flush()
@@ -57,14 +63,18 @@ class AnonyMusShell(cmd.Cmd):
             if not contacts:
                 print("No contacts found.")
                 return
-                
-            print(f"\n{'Nickname':<15} | {'Onion Address':<60} | {'Status':<18} | {'Safety Number':<25}")
+
+            print(
+                f"\n{'Nickname':<15} | {'Onion Address':<60} | {'Status':<18} | {'Safety Number':<25}"
+            )
             print("-" * 125)
             for c in contacts:
                 onion = c.get("onion_address")
                 status = c.get("status")
                 safety_num = self.client.session_ids.get(onion, "N/A")
-                print(f"{c.get('nickname'):<15} | {onion:<60} | {status:<18} | {safety_num[:25]}")
+                print(
+                    f"{c.get('nickname'):<15} | {onion:<60} | {status:<18} | {safety_num[:25]}"
+                )
             print("")
         except Exception as e:
             print(f"Error: {e}")
@@ -77,7 +87,7 @@ class AnonyMusShell(cmd.Cmd):
             return
         onion = parts[0].strip().lower()
         nickname = parts[1].strip()
-        
+
         success = self.client.add_contact(onion, nickname)
         if success:
             print(f"Handshake request successfully sent to {onion}!")
@@ -104,7 +114,7 @@ class AnonyMusShell(cmd.Cmd):
             return
         onion = parts[0].strip().lower()
         text = parts[1].strip()
-        
+
         success = self.client.send_message(onion, text)
         if success:
             print("Message encrypted and queued for delivery.")
@@ -121,11 +131,13 @@ class AnonyMusShell(cmd.Cmd):
         if not msgs:
             print("No messages found or decryption failed.")
             return
-            
+
         print(f"\n--- Chat History with {onion} ---")
         for m in msgs:
-            local_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(m['timestamp'] / 1000.0))
-            sender_label = "Me" if m['sender'] == 'me' else "Peer"
+            local_time = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(m["timestamp"] / 1000.0)
+            )
+            sender_label = "Me" if m["sender"] == "me" else "Peer"
             print(f"[{local_time}] {sender_label}: {m['text']}")
         print("---------------------------------\n")
 
@@ -143,40 +155,42 @@ class AnonyMusShell(cmd.Cmd):
 
 def main():
     print(ASCII_ART)
-    port = os.environ.get('PORT', 5000)
+    port = os.environ.get("PORT", 5000)
     base_url = f"http://127.0.0.1:{port}"
-    
+
     client = AnonyMusClient(base_url=base_url)
-    
+
     # Simple interactive auth
     print("Welcome! Please log in or register.")
     while True:
-        action = input("Choose action (login [l], register [r], quit [q]): ").strip().lower()
-        if action in ('l', 'login'):
+        action = (
+            input("Choose action (login [l], register [r], quit [q]): ").strip().lower()
+        )
+        if action in ("l", "login"):
             username = input("Username: ").strip()
             password = getpass.getpass("Password: ")
-            
+
             print("Authenticating...")
             if client.login(username, password):
                 print(f"Logged in successfully as '{username}'!")
                 break
             else:
                 print("Login failed. Check server status or credentials.")
-        elif action in ('r', 'register'):
+        elif action in ("r", "register"):
             username = input("New Username: ").strip()
             password = getpass.getpass("New Password: ")
             confirm = getpass.getpass("Confirm Password: ")
             if password != confirm:
                 print("Passwords do not match.")
                 continue
-                
+
             print("Registering...")
             res = client.register(username, password)
             if res.get("success"):
                 print("Registration successful! You can now log in.")
             else:
                 print(f"Registration failed: {res.get('error', 'unknown error')}")
-        elif action in ('q', 'quit', 'exit'):
+        elif action in ("q", "quit", "exit"):
             print("Exiting...")
             sys.exit(0)
         else:
@@ -186,5 +200,5 @@ def main():
     shell.cmdloop()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

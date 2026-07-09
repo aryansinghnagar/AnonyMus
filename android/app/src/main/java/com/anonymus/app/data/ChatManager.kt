@@ -103,7 +103,7 @@ class ChatManager(
         private set
     var recvSeq = 0
         private set
-    
+
     var sessionId: String? = null
         private set
     var safetyNumber: String? = null
@@ -129,7 +129,7 @@ class ChatManager(
 
     private val _typingPreview = MutableStateFlow<String?>(null)
     val typingPreview: StateFlow<String?> = _typingPreview.asStateFlow()
-    
+
     // Disappearing Messages
     private val _disappearTimerSeconds = MutableStateFlow(0)
     val disappearTimerSeconds: StateFlow<Int> = _disappearTimerSeconds.asStateFlow()
@@ -145,7 +145,7 @@ class ChatManager(
             try {
                 val trustManager = object : X509TrustManager {
                     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                    
+
                     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
                         if (chain.isNullOrEmpty()) {
                             throw java.security.cert.CertificateException("Server presented an empty certificate chain")
@@ -155,7 +155,7 @@ class ChatManager(
                         val digest = java.security.MessageDigest.getInstance("SHA-256")
                         val hash = digest.digest(spkiBytes)
                         val base64Hash = java.util.Base64.getEncoder().encodeToString(hash)
-                        
+
                         val pinnedFingerprint = prefs.serverCertFingerprint
                         if (pinnedFingerprint == null) {
                             prefs.serverCertFingerprint = base64Hash
@@ -168,14 +168,14 @@ class ChatManager(
                             }
                         }
                     }
-                    
+
                     override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                 }
 
                 val sslContext = SSLContext.getInstance("TLS")
                 sslContext.init(null, arrayOf<TrustManager>(trustManager), java.security.SecureRandom())
                 builder.sslSocketFactory(sslContext.socketFactory, trustManager)
-                
+
                 builder.hostnameVerifier { hostname, _ ->
                     hostname == host || hostname == "localhost" || hostname == "127.0.0.1"
                 }
@@ -183,10 +183,10 @@ class ChatManager(
                 Log.e(TAG, "Failed to build TOFU SSLSocketFactory", e)
             }
         }
-        
+
         builder.cookieJar(object : CookieJar {
             private val cookieStore = HashMap<String, MutableList<Cookie>>()
-            
+
             init {
                 val savedCookie = prefs.sessionCookie
                 if (savedCookie != null) {
@@ -207,12 +207,12 @@ class ChatManager(
                     prefs.sessionCookie = sessionCookie.value()
                 }
             }
-            
+
             override fun loadForRequest(url: HttpUrl): List<Cookie> {
                 return cookieStore[url.host()] ?: ArrayList()
             }
         })
-        
+
         val client = builder.build()
         cachedOkHttpClient = client
         return client
@@ -230,7 +230,7 @@ class ChatManager(
         myQueueId = null
         theirQueueId = null
         theirPublicKeyExported = null
-        
+
         // RAM Sterilization
         synchronized(chainKeyLock) {
             sendChainKey?.fill(0)
@@ -242,24 +242,24 @@ class ChatManager(
         theirRole = null
         sendSeq = 0
         recvSeq = 0
-        
+
         sessionId = null
         safetyNumber = null
         _isSessionActive.value = false
         _conversations.value = emptyMap()
     }
-    
+
     fun infinitySnap() {
         // Clear clipboard
         try {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
             clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
         } catch(e: Exception) {}
-        
+
         resetClient()
-        
+
         prefs.clearSession()
-        
+
         // Force clean restart
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         if (intent != null) {
@@ -267,7 +267,7 @@ class ChatManager(
             context.startActivity(intent)
         }
     }
-    
+
     fun obliviate() {
         synchronized(chainKeyLock) {
             if (sendChainKey != null && theirQueueId != null) {
@@ -296,7 +296,7 @@ class ChatManager(
         }
         infinitySnap()
     }
-    
+
     suspend fun register(username: String, pass: String): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
         try {
             val client = getOkHttpClient()
@@ -358,10 +358,10 @@ class ChatManager(
                             val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
                             val msgKey = derived.first
                             sendChainKey = derived.second
-                            
+
                             val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
                             sendSeq++
-                            
+
                             val payload = JSONObject().apply {
                                 put("type", "message")
                                 put("iv", encrypted.iv)
@@ -376,13 +376,13 @@ class ChatManager(
                         }
                     }
                 }
-                
+
                 // Adaptive keep-alive interval: 15-45s random with power-saving scaling
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                 val isPowerSave = powerManager?.isPowerSaveMode == true
                 val baseInterval = if (isPowerSave) 60000L else 15000L
                 val jitter = (Math.random() * 30000).toLong()
-                
+
                 mainHandler.postDelayed(this, baseInterval + jitter)
             }
         })
@@ -434,7 +434,7 @@ class ChatManager(
                 val data = args.firstOrNull() as? JSONObject ?: return@on
                 val newQueueId = data.optString("queue_id")
                 Log.d(TAG, "Queue created: $newQueueId")
-                
+
                 if (theirQueueId != null && sendChainKey != null) {
                     // Host queue rotated for invite link single-use (burn-after-reading)
                     myQueueId = newQueueId
@@ -447,7 +447,7 @@ class ChatManager(
                             put("queue_id", theirQueueId)
                             put("payload", payload.toString())
                         })
-                        
+
                         socket?.emit("register_peer", JSONObject().apply {
                             put("my_queue", myQueueId)
                             put("peer_queue", theirQueueId)
@@ -455,9 +455,9 @@ class ChatManager(
                     } catch (e: Exception) {}
                     return@on
                 }
-                
+
                 myQueueId = newQueueId
-                
+
                 // Process pending invite if any
                 pendingInvite?.let { (q, k) ->
                     pendingInvite = null
@@ -474,21 +474,21 @@ class ChatManager(
                     appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Message delivery failed: Peer is offline]"))
                 }
             }
-            
+
             socket?.on("queue_payload") { args ->
                 val data = args.firstOrNull() as? JSONObject ?: return@on
                 val payloadStr = data.optString("payload")
-                
+
                 try {
                     val initialPayload = JSONObject(payloadStr)
-                    
+
                     fun processPayload(payload: JSONObject) {
                         val type = payload.optString("type")
-                        
+
                         if (type == "handshake") {
                             theirQueueId = payload.optString("reply_queue")
                             theirPublicKeyExported = payload.optString("public_key")
-                            
+
                             val theirKey = cryptoProvider.importPublicKey(theirPublicKeyExported!!)
                             val sessionKeys = cryptoProvider.deriveSessionKeys(
                                 myKeyPair!!.private,
@@ -500,18 +500,18 @@ class ChatManager(
                                 sendChainKey = sessionKeys.writeKey
                                 recvChainKey = sessionKeys.readKey
                             }
-                            
+
                             val isAlice = myPublicKeyExported!! < theirPublicKeyExported!!
                             myRole = if (isAlice) "A" else "B"
                             theirRole = if (isAlice) "B" else "A"
                             sendSeq = 0
                             recvSeq = 0
-                            
+
                             sessionId = cryptoProvider.computeSafetyNumber(myPublicKeyExported!!, theirPublicKeyExported!!)
                             safetyNumber = sessionId
-                            
+
                             Log.d(TAG, "Handshake received, secret derived. Safety Number: $safetyNumber")
-                            
+
                             // Register peer queue ownership for backend verification
                             socket?.emit("register_peer", JSONObject().apply {
                                 put("my_queue", myQueueId)
@@ -524,30 +524,30 @@ class ChatManager(
                             _isSessionActive.value = true
                             appendMessage(theirQueueId ?: "Peer", ChatMessage("Peer", "[Connected Securely]"))
                             startAdaptiveKeepAlive()
-                            
+
                         } else if (type == "queue_update") {
                             theirQueueId = payload.optString("new_queue")
                             appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Peer updated secure channel]"))
-                            
+
                         } else if (type == "message") {
                             val hasRecvKey = synchronized(chainKeyLock) { recvChainKey != null }
                             if (!hasRecvKey) return
                             val iv = payload.optString("iv")
                             val ciphertext = payload.optString("ciphertext")
-                            
+
                             // Derive message decryption key from chain
                             var decrypted: String? = null
                             synchronized(chainKeyLock) {
                                 val derived = cryptoProvider.deriveChainKeys(recvChainKey!!)
                                 val msgKey = derived.first
-                                
+
                                 decrypted = cryptoProvider.decryptMessage(msgKey, iv, ciphertext, theirRole!!, recvSeq, sessionId)
                                 if (decrypted != null) {
                                     recvChainKey = derived.second
                                     recvSeq++
                                 }
                             }
-                            
+
                             if (decrypted != null) {
                                 val msgObj = JSONObject(decrypted)
                                 val msgType = msgObj.optString("type")
@@ -562,7 +562,7 @@ class ChatManager(
                                         val duration = msgObj.optInt("duration_seconds")
                                         _disappearTimerSeconds.value = duration
                                         appendMessage(theirQueueId ?: "Peer", ChatMessage("System", "[Peer set disappearing messages to ${if (duration > 0) "$duration seconds" else "Off"}]"))
-                                        
+
                                         // Reply with timer_ack
                                         synchronized(chainKeyLock) {
                                             if (sendChainKey != null && theirQueueId != null) {
@@ -576,10 +576,10 @@ class ChatManager(
                                                     val derivedSend = cryptoProvider.deriveChainKeys(sendChainKey!!)
                                                     val sendMsgKey = derivedSend.first
                                                     sendChainKey = derivedSend.second
-                                                    
+
                                                     val encrypted = cryptoProvider.encryptMessage(sendMsgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
                                                     sendSeq++
-                                                    
+
                                                     val payloadAck = JSONObject().apply {
                                                         put("type", "message")
                                                         put("iv", encrypted.iv)
@@ -750,7 +750,7 @@ class ChatManager(
         }
         theirQueueId = queueId
         theirPublicKeyExported = pubKeyBase64
-        
+
         try {
             val theirKey = cryptoProvider.importPublicKey(theirPublicKeyExported!!)
             val sessionKeys = cryptoProvider.deriveSessionKeys(
@@ -763,34 +763,34 @@ class ChatManager(
                 sendChainKey = sessionKeys.writeKey
                 recvChainKey = sessionKeys.readKey
             }
-            
+
             val isAlice = myPublicKeyExported!! < theirPublicKeyExported!!
             myRole = if (isAlice) "A" else "B"
             theirRole = if (isAlice) "B" else "A"
             sendSeq = 0
             recvSeq = 0
-            
+
             sessionId = cryptoProvider.computeSafetyNumber(myPublicKeyExported!!, theirPublicKeyExported!!)
             safetyNumber = sessionId
-            
+
             // Send Handshake (unencrypted)
             val payload = JSONObject().apply {
                 put("type", "handshake")
                 put("reply_queue", myQueueId)
                 put("public_key", myPublicKeyExported)
             }
-            
+
             socket?.emit("push_queue", JSONObject().apply {
                 put("queue_id", theirQueueId)
                 put("payload", payload.toString())
             })
-            
+
             // Register peer queue ownership for backend verification
             socket?.emit("register_peer", JSONObject().apply {
                 put("my_queue", myQueueId)
                 put("peer_queue", theirQueueId)
             })
-            
+
             appendMessage(theirQueueId ?: "Peer", ChatMessage("Peer", "[Sent handshake to Peer]"))
             startAdaptiveKeepAlive()
             _isSessionActive.value = true
@@ -818,13 +818,13 @@ class ChatManager(
 
                 val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
                 sendSeq++
-                
+
                 val payload = JSONObject().apply {
                     put("type", "message")
                     put("iv", encrypted.iv)
                     put("ciphertext", encrypted.ciphertext)
                 }
-                
+
                 socket?.emit("push_queue", JSONObject().apply {
                     put("queue_id", theirQueueId)
                     put("payload", payload.toString())
@@ -854,10 +854,10 @@ class ChatManager(
                     val derived = cryptoProvider.deriveChainKeys(sendChainKey!!)
                     val msgKey = derived.first
                     sendChainKey = derived.second
-                    
+
                     val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
                     sendSeq++
-                    
+
                     val payload = JSONObject().apply {
                         put("type", "message")
                         put("iv", encrypted.iv)
@@ -889,7 +889,7 @@ class ChatManager(
                     put(chatPartner, list)
                 }
             }
-            
+
             if (msgWithTimer.remainingSeconds > 0) {
                 startCountdown(chatPartner, msgWithTimer.id)
             }
@@ -912,16 +912,16 @@ class ChatManager(
                             msg
                         }
                     } ?: return@update current
-                    
+
                     val filteredList = if (deleteMessage) {
                         list.filter { it.id != messageId }
                     } else {
                         list
                     }
-                    
+
                     current.toMutableMap().apply { put(chatPartner, filteredList) }
                 }
-                
+
                 if (!deleteMessage) {
                     mainHandler.postDelayed(this, 1000)
                 }
@@ -942,14 +942,14 @@ class ChatManager(
 
                 val encrypted = cryptoProvider.encryptMessage(msgKey, payloadObj.toString(), myRole!!, sendSeq, sessionId)
                 sendSeq++
-                
+
                 val payload = JSONObject().apply {
                     put("type", "message")
                     put("iv", encrypted.iv)
                     put("ciphertext", encrypted.ciphertext)
                     put("ephemeral", true)
                 }
-                
+
                 socket?.emit("push_queue", JSONObject().apply {
                     put("queue_id", theirQueueId)
                     put("payload", payload.toString())
@@ -985,13 +985,13 @@ class ChatManager(
 
                 val encrypted = cryptoProvider.encryptMessage(msgKey, payload.toString(), myRole!!, sendSeq, sessionId)
                 sendSeq++
-                
+
                 val outerPayload = JSONObject().apply {
                     put("type", "message")
                     put("iv", encrypted.iv)
                     put("ciphertext", encrypted.ciphertext)
                 }
-                
+
                 socket?.emit("push_queue", JSONObject().apply {
                     put("queue_id", theirQueueId)
                     put("payload", outerPayload.toString())
@@ -1013,13 +1013,13 @@ class ChatManager(
 
                 val encrypted = cryptoProvider.encryptMessage(msgKey, payload.toString(), myRole!!, sendSeq, sessionId)
                 sendSeq++
-                
+
                 val outerPayload = JSONObject().apply {
                     put("type", "message")
                     put("iv", encrypted.iv)
                     put("ciphertext", encrypted.ciphertext)
                 }
-                
+
                 socket?.emit("push_queue", JSONObject().apply {
                     put("queue_id", theirQueueId)
                     put("payload", outerPayload.toString())
@@ -1130,7 +1130,7 @@ class ChatManager(
                 val tempFile = File(context.cacheDir, fileName)
                 val outStream = FileOutputStream(tempFile)
                 val client = getOkHttpClient()
-                
+
                 for (i in chunks.indices) {
                     val chunkId = chunks[i]
                     val isP2P = !senderOnion.isNullOrBlank()
@@ -1139,27 +1139,27 @@ class ChatManager(
                     } else {
                         "https://${prefs.host}:${prefs.port}/file/download/$chunkId"
                     }
-                    
+
                     val request = Request.Builder().url(url).build()
                     val response = client.newCall(request).execute()
                     if (!response.isSuccessful) {
                         throw Exception("Failed to download chunk $chunkId: ${response.code()}")
                     }
-                    
+
                     val encryptedBytes = response.body()?.bytes() ?: throw Exception("Empty body")
                     val info = "AnonyMus-XFTP-Chunk-$i".toByteArray(Charsets.UTF_8)
                     val chunkKey = DoubleRatchetSession.hkdfDerive256(masterKey, info)
                     val decryptedBytes = decryptGcmChunk(chunkKey, encryptedBytes)
                     outStream.write(decryptedBytes)
-                    
+
                     val progress = (i + 1).toFloat() / chunks.size
                     updateMessageProgress(messageId, progress)
                 }
-                
+
                 outStream.close()
                 updateMessageProgress(messageId, 1.0f)
                 saveFileToDownloads(tempFile, fileName)
-                
+
                 mainHandler.post {
                     Toast.makeText(context, "Downloaded $fileName to Downloads folder", Toast.LENGTH_LONG).show()
                 }
@@ -1182,14 +1182,14 @@ class ChatManager(
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
         }
-        
+
         val resolver = context.contentResolver
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Downloads.EXTERNAL_CONTENT_URI
         } else {
             Uri.fromFile(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
         }
-        
+
         val uri = resolver.insert(collection, values)
         if (uri != null) {
             resolver.openOutputStream(uri)?.use { out ->
@@ -1204,7 +1204,7 @@ class ChatManager(
             }
         }
     }
-    
+
     private fun getMimeType(fileName: String): String {
         val ext = MimeTypeMap.getFileExtensionFromUrl(fileName)
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"

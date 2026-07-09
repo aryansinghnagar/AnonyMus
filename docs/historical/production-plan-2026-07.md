@@ -3042,4 +3042,3 @@ AnonyMus today is a thoughtful prototype with a sound cryptographic concept and 
 The ambitious goal — integrating every SimpleX feature into AnonyMus without breaking the existing architecture — is also achievable. The integration plan in Section 10 maps each SimpleX feature to a concrete AnonyMus implementation path, with attention to preserving the differentiators that make AnonyMus uniquely valuable. The result, at the end of month 6, is an AnonyMus that is feature-complete against SimpleX, retains its dual-mode architecture and privacy hardening, has passed an external crypto audit, ships reproducible builds, and publishes transparency reports. That is a credible production-grade privacy messenger.
 
 The work begins with week 1: remove the hardcoded Flask secret from the launcher, move `db_key` out of the session cookie, sanitize the `nickname` field, add CSRF tokens, authenticate `/api/mode`, and fix `encrypt_secret()`. Everything else follows.
-

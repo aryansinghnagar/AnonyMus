@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 
 def assert_single_worker():
     """
@@ -8,26 +9,26 @@ def assert_single_worker():
     """
     is_gunicorn = False
     workers = 1
-    
+
     # 1. Check parent process name or environment
     if "gunicorn" in os.environ.get("SERVER_SOFTWARE", "").lower():
         is_gunicorn = True
-        
+
     # 2. Check command line arguments for worker specifications
     for i, arg in enumerate(sys.argv):
-        if arg in ('-w', '--workers'):
+        if arg in ("-w", "--workers"):
             try:
-                workers = int(sys.argv[i+1])
+                workers = int(sys.argv[i + 1])
                 is_gunicorn = True
             except (IndexError, ValueError):
                 pass
-        elif arg.startswith('--workers='):
+        elif arg.startswith("--workers="):
             try:
-                workers = int(arg.split('=', 1)[1])
+                workers = int(arg.split("=", 1)[1])
                 is_gunicorn = True
             except ValueError:
                 pass
-                
+
     # 3. Check WEB_CONCURRENCY env var
     web_concurrency = os.environ.get("WEB_CONCURRENCY")
     if web_concurrency:
@@ -43,11 +44,12 @@ def assert_single_worker():
     if is_gunicorn and workers == 1:
         try:
             import glob
+
             ppid = os.getppid()
             worker_count = 0
             for stat_path in glob.glob("/proc/*/stat"):
                 try:
-                    with open(stat_path, "r") as f:
+                    with open(stat_path) as f:
                         parts = f.read().split()
                         if len(parts) > 3 and int(parts[3]) == ppid:
                             worker_count += 1
@@ -57,7 +59,7 @@ def assert_single_worker():
                 workers = worker_count
         except Exception:
             pass
-                
+
     if is_gunicorn and workers > 1:
         redis_url = os.environ.get("REDIS_URL")
         if not redis_url:

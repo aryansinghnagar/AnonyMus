@@ -20,7 +20,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         // Anti-Forensics: Screen Security (Block screenshots & tab previews)
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,

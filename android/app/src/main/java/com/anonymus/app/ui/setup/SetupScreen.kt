@@ -31,7 +31,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
     var pastedLink by remember { mutableStateOf("") }
     var pasteError by remember { mutableStateOf<String?>(null) }
     var isConnecting by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(isSessionActive) {
         if (isSessionActive) {
             onNavigateToChat()
@@ -80,7 +80,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
             }
 
             val inviteUrl = "${BuildConfig.URL_SCHEME}://${BuildConfig.URL_HOST_JOIN}?q=${chatManager.myQueueId}&k=${android.net.Uri.encode(chatManager.myPublicKeyExported)}"
-            
+
             Text("Your secure invite link:", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             SelectionContainer {
@@ -93,7 +93,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
                     textAlign = TextAlign.Center
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = {
@@ -105,9 +105,9 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
             ) {
                 Text("Copy Invite Link")
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             // Generate QR Code
             val qrBitmap = generateQrCode(inviteUrl)
             if (qrBitmap != null) {
@@ -117,7 +117,7 @@ fun SetupScreen(onNavigateToChat: () -> Unit) {
                     modifier = Modifier.size(200.dp)
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
             Text("Scan or share this link to start a chat.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             Text("Waiting for peer to connect...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)

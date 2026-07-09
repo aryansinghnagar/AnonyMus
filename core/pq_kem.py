@@ -23,9 +23,9 @@ Usage:
     assert ss_alice == ss_bob  # Both have the same 32-byte shared secret
 """
 
-import os
 import base64
 import logging
+import os
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ _oqs = None
 if not os.environ.get("ANONYMUS_PQ_DISABLE"):
     try:
         import oqs as _oqs_module  # type: ignore
+
         # Eagerly probe the native lib so we fail fast, not on first call
         _probe = _oqs_module.KeyEncapsulation(_KEM_ALG)
         _probe.generate_keypair()
@@ -115,7 +116,7 @@ def decapsulate(ciphertext_bytes: bytes, private_key_bytes: bytes) -> bytes | No
 
 def encode_public_key(pk_bytes: bytes) -> str:
     """Base64-encodes an ML-KEM-768 public key for JSON transport."""
-    return base64.b64encode(pk_bytes).decode('utf-8')
+    return base64.b64encode(pk_bytes).decode("utf-8")
 
 
 def decode_public_key(pk_b64: str) -> bytes:
@@ -125,7 +126,7 @@ def decode_public_key(pk_b64: str) -> bytes:
 
 def encode_ciphertext(ct_bytes: bytes) -> str:
     """Base64-encodes an ML-KEM-768 ciphertext for JSON transport."""
-    return base64.b64encode(ct_bytes).decode('utf-8')
+    return base64.b64encode(ct_bytes).decode("utf-8")
 
 
 def decode_ciphertext(ct_b64: str) -> bytes:
