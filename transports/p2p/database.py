@@ -895,33 +895,73 @@ def update_message_text(peer_onion, timestamp, new_text):
     conn.close()
 
 
-def create_group(group_id, name, founder_onion, profile_id='default'):
+def create_group(group_id, name, founder_onion, profile_id='default', is_channel=0):
     founder_onion = founder_onion.strip().lower()
     conn = get_connection()
     c = conn.cursor()
     c.execute('''
-        INSERT OR IGNORE INTO groups (group_id, name, founder_onion, created_at, profile_id)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (group_id, name, founder_onion, int(time.time() * 1000), profile_id))
+        INSERT OR IGNORE INTO groups (group_id, name, founder_onion, created_at, profile_id, is_channel)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (group_id, name, founder_onion, int(time.time() * 1000), profile_id, is_channel))
     conn.commit()
     conn.close()
 
 def get_groups(profile_id='default'):
     conn = get_connection()
     c = conn.cursor()
-    c.execute('SELECT group_id, name, founder_onion, created_at FROM groups WHERE profile_id = ?', (profile_id,))
+    c.execute('SELECT group_id, name, founder_onion, created_at, is_channel FROM groups WHERE profile_id = ?', (profile_id,))
     rows = c.fetchall()
     conn.close()
-    return [{'group_id': r[0], 'name': r[1], 'founder_onion': r[2], 'created_at': r[3]} for r in rows]
+    return [{'group_id': r[0], 'name': r[1], 'founder_onion': r[2], 'created_at': r[3], 'is_channel': r[4]} for r in rows]
 
 def get_group(group_id):
     conn = get_connection()
     c = conn.cursor()
-    c.execute('SELECT group_id, name, founder_onion, created_at FROM groups WHERE group_id = ?', (group_id,))
+    c.execute('SELECT group_id, name, founder_onion, created_at, is_channel FROM groups WHERE group_id = ?', (group_id,))
     row = c.fetchone()
     conn.close()
     if row:
-        return {'group_id': row[0], 'name': row[1], 'founder_onion': row[2], 'created_at': row[3]}
+        return {'group_id': row[0], 'name': row[1], 'founder_onion': row[2], 'created_at': row[3], 'is_channel': row[4]}
+    return None
+
+def save_abuse_report(report_id, message_hash, reporter_onion, reason, signature):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO abuse_reports (report_id, message_hash, reporter_onion, reason, signature, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (report_id, message_hash, reporter_onion, reason, signature, int(time.time() * 1000)))
+    conn.commit()
+    conn.close()
+
+def get_abuse_reports():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT report_id, message_hash, reporter_onion, reason, signature, timestamp FROM abuse_reports')
+    rows = c.fetchall()
+    conn.close()
+    return [{'report_id': r[0], 'message_hash': r[1], 'reporter_onion': r[2], 'reason': r[3], 'signature': r[4], 'timestamp': r[5]} for r in rows]
+
+from core.crypto import DEVELOPER_PUBLIC_KEY_B64
+
+def save_supporter_badge(onion_address, signature):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        INSERT OR REPLACE INTO supporter_badges (onion_address, badge_signature, signed_by_key, timestamp)
+        VALUES (?, ?, ?, ?)
+    ''', (onion_address, signature, DEVELOPER_PUBLIC_KEY_B64, int(time.time() * 1000)))
+    conn.commit()
+    conn.close()
+
+def get_supporter_badge(onion_address):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT badge_signature, signed_by_key, timestamp FROM supporter_badges WHERE onion_address = ?', (onion_address,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'badge_signature': row[0], 'signed_by_key': row[1], 'timestamp': row[2]}
     return None
 
 def add_group_member(group_id, member_onion, nickname, invited_by=None, role='member'):

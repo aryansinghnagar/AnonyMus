@@ -41,3 +41,30 @@ def decrypt_secret(ciphertext_b64: str, db_key_hex: str) -> str:
     pt = aesgcm.decrypt(nonce, ct, None)
     return pt.decode('utf-8')
 
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+DEVELOPER_PUBLIC_KEY_B64 = "HO/h+Ogyso5N4QGTd5AhBIOuX2PQx7mj39dhwk4U1hU="
+
+def verify_supporter_badge(onion_address: str, signature_b64: str) -> bool:
+    """
+    Verifies a supporter badge signature locally.
+    The message signed is the user's onion_address.
+    """
+    try:
+        pub_key_bytes = base64.b64decode(DEVELOPER_PUBLIC_KEY_B64)
+        public_key = ed25519.Ed25519PublicKey.from_public_bytes(pub_key_bytes)
+        signature = base64.b64decode(signature_b64)
+        public_key.verify(signature, onion_address.encode('utf-8'))
+        return True
+    except Exception:
+        return False
+
+def generate_supporter_badge_signature(onion_address: str, priv_key_b64: str) -> str:
+    """
+    Helper function to generate a supporter badge signature.
+    """
+    priv_key_bytes = base64.b64decode(priv_key_b64)
+    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(priv_key_bytes)
+    signature = private_key.sign(onion_address.encode('utf-8'))
+    return base64.b64encode(signature).decode('utf-8')
+
