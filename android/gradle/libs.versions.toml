@@ -15,7 +15,7 @@ nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
 socketio = "2.1.1"
 securityCrypto = "1.1.0-alpha06"
-tink = "1.15.0"
+tink = "1.23.0"
 biometric = "1.1.0"
 
 
