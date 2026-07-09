@@ -1,0 +1,53 @@
+site_name: AnonyMus Documentation
+site_url: https://docs.anonymus.example
+repo_url: https://github.com/aryansinghnagar/AnonyMus
+repo_name: aryansinghnagar/AnonyMus
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle: { icon: material/brightness-7, name: Switch to dark mode }
+    - scheme: slate
+      toggle: { icon: material/brightness-4, name: Switch to light mode }
+plugins:
+  - search
+  - mermaid2
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid
+nav:
+  - Home: index.md
+  - Architecture: architecture/overview.md
+  - Guides:
+      - Setup: guides/setup.md
+      - Self-Hosting: guides/self-hosting.md
+      - Reproduce Build: guides/reproduce-build.md
+  - Protocols:
+      - Crypto Spec: protocols/crypto-spec.md
+      - Multi-Device Sync: protocols/multi-device-sync.md
+  - RFCs: rfcs/index.md
+  - ADRs: adr/index.md
+  - API:
+      - Socket.IO Events: api/socket-io-events.md
+  - Releases:
+      - v1.0: releases/RELEASE_1.0.md
+  - Historical: historical/index.md
