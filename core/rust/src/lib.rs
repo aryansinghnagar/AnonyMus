@@ -5,6 +5,7 @@
 
 pub mod crypto;
 pub mod ffi;
+pub mod protocol;
 
 use thiserror::Error;
 
@@ -32,6 +33,15 @@ pub type Result<T> = std::result::Result<T, AnonymusError>;
 
 /// Must be called once per process to verify the runtime environment.
 pub fn init() -> Result<()> {
-    // Future: FIPS self-test, entropy check, etc.
     Ok(())
+}
+
+// Wire up the PyO3 module entry-point when compiled with `--features python`.
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+#[pymodule]
+fn anonymus_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    ffi::python::anonymus_core(m)
 }
