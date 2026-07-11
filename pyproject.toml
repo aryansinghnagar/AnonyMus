@@ -1,3 +1,27 @@
+[project]
+name = "anonymus"
+version = "3.0.0"
+description = "Privacy-first encrypted P2P messaging — Python + Rust hybrid"
+requires-python = ">=3.11"
+
+[build-system]
+# Pure Python distribution uses hatchling.
+# The PyO3 wheel is built separately via:
+#   maturin build -m core/rust/Cargo.toml --features python
+# in the CI rust.yml workflow.
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "transports", "tests"]
+
+[tool.maturin]
+# Build settings for the anonymus-core PyO3 extension wheel.
+# Run explicitly: maturin build -m core/rust/Cargo.toml --features python
+manifest-path = "core/rust/Cargo.toml"
+module-name = "anonymus_core"
+features = ["python"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -26,6 +50,10 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["-v", "--tb=short"]
+markers = [
+    "legacy: marks tests that require the full Flask/cryptography stack (skipped in v3 env)",
+    "v3: marks tests for the v3 FastAPI async stack",
+]
 
 [tool.coverage.run]
 source = ["core", "transports"]

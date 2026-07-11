@@ -65,6 +65,7 @@ dependencies = [
  "hex",
  "hkdf",
  "jni",
+ "js-sys",
  "ml-kem",
  "proptest",
  "pyo3",

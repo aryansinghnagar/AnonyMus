@@ -71,10 +71,10 @@ jobs:
         run: pyright
 
       - name: Run Legacy Test Suite
-        run: pytest tests/unit/ --cov=core --cov=transports --cov-report=xml --ignore=tests/integration/ || true
+        run: pytest tests/unit/ tests/integration/ --ignore=tests/integration/test_fastapi_v3.py --cov=core --cov=transports --cov-report=xml || true
 
       - name: Run FastAPI v3 Integration Tests
-        run: pytest tests/integration/test_fastapi_v3.py -v
+        run: pytest tests/integration/test_fastapi_v3.py -v -m "not legacy"
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
