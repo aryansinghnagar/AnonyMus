@@ -1,0 +1,55 @@
+{
+  "_comment": "AnonyMus v3 Known Answer Test vectors. All hex-encoded. Run by every platform FFI target.",
+  "protocol_version": 3,
+  "vectors": [
+    {
+      "id": "hkdf-1",
+      "description": "HKDF-SHA256 RFC 5869 Test Case 1 — first 32 bytes",
+      "primitive": "hkdf",
+      "ikm":  "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "salt": "000102030405060708090a0b0c",
+      "info": "f0f1f2f3f4f5f6f7f8f9",
+      "output_len": 32,
+      "okm":  "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf"
+    },
+    {
+      "id": "hkdf-2",
+      "description": "HKDF-SHA256 — no salt, chain-key context",
+      "primitive": "hkdf",
+      "ikm":  "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      "salt": null,
+      "info": "416e6f6e794d757320763320636861696e2d6b6579",
+      "output_len": 32,
+      "okm":  "__PLACEHOLDER_generated_at_test_time__"
+    },
+    {
+      "id": "aead-1",
+      "description": "AES-256-GCM encrypt/decrypt round-trip — zero key, zero nonce, empty AAD",
+      "primitive": "aead",
+      "key":   "0000000000000000000000000000000000000000000000000000000000000000",
+      "nonce": "000000000000000000000000",
+      "aad":   "",
+      "plaintext": "416e6f6e794d75732076332061656164207465737420766563746f72",
+      "ciphertext": "__PLACEHOLDER_generated_at_test_time__"
+    },
+    {
+      "id": "x25519-1",
+      "description": "X25519 DH — RFC 7748 Test Vector 1",
+      "primitive": "x25519_dh",
+      "alice_private": "77076d0a7318a57d3c16c17251b26645df1fb2c691af37ca7ac75cd4be2f810",
+      "bob_private":   "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "alice_public":  "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+      "bob_public":    "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "shared_secret": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+    },
+    {
+      "id": "argon2-1",
+      "description": "Argon2id key derivation — determinism check",
+      "primitive": "argon2",
+      "password": "636f727265637420686f727365206261747465727920737461706c65",
+      "salt":     "42424242424242424242424242424242",
+      "output_len": 32,
+      "key": "__PLACEHOLDER_generated_at_test_time__"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ SKIP="false"
 
 case "$WORKFLOW_NAME" in
   rust)
-    if [ ! -f "Cargo.toml" ] && [ ! -d "core/rust" ]; then
+    if [ ! -d "core/rust" ]; then
       echo "=== [PREFLIGHT] Rust core not yet scaffolded. Skipping. ==="
       SKIP="true"
     fi
