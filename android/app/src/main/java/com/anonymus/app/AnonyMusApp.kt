@@ -2,16 +2,19 @@ package com.anonymus.app
 
 import android.app.Application
 import com.anonymus.app.data.ChatManager
-import com.anonymus.app.data.PreferencesHelper
-import com.anonymus.app.data.TinkCryptoProvider
+import com.anonymus.app.di.appModule
+import org.koin.android.ext.android.inject
+import org.koin.android.ext.koin.androidContext
+import org.koin.core.context.startKoin
 
 class AnonyMusApp : Application() {
-    lateinit var chatManager: ChatManager
-        private set
+    val chatManager: ChatManager by inject()
 
     override fun onCreate() {
         super.onCreate()
-        val prefs = PreferencesHelper(this)
-        chatManager = ChatManager(this, prefs, TinkCryptoProvider())
+        startKoin {
+            androidContext(this@AnonyMusApp)
+            modules(appModule)
+        }
     }
 }

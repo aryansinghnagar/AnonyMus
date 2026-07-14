@@ -336,7 +336,7 @@ pub struct X3dhInitResult {
 /// Verifies the signed pre-key signature before computing the four DH values.
 pub fn x3dh_initiate(
     alice_identity: &x25519::StaticKeypair,
-    alice_identity_ed: &[u8; 32],
+    _alice_identity_ed: &[u8; 32],
     bundle: &PreKeyBundle,
 ) -> Result<X3dhInitResult> {
     use crate::crypto::ed25519;

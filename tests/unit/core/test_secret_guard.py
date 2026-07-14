@@ -1,7 +1,13 @@
 import os
-import subprocess
 import sys
 import unittest
+
+try:
+    import eventlet.patcher
+
+    subprocess = eventlet.patcher.original("subprocess")
+except (ImportError, AttributeError):
+    import subprocess
 
 # Ensure project root is in path
 sys.path.insert(
@@ -18,15 +24,24 @@ class TestSecretGuard(unittest.TestCase):
             "",
         ]
 
+        import tempfile
+
         for placeholder in placeholders:
             env = os.environ.copy()
+            env["ANONYMUS_PQ_DISABLE"] = "1"
             env["FLASK_SECRET_KEY"] = placeholder
-            res = subprocess.run(
-                [sys.executable, "-c", "import server"],
-                env=env,
-                capture_output=True,
-                text=True,
-            )
+            env["SECRET_KEY"] = placeholder
+
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as tmp:
+                res = subprocess.run(
+                    [sys.executable, "-c", "import server"],
+                    env=env,
+                    stdout=tmp,
+                    stderr=tmp,
+                )
+                tmp.seek(0)
+                output = tmp.read()
+
             self.assertNotEqual(
                 res.returncode,
                 0,
@@ -34,7 +49,7 @@ class TestSecretGuard(unittest.TestCase):
             )
             self.assertIn(
                 "Refusing to start: FLASK_SECRET_KEY is missing, empty, or a known placeholder.",
-                res.stderr,
+                output,
             )
 
 

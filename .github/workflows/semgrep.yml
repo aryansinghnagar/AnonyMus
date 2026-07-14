@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Semgrep Scan
-        run: semgrep ci --sarif --output=semgrep.sarif || true
+        run: semgrep ci --sarif --output=semgrep.sarif
       - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v3
         with:

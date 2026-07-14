@@ -2,15 +2,16 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  id("com.android.legacy-kapt") version "9.0.1"
 }
 
 android {
     namespace = "com.anonymus.app"
-    compileSdk = 34
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.anonymus.app"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -112,4 +113,24 @@ dependencies {
 
   // WorkManager for background polling / push service keep-alive
   implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+  // Room Database
+  implementation(libs.room.runtime)
+  implementation(libs.room.ktx)
+  add("kapt", libs.room.compiler)
+
+  // DataStore Preferences
+  implementation(libs.datastore.preferences)
+
+  // Koin Dependency Injection
+  implementation(libs.koin.android)
+  implementation(libs.koin.compose)
+
+  // Ktor HTTP Client
+  implementation(libs.ktor.client.core)
+  implementation(libs.ktor.client.okhttp)
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask>().configureEach {
+    kaptProcessJvmArgs.add("-Dorg.sqlite.tmpdir=C:/Users/Aryan/AppData/Local/Temp")
 }

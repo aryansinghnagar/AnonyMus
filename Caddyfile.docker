@@ -1,6 +1,14 @@
-﻿# Caddyfile for Docker deployment — replace {$RELAY_DOMAIN} with your domain in .env
+# Caddyfile for Docker deployment — replace {$RELAY_DOMAIN} with your domain in .env
 {$RELAY_DOMAIN} {
-    reverse_proxy relay:5001
+    root * /usr/share/caddy
+    file_server
+
+    # Route backend requests to relay container
+    reverse_proxy /v3/* relay:5001
+
+    # Fallback to index.html for SPA client-side routing
+    try_files {path} /index.html
+
     encode gzip
     log {
         output stdout

@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.anonymus.app.LocalChatManager
+import com.anonymus.app.data.ChatMessage
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.draw.rotate

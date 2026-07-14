@@ -306,7 +306,7 @@ object CryptoUtils {
         // Lazysodium: com.goterl.lazysodium
         val sodium = com.goterl.lazysodium.LazySodiumAndroid(com.goterl.lazysodium.SodiumAndroid())
         val nonce = ByteArray(com.goterl.lazysodium.interfaces.Box.NONCEBYTES)
-        sodium.nonce(nonce)
+        java.security.SecureRandom().nextBytes(nonce)
 
         val recipientPub = com.goterl.lazysodium.utils.Key.fromBytes(recipientPubRaw)
         val senderPriv = com.goterl.lazysodium.utils.Key.fromBytes(senderPrivRaw)
@@ -373,3 +373,5 @@ data class EncryptedPayloadV2(
         }
     }
 }
+
+data class SessionKeys(val writeKey: ByteArray, val readKey: ByteArray)

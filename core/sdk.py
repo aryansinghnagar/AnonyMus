@@ -17,7 +17,7 @@ from core import protocol
 
 
 class AnonyMusClient:
-    def __init__(self, base_url="http://127.0.0.1:5000"):
+    def __init__(self, base_url="http://127.0.0.1:5001"):
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
         self.sio = socketio.Client()

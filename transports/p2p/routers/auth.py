@@ -18,7 +18,7 @@ from core.db.models import User
 from core.logging_v3 import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/v3/auth", tags=["auth"])
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -48,6 +48,33 @@ class UserResponse(BaseModel):
     onion_address: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+# UserOut is an alias for User, exported for use by other routers.
+UserOut = User
+
+
+# ── Auth dependency ────────────────────────────────────────────────────────────
+
+
+async def get_current_user(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    """Return the authenticated user from the session cookie, or raise 401."""
+    username = request.session.get("username")
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    user = await session.scalar(select(User).where(User.username == username))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    return user
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────

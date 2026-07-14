@@ -166,3 +166,417 @@ async def test_openapi_accessible_in_dev(client: AsyncClient) -> None:
     response = await client.get("/v3/openapi.json")
     # Should be 200 in dev, 404 in prod (not an error either way)
     assert response.status_code in (200, 404)
+
+
+@pytest.mark.asyncio
+async def test_node_info_endpoint(client: AsyncClient) -> None:
+    # 1. Register & login user to get active session
+    await client.post(
+        "/v3/auth/register",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    # 2. Check /node/info
+    response = await client.get("/v3/node/info")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == "eve"
+    assert "onion_address" in data
+
+
+@pytest.mark.asyncio
+async def test_relay_setting_endpoint(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    # Get initial relay setting
+    response = await client.get("/v3/node/settings/relay")
+    assert response.status_code == 200
+    assert response.json()["preferred_file_relay"] == ""
+
+    # Set new relay setting
+    response = await client.post(
+        "/v3/node/settings/relay",
+        json={"preferred_file_relay": "https://relay.anonymus.io"},
+    )
+    assert response.status_code == 200
+    assert response.json()["preferred_file_relay"] == "https://relay.anonymus.io"
+
+
+@pytest.mark.asyncio
+async def test_tor_status_endpoint(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    response = await client.get("/v3/node/tor/status")
+    assert response.status_code == 200
+    assert "is_running" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_notifications_flow(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    # Register contact first
+    target_onion = "abcdefghijklmnopqrstuvwxyz234567.onion"
+    await client.post(
+        "/v3/contacts/",
+        json={"onion_address": target_onion, "nickname": "Target Contact"},
+    )
+    # Register notification token
+    response = await client.post(
+        "/v3/notifications/register",
+        json={"onion_address": target_onion},
+    )
+    assert response.status_code == 201
+    token = response.json()["token"]
+    assert token != ""
+
+    # Poll notifications
+    response = await client.get(f"/v3/notifications/poll?tokens={token}")
+    assert response.status_code == 200
+    assert response.json()["has_new"][token] is False
+
+    # Clear notification
+    response = await client.post(
+        "/v3/notifications/clear",
+        json={"tokens": [token]},
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_keys_flow(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    # Publish prekey bundle
+    bundle = {
+        "onion_address": "eveonionaddressxyz.onion",
+        "identity_key": "base64_identity_key_bytes",
+        "signed_prekey": "base64_signed_prekey_bytes",
+        "signed_prekey_sig": "base64_sig_bytes",
+        "pq_prekey": "base64_pq_prekey_bytes",
+        "pq_prekey_sig": "base64_pq_sig_bytes",
+        "one_time_prekeys": ["opk1", "opk2"],
+        "one_time_pq_prekeys": ["opq1", "opq2"],
+    }
+    response = await client.post("/v3/keys/publish", json=bundle)
+    assert response.status_code == 201
+    assert response.json()["opk_count"] == 2
+
+    # Fetch bundle (should consume OPK)
+    response = await client.get("/v3/keys/eveonionaddressxyz.onion")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["one_time_prekey"] == "opk1"
+    assert data["opk_pool_size"] == 1
+
+
+@pytest.mark.asyncio
+async def test_files_flow(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    # Upload chunk
+    chunk_id = "test-chunk-123"
+    chunk_data = b"anonymus-encrypted-chunk-data"
+    response = await client.post(
+        f"/v3/files/upload/{chunk_id}",
+        content=chunk_data,
+    )
+    assert response.status_code == 200
+
+    # Download chunk
+    response = await client.get(f"/v3/files/download/{chunk_id}")
+    assert response.status_code == 200
+    assert response.content == chunk_data
+
+
+@pytest.mark.asyncio
+async def test_cors_restrictions(client: AsyncClient) -> None:
+    # Test valid CORS request
+    headers = {"Origin": "http://localhost:3000"}
+    response = await client.get("/healthz", headers=headers)
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    )
+
+    # Test invalid CORS request
+    headers = {"Origin": "http://malicious.com"}
+    response = await client.get("/healthz", headers=headers)
+    assert "access-control-allow-origin" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_rate_limiting(client: AsyncClient) -> None:
+    got_429 = False
+    for _ in range(130):
+        response = await client.get("/v3/auth/me")
+        if response.status_code == 429:
+            got_429 = True
+            break
+    assert got_429
+
+
+@pytest.mark.asyncio
+async def test_contacts_delete_by_id(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    target_onion = "deletebyidcontactonion.onion"
+    response = await client.post(
+        "/v3/contacts/",
+        json={"onion_address": target_onion, "nickname": "To Delete"},
+    )
+    assert response.status_code == 201
+    contact_id = response.json()["id"]
+
+    delete_response = await client.delete(f"/v3/contacts/{contact_id}")
+    assert delete_response.status_code == 204
+
+    list_response = await client.get("/v3/contacts/")
+    assert all(c["id"] != contact_id for c in list_response.json())
+
+
+@pytest.mark.asyncio
+async def test_keys_ownership_validation(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    bundle = {
+        "onion_address": "maliciousonionaddress.onion",
+        "identity_key": "base64_identity_key_bytes",
+        "signed_prekey": "base64_signed_prekey_bytes",
+        "signed_prekey_sig": "base64_sig_bytes",
+        "pq_prekey": "base64_pq_prekey_bytes",
+        "pq_prekey_sig": "base64_pq_sig_bytes",
+        "one_time_prekeys": ["opk1"],
+        "one_time_pq_prekeys": ["opq1"],
+    }
+    response = await client.post("/v3/keys/publish", json=bundle)
+    assert response.status_code == 403
+
+    rotate_req = {
+        "onion_address": "maliciousonionaddress.onion",
+        "signed_prekey": "rotated_sig_key",
+        "signed_prekey_sig": "rotated_sig",
+        "pq_prekey": "rotated_pq_key",
+        "pq_prekey_sig": "rotated_pq_sig",
+    }
+    response = await client.post("/v3/keys/rotate", json=rotate_req)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_group_membership_validation(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    response = await client.post(
+        "/v3/groups/",
+        json={"name": "Eve's Secret Group", "member_onions": []},
+    )
+    assert response.status_code == 201
+    group_id = response.json()["group_id"]
+
+    await client.post(
+        "/v3/auth/register",
+        json={"username": "mallory", "password": "mallorysecurepwd"},
+    )
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "mallory", "password": "mallorysecurepwd"},
+    )
+    bundle = {
+        "onion_address": "malloryonionaddress.onion",
+        "identity_key": "base64_identity_key_bytes",
+        "signed_prekey": "base64_signed_prekey_bytes",
+        "signed_prekey_sig": "base64_sig_bytes",
+        "pq_prekey": "base64_pq_prekey_bytes",
+        "pq_prekey_sig": "base64_pq_sig_bytes",
+        "one_time_prekeys": ["opk1"],
+        "one_time_pq_prekeys": ["opq1"],
+    }
+    await client.post("/v3/keys/publish", json=bundle)
+
+    response = await client.post(
+        "/v3/groups/messages",
+        json={"group_id": group_id, "ciphertext_b64": "encrypted_secret"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_message_history_pagination(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+    peer_onion = "somepeercontactonion.onion"
+    await client.post(
+        "/v3/contacts/",
+        json={"onion_address": peer_onion, "nickname": "Peer"},
+    )
+    response1 = await client.post(
+        "/v3/messages/",
+        json={
+            "recipient_onion": peer_onion,
+            "ciphertext_b64": "msg1",
+            "iv_b64": "iv1",
+            "sequence_number": 1,
+        },
+    )
+    msg1_id = response1.json()["message_id"]
+
+    await client.post(
+        "/v3/messages/",
+        json={
+            "recipient_onion": peer_onion,
+            "ciphertext_b64": "msg2",
+            "iv_b64": "iv2",
+            "sequence_number": 2,
+        },
+    )
+    await client.post(
+        "/v3/messages/",
+        json={
+            "recipient_onion": peer_onion,
+            "ciphertext_b64": "msg3",
+            "iv_b64": "iv3",
+            "sequence_number": 3,
+        },
+    )
+
+    response = await client.get(f"/v3/messages/{peer_onion}?before={msg1_id}")
+    assert response.status_code == 200
+    assert len(response.json()) == 0
+
+
+@pytest.mark.asyncio
+async def test_profiles_lifecycle_v3(client: AsyncClient) -> None:
+    # Login first
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+
+    # 1. Fetch active profile (initially default)
+    res = await client.get("/v3/profiles/active")
+    assert res.status_code == 200
+    assert res.json()["profile_id"] == "default"
+
+    # 2. Create decoy (hidden) profile
+    res = await client.post(
+        "/v3/profiles/create",
+        json={
+            "display_name": "Work Decoy",
+            "hidden": True,
+            "passphrase": "decoypassphrase",
+        },
+    )
+    assert res.status_code == 200
+    decoy_id = res.json()["profile_id"]
+
+    # 3. List profiles - should NOT show hidden profile
+    res = await client.get("/v3/profiles/")
+    assert res.status_code == 200
+    profile_ids = [p["profile_id"] for p in res.json()]
+    assert decoy_id not in profile_ids
+
+    # 4. Switch to hidden decoy profile (should fail directly without unlock)
+    res = await client.post(
+        "/v3/profiles/switch",
+        json={"profile_id": decoy_id},
+    )
+    assert res.status_code == 403
+
+    # 5. Unlock profile with passphrase
+    res = await client.post(
+        "/v3/profiles/unlock",
+        json={"passphrase": "decoypassphrase"},
+    )
+    assert res.status_code == 200
+    assert res.json()["profile"]["profile_id"] == decoy_id
+
+    # 6. Active profile should now be decoy_id
+    res = await client.get("/v3/profiles/active")
+    assert res.status_code == 200
+    assert res.json()["profile_id"] == decoy_id
+
+
+@pytest.mark.asyncio
+async def test_supporter_badge_v3(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+
+    onion = "testsupporteronionaddress.onion"
+
+    # Check initially not supporter
+    res = await client.get(f"/v3/profile/supporter_badge/status?onion_address={onion}")
+    assert res.status_code == 200
+    assert res.json()["is_supporter"] is False
+
+    # Sign using helper
+    from core.crypto import generate_supporter_badge_signature
+
+    dev_priv_key_b64 = "5ZOf4PhdTNRUN0YDwX/Clf5rgoTuLa1YQz3UtbyrUj4="
+    valid_sig = generate_supporter_badge_signature(onion, dev_priv_key_b64)
+
+    # Post invalid signature
+    res = await client.post(
+        "/v3/profile/supporter_badge/",
+        json={"onion_address": onion, "signature": "invalidsig"},
+    )
+    assert res.status_code == 400
+
+    # Post valid signature
+    res = await client.post(
+        "/v3/profile/supporter_badge/",
+        json={"onion_address": onion, "signature": valid_sig},
+    )
+    assert res.status_code == 200
+
+    # Check status again
+    res = await client.get(f"/v3/profile/supporter_badge/status?onion_address={onion}")
+    assert res.status_code == 200
+    assert res.json()["is_supporter"] is True
+    assert res.json()["badge_signature"] == valid_sig
+
+
+@pytest.mark.asyncio
+async def test_sync_pairing_v3(client: AsyncClient) -> None:
+    await client.post(
+        "/v3/auth/login",
+        json={"username": "eve", "password": "securepassword123"},
+    )
+
+    res = await client.post("/v3/sync/pair")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert "ip" in data
+    assert data["port"] == 8999
+    assert "k" in data
+
+    # Clean up pairing broker
+    from transports.p2p.routers import sync
+
+    if sync.active_pairing_broker:
+        sync.active_pairing_broker.shutdown()
+        sync.active_pairing_broker.server_close()
+        sync.active_pairing_broker = None

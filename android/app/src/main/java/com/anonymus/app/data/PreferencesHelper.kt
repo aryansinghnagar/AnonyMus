@@ -1,87 +1,136 @@
 package com.anonymus.app.data
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 
-class PreferencesHelper(context: Context) {
-    private val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        com.anonymus.app.BuildConfig.PREFS_NAME,
-        masterKeyAlias,
-        context.applicationContext,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "anonymus_prefs")
+
+class PreferencesHelper(private val context: Context) {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    init {
+        runBlocking {
+            try {
+                val prefs = context.dataStore.data.first()
+                prefs.asMap().forEach { (key, value) ->
+                    cache[key.name] = value
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PreferencesHelper", "Failed to load preferences on startup", e)
+            }
+        }
+    }
+
+    private fun <T : Any> get(key: Preferences.Key<T>, default: T): T {
+        @Suppress("UNCHECKED_CAST")
+        return cache[key.name] as? T ?: default
+    }
+
+    private fun <T : Any> getNullable(key: Preferences.Key<T>): T? {
+        @Suppress("UNCHECKED_CAST")
+        return cache[key.name] as? T
+    }
+
+    private fun <T : Any> set(key: Preferences.Key<T>, value: T?) {
+        if (value == null) {
+            cache.remove(key.name)
+            scope.launch {
+                context.dataStore.edit { preferences ->
+                    preferences.remove(key)
+                }
+            }
+        } else {
+            cache[key.name] = value
+            scope.launch {
+                context.dataStore.edit { preferences ->
+                    preferences[key] = value
+                }
+            }
+        }
+    }
 
     companion object {
-        private const val KEY_HOST = "server_host"
-        private const val KEY_PORT = "server_port"
-        private const val KEY_TRUST_SELF_SIGNED = "trust_self_signed"
-        private const val KEY_BIOMETRIC_LOCK = "biometric_lock"
+        private val KEY_HOST = stringPreferencesKey("server_host")
+        private val KEY_PORT = intPreferencesKey("server_port")
+        private val KEY_TRUST_SELF_SIGNED = booleanPreferencesKey("trust_self_signed")
+        private val KEY_BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
+        private val KEY_PUSH_ENABLED = booleanPreferencesKey("push_enabled")
+        private val KEY_PUSH_PRIVATE_MODE = booleanPreferencesKey("push_private_mode")
+        private val KEY_PUSH_TOKEN = stringPreferencesKey("push_token")
+        private val KEY_SESSION_COOKIE = stringPreferencesKey("session_cookie")
+        private val KEY_USERNAME = stringPreferencesKey("username")
     }
 
     var host: String?
-        get() = prefs.getString(KEY_HOST, null)
-        set(value) = prefs.edit().putString(KEY_HOST, value).apply()
+        get() = getNullable(KEY_HOST)
+        set(value) = set(KEY_HOST, value)
 
     var port: Int
-        get() = prefs.getInt(KEY_PORT, 5000)
-        set(value) = prefs.edit().putInt(KEY_PORT, value).apply()
+        get() = get(KEY_PORT, 5000)
+        set(value) = set(KEY_PORT, value)
 
     var trustSelfSigned: Boolean
-        get() = prefs.getBoolean(KEY_TRUST_SELF_SIGNED, false)
-        set(value) = prefs.edit().putBoolean(KEY_TRUST_SELF_SIGNED, value).apply()
+        get() = get(KEY_TRUST_SELF_SIGNED, false)
+        set(value) = set(KEY_TRUST_SELF_SIGNED, value)
 
     var biometricLock: Boolean
-        get() = prefs.getBoolean(KEY_BIOMETRIC_LOCK, false)
-        set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_LOCK, value).apply()
+        get() = get(KEY_BIOMETRIC_LOCK, false)
+        set(value) = set(KEY_BIOMETRIC_LOCK, value)
 
     var pushEnabled: Boolean
-        get() = prefs.getBoolean("push_enabled", false)
-        set(value) = prefs.edit().putBoolean("push_enabled", value).apply()
+        get() = get(KEY_PUSH_ENABLED, false)
+        set(value) = set(KEY_PUSH_ENABLED, value)
 
     var pushPrivateMode: Boolean
-        get() = prefs.getBoolean("push_private_mode", false)
-        set(value) = prefs.edit().putBoolean("push_private_mode", value).apply()
+        get() = get(KEY_PUSH_PRIVATE_MODE, false)
+        set(value) = set(KEY_PUSH_PRIVATE_MODE, value)
 
     var pushToken: String?
-        get() = prefs.getString("push_token", null)
-        set(value) = prefs.edit().putString("push_token", value).apply()
+        get() = getNullable(KEY_PUSH_TOKEN)
+        set(value) = set(KEY_PUSH_TOKEN, value)
 
     fun isConfigured(): Boolean {
         return !host.isNullOrBlank()
     }
 
     var sessionCookie: String?
-        get() = prefs.getString("session_cookie", null)
-        set(value) = prefs.edit().putString("session_cookie", value).apply()
+        get() = getNullable(KEY_SESSION_COOKIE)
+        set(value) = set(KEY_SESSION_COOKIE, value)
 
     var username: String?
-        get() = prefs.getString("username", null)
-        set(value) = prefs.edit().putString("username", value).apply()
+        get() = getNullable(KEY_USERNAME)
+        set(value) = set(KEY_USERNAME, value)
 
     var serverCertFingerprint: String?
-        get() = prefs.getString("server_cert_fingerprint_${host ?: ""}", null)
-        set(value) = prefs.edit().putString("server_cert_fingerprint_${host ?: ""}", value).apply()
+        get() = host?.let { getNullable(stringPreferencesKey("server_cert_fingerprint_$it")) }
+        set(value) {
+            host?.let { set(stringPreferencesKey("server_cert_fingerprint_$it"), value) }
+        }
 
     fun hasFingerprint(host: String): Boolean {
-        return prefs.contains("server_cert_fingerprint_$host")
+        return cache.containsKey("server_cert_fingerprint_$host")
     }
 
     fun clearFingerprint(host: String) {
-        prefs.edit().remove("server_cert_fingerprint_$host").apply()
+        set(stringPreferencesKey("server_cert_fingerprint_$host"), null)
     }
 
     fun clearSession() {
-        prefs.edit()
-            .remove("session_cookie")
-            .remove("username")
-            .apply()
+        sessionCookie = null
+        username = null
     }
 
     fun clear() {
-        prefs.edit().clear().apply()
+        cache.clear()
+        scope.launch {
+            context.dataStore.edit { preferences ->
+                preferences.clear()
+            }
+        }
     }
 }

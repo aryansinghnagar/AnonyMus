@@ -12,7 +12,8 @@ class P2PTransport(TransportProvider):
         from transports.p2p import database, tor_manager
 
         try:
-            onion, socks, peer = tor_manager.launch_tor()
+            port = int(config.get("PORT", 5001))
+            onion, socks, peer = tor_manager.launch_tor(peer_port=port)
             self.socks_port = socks
             self.onion_address = onion
             database.set_config("my_onion_address", onion)

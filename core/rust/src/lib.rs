@@ -6,6 +6,7 @@
 pub mod crypto;
 pub mod ffi;
 pub mod protocol;
+pub mod identity;
 
 use thiserror::Error;
 
@@ -45,3 +46,6 @@ use pyo3::prelude::*;
 fn anonymus_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ffi::python::anonymus_core(m)
 }
+
+#[cfg(feature = "swift")]
+uniffi::setup_scaffolding!();

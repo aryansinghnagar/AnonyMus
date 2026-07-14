@@ -25,6 +25,7 @@ import threading
 
 _pool = None
 _pool_lock = threading.Lock()
+_all_pools = []
 
 
 class BoundedSQLitePool:
@@ -34,10 +35,14 @@ class BoundedSQLitePool:
         self.queue = queue.Queue(maxsize=max_connections)
         self.created = 0
         self.lock = threading.Lock()
+        self.active_conns = set()
+        global _all_pools
+        _all_pools.append(self)
 
     def get(self):
         try:
-            return self.queue.get_nowait()
+            conn = self.queue.get_nowait()
+            return conn
         except queue.Empty:
             with self.lock:
                 if self.created < self.max_connections:
@@ -46,8 +51,10 @@ class BoundedSQLitePool:
                     conn.execute("PRAGMA busy_timeout=5000")
                     conn.execute("PRAGMA foreign_keys = ON")
                     self.created += 1
+                    self.active_conns.add(conn)
                     return conn
-            return self.queue.get(timeout=10)
+            conn = self.queue.get(timeout=10)
+            return conn
 
     def put(self, conn):
         try:
@@ -56,6 +63,7 @@ class BoundedSQLitePool:
             conn.close()
             with self.lock:
                 self.created -= 1
+                self.active_conns.discard(conn)
 
 
 class PooledConnection:
@@ -91,16 +99,37 @@ def get_connection():
             if _pool is None or _pool.db_file != DB_FILE:
                 if _pool is not None:
                     # Close connections in the old pool
-                    while not _pool.queue.empty():
+                    for conn in list(_pool.active_conns):
                         try:
-                            old_conn = _pool.queue.get_nowait()
-                            old_conn.close()
+                            conn.close()
                         except Exception:
                             pass
                 _pool = BoundedSQLitePool(DB_FILE)
 
     conn = _pool.get()
     return PooledConnection(conn, _pool)
+
+
+def close_pool():
+    """
+    Closes all active database connections in all connection pools and resets.
+    Useful for releasing file locks in test teardown/setup on Windows.
+    """
+    global _pool, _all_pools
+    for p in list(_all_pools):
+        for conn in list(p.active_conns):
+            try:
+                conn.close()
+            except Exception:
+                pass
+        p.active_conns.clear()
+        while not p.queue.empty():
+            try:
+                p.queue.get_nowait()
+            except Exception:
+                pass
+    _all_pools.clear()
+    _pool = None
 
 
 from core.crypto import decrypt_secret, encrypt_secret
@@ -1431,17 +1460,7 @@ class DatabaseModuleWrapper:
 
     def __setattr__(self, name, value):
         if name == "DB_FILE":
-            global _pool
-            if _pool is not None:
-                with _pool_lock:
-                    if _pool is not None:
-                        while not _pool.queue.empty():
-                            try:
-                                old_conn = _pool.queue.get_nowait()
-                                old_conn.close()
-                            except Exception:
-                                pass
-                        _pool = None
+            close_pool()
         setattr(self._module, name, value)
 
 

@@ -4,7 +4,7 @@
 //!
 //! ML-KEM-768 provides ~180-bit post-quantum security (NIST PQ Level 3).
 
-use ml_kem::{kem::Kem, KemCore, MlKem768};
+use ml_kem::{KemCore, MlKem768};
 use ml_kem::kem::{Decapsulate, Encapsulate};
 use ml_kem::{EncodedSizeUser, Encoded};
 
@@ -44,19 +44,18 @@ impl MlKemKeypair {
     pub fn decapsulate(&self, ct_bytes: &[u8]) -> Result<[u8; SS_LEN]> {
         use ml_kem::MlKem768Params;
 
-        type Dk = <MlKem768Params as ml_kem::ParameterSet>::DecapsulationKey;
-        type Ct = <MlKem768Params as ml_kem::ParameterSet>::CipherText;
+        type Dk = ml_kem::kem::DecapsulationKey<MlKem768Params>;
+        type Ct = ml_kem::Ciphertext<MlKem768>;
 
         let dk_encoded = Encoded::<Dk>::try_from(self.dk_bytes.as_slice())
             .map_err(|_| AnonymusError::InvalidKey("dk length/format mismatch".into()))?;
         let dk = Dk::from_bytes(&dk_encoded);
 
-        let ct_encoded = Encoded::<Ct>::try_from(ct_bytes)
-            .map_err(|_| AnonymusError::InvalidKey("ct length/format mismatch".into()))?;
-        let ct = Ct::from_bytes(&ct_encoded);
+        let ct = Ct::try_from(ct_bytes)
+            .map_err(|_| AnonymusError::InvalidKey("ct length mismatch".into()))?;
 
-        let ss = dk.decapsulate(&ct);
-        let ss_bytes: [u8; SS_LEN] = ss.as_bytes()[..SS_LEN]
+        let ss = dk.decapsulate(&ct).map_err(|_| AnonymusError::Decrypt("decapsulation failed".into()))?;
+        let ss_bytes: [u8; SS_LEN] = ss[..SS_LEN]
             .try_into()
             .expect("shared secret length guaranteed");
         Ok(ss_bytes)
@@ -68,7 +67,7 @@ impl MlKemKeypair {
 pub fn encapsulate(ek_bytes: &[u8]) -> Result<([u8; SS_LEN], Vec<u8>)> {
     use ml_kem::MlKem768Params;
 
-    type Ek = <MlKem768Params as ml_kem::ParameterSet>::EncapsulationKey;
+    type Ek = ml_kem::kem::EncapsulationKey<MlKem768Params>;
 
     let ek_encoded = Encoded::<Ek>::try_from(ek_bytes)
         .map_err(|_| AnonymusError::InvalidKey("ek length/format mismatch".into()))?;
@@ -78,10 +77,10 @@ pub fn encapsulate(ek_bytes: &[u8]) -> Result<([u8; SS_LEN], Vec<u8>)> {
         .encapsulate(&mut rand_core::OsRng)
         .map_err(|e| AnonymusError::Kdf(format!("{e:?}")))?;
 
-    let ss_bytes: [u8; SS_LEN] = ss.as_bytes()[..SS_LEN]
+    let ss_bytes: [u8; SS_LEN] = ss[..SS_LEN]
         .try_into()
         .expect("shared secret length guaranteed");
-    Ok((ss_bytes, ct.as_bytes().to_vec()))
+    Ok((ss_bytes, ct.to_vec()))
 }
 
 #[cfg(test)]

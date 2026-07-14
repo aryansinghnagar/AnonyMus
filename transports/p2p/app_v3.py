@@ -10,6 +10,9 @@ Mount into the Flask app with a WSGIMiddleware, or run standalone with uvicorn:
 
 from __future__ import annotations
 
+import asyncio
+import threading
+
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -27,9 +30,17 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from core.config import settings
 from core.db.engine import engine
-from core.db.models import Base
 from core.logging_v3 import configure_logging, get_logger
-from transports.p2p.routers import auth, contacts, groups, messages
+from transports.p2p.routers import (
+    auth,
+    contacts,
+    files,
+    groups,
+    keys,
+    messages,
+    notifications,
+    node,
+)
 
 logger = get_logger(__name__)
 
@@ -48,12 +59,57 @@ REQUEST_LATENCY = Histogram(
 )
 
 
+# ── Rate Limiting Middleware ──────────────────────────────────────────────────
+
+
+class RateLimiterMiddleware:
+    """Simple self-contained in-memory rate-limiter ASGI middleware."""
+
+    def __init__(self, app, max_requests: int = 120, period: float = 60.0):
+        self.app = app
+        self.max_requests = max_requests
+        self.period = period
+        self.requests = {}
+        self.lock = threading.Lock()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        client = scope.get("client")
+        ip = client[0] if client else "127.0.0.1"
+
+        path = scope.get("path", "")
+        if path in ("/healthz", "/readyz", "/metrics"):
+            await self.app(scope, receive, send)
+            return
+
+        now = time.time()
+        with self.lock:
+            timestamps = self.requests.get(ip, [])
+            timestamps = [t for t in timestamps if now - t < self.period]
+            if len(timestamps) >= self.max_requests:
+                from fastapi.responses import JSONResponse
+
+                response = JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please try again later."},
+                )
+                await response(scope, receive, send)
+                return
+            timestamps.append(now)
+            self.requests[ip] = timestamps
+
+        await self.app(scope, receive, send)
+
+
 # ── Lifespan ───────────────────────────────────────────────────────────────────
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Create tables on startup, clean up on shutdown."""
+    """Run migrations and Tor transport on startup, clean up on shutdown."""
     configure_logging(
         log_level=settings.log_level,
         json_logs=settings.is_production,
@@ -61,17 +117,112 @@ async def lifespan(application: FastAPI):
     logger.info(
         "anonymus_v3_starting",
         environment=settings.environment,
-        database_url=settings.database_url.split("@")[-1],  # redact credentials
+        database_url=settings.database_url.split("@")[-1],
     )
 
-    async with engine.begin() as conn:
-        # In Phase 2a we create tables if they don't exist.
-        # Phase 2c switches to Alembic migrations for schema management.
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        from alembic.config import Config
+        from alembic import command
 
-    logger.info("database_tables_ready")
+        logger.info("running_alembic_migrations")
+
+        def run_migrations():
+            alembic_cfg = Config("alembic.ini")
+            command.upgrade(alembic_cfg, "head")
+
+        await asyncio.to_thread(run_migrations)
+        logger.info("alembic_migrations_completed")
+    except Exception as e:
+        logger.error("alembic_migrations_failed", error=str(e))
+
+    p2p_transport = None
+    import os
+    import sys
+
+    is_test_env = (
+        settings.is_test
+        or os.environ.get("TESTING") == "True"
+        or "pytest" in sys.modules
+    )
+
+    if settings.tor_enabled and not is_test_env:
+        try:
+            from transports.p2p.adapter import P2PTransport
+
+            p2p_transport = P2PTransport()
+            logger.info("starting_p2p_transport_tor", port=settings.port)
+            p2p_transport.start({"PORT": settings.port})
+            logger.info("p2p_transport_tor_started", onion=p2p_transport.onion_address)
+        except Exception as e:
+            logger.error("p2p_transport_tor_startup_failed", error=str(e))
+
+    zeroconf_instance = None
+    if os.environ.get("ANONYMUS_MDNS", "false").lower() == "true" and not is_test_env:
+        try:
+            from zeroconf import ServiceInfo, Zeroconf
+            import socket
+            from sqlalchemy import select
+
+            def get_local_ip():
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    s.connect(("10.255.255.255", 1))
+                    ip = s.getsockname()[0]
+                except Exception:
+                    ip = "127.0.0.1"
+                finally:
+                    s.close()
+                return ip
+
+            user_onion = None
+            try:
+                from sqlalchemy.ext.asyncio import AsyncSession
+                from core.db.models import User
+
+                async with AsyncSession(engine) as db_session:
+                    user = await db_session.scalar(select(User).limit(1))
+                    if user:
+                        user_onion = user.onion_address
+            except Exception as db_err:
+                logger.warning("mdns_db_query_failed", error=str(db_err))
+
+            local_ip = get_local_ip()
+            zeroconf_instance = Zeroconf()
+            info = ServiceInfo(
+                "_anonymus._tcp.local.",
+                f"AnonyMus Peer {settings.port}._anonymus._tcp.local.",
+                addresses=[socket.inet_aton(local_ip)],
+                port=settings.port,
+                properties={"onion": user_onion or ""},
+            )
+            zeroconf_instance.register_service(info)
+            logger.info(
+                "mdns_advertised",
+                service="_anonymus._tcp.local.",
+                ip=local_ip,
+                port=settings.port,
+            )
+        except Exception as e:
+            logger.error("mdns_advertisement_failed", error=str(e))
+
     yield
-    # Dispose of the connection pool on shutdown
+
+    if zeroconf_instance:
+        try:
+            logger.info("stopping_mdns_advertisement")
+            zeroconf_instance.close()
+            logger.info("mdns_advertisement_stopped")
+        except Exception as e:
+            logger.error("mdns_shutdown_failed", error=str(e))
+
+    if p2p_transport:
+        try:
+            logger.info("stopping_p2p_transport_tor")
+            p2p_transport.stop()
+            logger.info("p2p_transport_tor_stopped")
+        except Exception as e:
+            logger.error("p2p_transport_tor_shutdown_failed", error=str(e))
+
     await engine.dispose()
     logger.info("anonymus_v3_shutdown")
 
@@ -93,7 +244,7 @@ def create_app() -> FastAPI:
     # ── Middleware ─────────────────────────────────────────────────────────────
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://127.0.0.1:*", "http://localhost:*"],
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -104,6 +255,7 @@ def create_app() -> FastAPI:
         same_site="strict",
         https_only=settings.is_production,
     )
+    application.add_middleware(RateLimiterMiddleware, max_requests=120, period=60.0)
 
     # ── Prometheus timing middleware ───────────────────────────────────────────
     @application.middleware("http")
@@ -134,11 +286,22 @@ def create_app() -> FastAPI:
         )
 
     # ── V3 API Routers ─────────────────────────────────────────────────────────
-    v3_prefix = "/v3"
-    application.include_router(auth.router, prefix=v3_prefix)
-    application.include_router(contacts.router, prefix=v3_prefix)
-    application.include_router(messages.router, prefix=v3_prefix)
-    application.include_router(groups.router, prefix=v3_prefix)
+    application.include_router(auth.router)
+    application.include_router(contacts.router)
+    application.include_router(messages.router)
+    application.include_router(groups.router)
+    # Phase 2b — new routers (node info, notifications, pre-key bundles)
+    application.include_router(node.router)
+    application.include_router(notifications.router)
+    application.include_router(keys.router)
+    application.include_router(files.router)
+    from transports.p2p.routers import p2p, profiles, sync, supporter, compat
+
+    application.include_router(p2p.router)
+    application.include_router(profiles.router)
+    application.include_router(sync.router)
+    application.include_router(supporter.router)
+    application.include_router(compat.router)
 
     # ── Observability Endpoints ────────────────────────────────────────────────
     @application.get("/healthz", tags=["observability"], summary="Liveness probe")
@@ -167,6 +330,11 @@ def create_app() -> FastAPI:
             content=generate_latest(),
             media_type=CONTENT_TYPE_LATEST,
         )
+
+    # ── Socket.IO ASGI mount ───────────────────────────────────────────────────
+    from transports.p2p.socket_v3 import socket_app
+
+    application.mount("/socket.io", socket_app)
 
     return application
 
