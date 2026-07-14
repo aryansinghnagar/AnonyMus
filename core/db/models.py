@@ -54,6 +54,9 @@ class User(Base):
     last_seen: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    preferred_file_relay: Mapped[str | None] = mapped_column(
+        String(512), default="", nullable=True
+    )
 
     contacts: Mapped[list[Contact]] = relationship(
         "Contact",
@@ -67,10 +70,9 @@ class User(Base):
 
 
 class Contact(Base):
-    """A peer in the local contact list."""
+    """Pairwise peer contact."""
 
     __tablename__ = "contacts"
-    __table_args__ = (UniqueConstraint("owner_onion", "onion_address"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_onion: Mapped[str] = mapped_column(
@@ -83,13 +85,46 @@ class Contact(Base):
     nickname: Mapped[str | None] = mapped_column(String(64), nullable=True)
     public_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
     shared_secret_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="accepted", nullable=False)
     verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     added_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
+    notify_queue_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Added columns for Phase 4 / week 18 / profiles
+    my_onion_address: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    disappearing_ttl: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    dr_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    peer_kem_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    my_kem_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_file_relay: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    send_receipts: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    profile_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("profiles.profile_id", ondelete="CASCADE"),
+        default="default",
+        nullable=False,
+    )
 
     owner: Mapped[User] = relationship(
         "User", foreign_keys=[owner_onion], back_populates="contacts"
+    )
+
+
+# ── Notification Queue ─────────────────────────────────────────────────────────
+
+
+class NotificationQueue(Base):
+    """Token-based push-notification polling queue."""
+
+    __tablename__ = "notify_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
     )
 
 
@@ -124,6 +159,7 @@ class Message(Base):
         DateTime(timezone=True), nullable=True
     )
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sealed_sender: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 # ── Groups ─────────────────────────────────────────────────────────────────────
@@ -147,6 +183,12 @@ class Group(Base):
     is_channel: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    profile_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("profiles.profile_id", ondelete="CASCADE"),
+        default="default",
+        nullable=False,
     )
 
     members: Mapped[list[GroupMember]] = relationship(
@@ -208,3 +250,100 @@ class GroupMessage(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     group: Mapped[Group] = relationship("Group", back_populates="messages")
+
+
+# ── Pre-Key Bundles ────────────────────────────────────────────────────────────
+
+import json
+
+
+class PreKeyBundle(Base):
+    """Pre-key bundles for X3DH / PQXDH key exchange, stored persistently."""
+
+    __tablename__ = "prekey_bundles"
+
+    onion_address: Mapped[str] = mapped_column(
+        String(128), primary_key=True, nullable=False, index=True
+    )
+    identity_key: Mapped[str] = mapped_column(Text, nullable=False)
+    signed_prekey: Mapped[str] = mapped_column(Text, nullable=False)
+    signed_prekey_sig: Mapped[str] = mapped_column(Text, nullable=False)
+    pq_prekey: Mapped[str] = mapped_column(Text, nullable=False)
+    pq_prekey_sig: Mapped[str] = mapped_column(Text, nullable=False)
+    one_time_prekeys_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    one_time_pq_prekeys_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    @property
+    def one_time_prekeys(self) -> list[str]:
+        try:
+            return json.loads(self.one_time_prekeys_json)
+        except Exception:
+            return []
+
+    @one_time_prekeys.setter
+    def one_time_prekeys(self, val: list[str]) -> None:
+        self.one_time_prekeys_json = json.dumps(list(val))
+
+    @property
+    def one_time_pq_prekeys(self) -> list[str]:
+        try:
+            return json.loads(self.one_time_pq_prekeys_json)
+        except Exception:
+            return []
+
+    @one_time_pq_prekeys.setter
+    def one_time_pq_prekeys(self, val: list[str]) -> None:
+        self.one_time_pq_prekeys_json = json.dumps(list(val))
+
+
+# ── Profiles, Abuse Reports, Supporter Badges ────────────────────────────────
+
+
+class Profile(Base):
+    """Hidden and decoy profiles for the calc stealth vault."""
+
+    __tablename__ = "profiles"
+
+    profile_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, nullable=False
+    )
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    passphrase_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+
+class AbuseReport(Base):
+    """P2P message abuse/spam reports."""
+
+    __tablename__ = "abuse_reports"
+
+    report_id: Mapped[str] = mapped_column(String(64), primary_key=True, nullable=False)
+    message_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    reporter_onion: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    signature: Mapped[str] = mapped_column(String(512), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
+class SupporterBadge(Base):
+    """Cryptographic signatures showing the user is a supporter of the project."""
+
+    __tablename__ = "supporter_badges"
+
+    onion_address: Mapped[str] = mapped_column(
+        String(128), primary_key=True, nullable=False
+    )
+    badge_signature: Mapped[str] = mapped_column(String(512), nullable=False)
+    signed_by_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )

@@ -4,7 +4,6 @@
 //! Parameters match OWASP 2024 recommendations for interactive logins.
 
 use argon2::{
-    password_hash::{PasswordHasher, SaltString},
     Argon2, Params, Algorithm, Version,
 };
 

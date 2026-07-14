@@ -16,7 +16,7 @@ from core.db.models import Group, GroupMember, GroupMessage, User
 from core.logging_v3 import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/groups", tags=["groups"])
+router = APIRouter(prefix="/v3/groups", tags=["groups"])
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -90,11 +90,13 @@ async def create_group(
             detail="Onion address not configured",
         )
 
+    profile_id = request.session.get("active_profile_id", "default")
     group = Group(
         group_id=str(uuid.uuid4()),
         name=body.name,
         founder_onion=user.onion_address,
         is_channel=body.is_channel,
+        profile_id=profile_id,
     )
     session.add(group)
     await session.flush()
@@ -123,6 +125,7 @@ async def list_groups(
     session: AsyncSession = Depends(get_session),
 ) -> list[GroupResponse]:
     user = await _get_current_user(request, session)
+    profile_id = request.session.get("active_profile_id", "default")
 
     memberships = await session.scalars(
         select(GroupMember).where(GroupMember.onion_address == user.onion_address)
@@ -132,7 +135,12 @@ async def list_groups(
     if not group_ids:
         return []
 
-    groups = await session.scalars(select(Group).where(Group.group_id.in_(group_ids)))
+    groups = await session.scalars(
+        select(Group).where(
+            Group.group_id.in_(group_ids),
+            Group.profile_id == profile_id,
+        )
+    )
     return [GroupResponse.model_validate(g) for g in groups]
 
 
@@ -153,6 +161,19 @@ async def send_group_message(
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+
+    # Verify the user is a member of the group
+    is_member = await session.scalar(
+        select(GroupMember).where(
+            GroupMember.group_id == body.group_id,
+            GroupMember.onion_address == user.onion_address,
+        )
+    )
+    if not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You are not a member of this group",
         )
 
     # Broadcast channels: only the founder can post

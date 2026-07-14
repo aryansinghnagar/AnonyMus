@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -44,12 +47,13 @@ import javax.crypto.spec.SecretKeySpec
 import javax.crypto.Cipher
 import java.nio.charset.StandardCharsets
 
+@Entity(tableName = "messages")
 data class ChatMessage(
     val sender: String,
     var text: String,
     val timestamp: Long = System.currentTimeMillis(),
     val isDecryptedSuccessfully: Boolean = true,
-    val id: String = java.util.UUID.randomUUID().toString(),
+    @PrimaryKey val id: String = java.util.UUID.randomUUID().toString(),
     var remainingSeconds: Int = -1,
     var reactions: List<String> = emptyList(),
     var isFile: Boolean = false,
@@ -74,8 +78,25 @@ enum class ConnectionStatus {
 class ChatManager(
     private val context: Context,
     private val prefs: PreferencesHelper,
-    private val cryptoProvider: CryptoProvider
+    private val cryptoProvider: CryptoProvider,
+    private val messageDao: com.anonymus.app.data.db.MessageDao
 ) {
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            loadMessagesFromDb()
+        }
+    }
+
+    private suspend fun loadMessagesFromDb() {
+        try {
+            val list = messageDao.getAllMessages()
+            val partner = theirQueueId ?: "Peer"
+            _conversations.value = mapOf(partner to list)
+        } catch (e: Exception) {
+            Log.e("ChatManager", "Error loading messages from database", e)
+        }
+    }
+
     private val TAG = "ChatManager"
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -201,15 +222,15 @@ class ChatManager(
             }
 
             override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                cookieStore[url.host()] = cookies.toMutableList()
-                val sessionCookie = cookies.find { it.name() == "session" }
+                cookieStore[url.host] = cookies.toMutableList()
+                val sessionCookie = cookies.find { it.name == "session" }
                 if (sessionCookie != null) {
-                    prefs.sessionCookie = sessionCookie.value()
+                    prefs.sessionCookie = sessionCookie.value
                 }
             }
 
             override fun loadForRequest(url: HttpUrl): List<Cookie> {
-                return cookieStore[url.host()] ?: ArrayList()
+                return cookieStore[url.host] ?: ArrayList()
             }
         })
 
@@ -247,6 +268,9 @@ class ChatManager(
         safetyNumber = null
         _isSessionActive.value = false
         _conversations.value = emptyMap()
+        CoroutineScope(Dispatchers.IO).launch {
+            messageDao.clearAllMessages()
+        }
     }
 
     fun infinitySnap() {
@@ -306,10 +330,10 @@ class ChatManager(
             }
             val request = Request.Builder()
                 .url("https://${prefs.host}:${prefs.port}/register")
-                .post(RequestBody.create(MediaType.parse("application/json"), payload.toString()))
+                .post(RequestBody.create("application/json".toMediaTypeOrNull(), payload.toString()))
                 .build()
             val response = client.newCall(request).execute()
-            val respStr = response.body()?.string() ?: ""
+            val respStr = response.body?.string() ?: ""
             val json = JSONObject(respStr)
             if (json.optBoolean("success")) {
                 Pair(true, null)
@@ -330,10 +354,10 @@ class ChatManager(
             }
             val request = Request.Builder()
                 .url("https://${prefs.host}:${prefs.port}/login")
-                .post(RequestBody.create(MediaType.parse("application/json"), payload.toString()))
+                .post(RequestBody.create("application/json".toMediaTypeOrNull(), payload.toString()))
                 .build()
             val response = client.newCall(request).execute()
-            val respStr = response.body()?.string() ?: ""
+            val respStr = response.body?.string() ?: ""
             val json = JSONObject(respStr)
             if (json.optBoolean("success")) {
                 Pair(true, null)
@@ -894,6 +918,9 @@ class ChatManager(
                 startCountdown(chatPartner, msgWithTimer.id)
             }
         }
+        CoroutineScope(Dispatchers.IO).launch {
+            messageDao.insertMessage(msgWithTimer)
+        }
     }
 
     private fun startCountdown(chatPartner: String, messageId: String) {
@@ -924,6 +951,10 @@ class ChatManager(
 
                 if (!deleteMessage) {
                     mainHandler.postDelayed(this, 1000)
+                } else {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        messageDao.deleteMessage(messageId)
+                    }
                 }
             }
         }
@@ -1112,6 +1143,9 @@ class ChatManager(
             list[idx] = updatedMsg
             current[queueId] = list
             _conversations.value = current
+            CoroutineScope(Dispatchers.IO).launch {
+                messageDao.updateFileProgress(messageId, progress)
+            }
         }
     }
 
@@ -1143,10 +1177,10 @@ class ChatManager(
                     val request = Request.Builder().url(url).build()
                     val response = client.newCall(request).execute()
                     if (!response.isSuccessful) {
-                        throw Exception("Failed to download chunk $chunkId: ${response.code()}")
+                        throw Exception("Failed to download chunk $chunkId: ${response.code}")
                     }
 
-                    val encryptedBytes = response.body()?.bytes() ?: throw Exception("Empty body")
+                    val encryptedBytes = response.body?.bytes() ?: throw Exception("Empty body")
                     val info = "AnonyMus-XFTP-Chunk-$i".toByteArray(Charsets.UTF_8)
                     val chunkKey = DoubleRatchetSession.hkdfDerive256(masterKey, info)
                     val decryptedBytes = decryptGcmChunk(chunkKey, encryptedBytes)

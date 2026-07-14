@@ -1,0 +1,19 @@
+{
+  "identifier": "default-capability",
+  "description": "Default capability for the main window including Tor sidecar execution permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "bin/tor",
+          "sidecar": true
+        }
+      ]
+    }
+  ]
+}

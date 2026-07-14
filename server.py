@@ -21,6 +21,9 @@ _PLACEHOLDER_SECRETS = {
     "changeme",
     "",
 }
+if not os.environ.get("FLASK_SECRET_KEY"):
+    os.environ["FLASK_SECRET_KEY"] = os.environ.get("SECRET_KEY", "")
+
 if os.environ.get("FLASK_SECRET_KEY", "") in _PLACEHOLDER_SECRETS:
     raise RuntimeError(
         "Refusing to start: FLASK_SECRET_KEY is missing, empty, or a known placeholder. "

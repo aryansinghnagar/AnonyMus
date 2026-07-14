@@ -48,6 +48,15 @@ impl StaticKeypair {
     }
 }
 
+impl zeroize::Zeroize for StaticKeypair {
+    fn zeroize(&mut self) {
+        self.private = StaticSecret::from([0u8; 32]);
+        self.public = PublicKey::from(&self.private);
+    }
+}
+
+impl zeroize::ZeroizeOnDrop for StaticKeypair {}
+
 /// Generate an ephemeral keypair for a single use (X3DH initiator EK).
 /// The private key is consumed after the DH step.
 pub struct EphemeralKeypair {

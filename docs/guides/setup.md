@@ -86,17 +86,14 @@ python launcher/launcher.py
 
 ## 4. Containerized Deployment (Docker)
 
-To spin up the centralized relay stack (Flask server, PostgreSQL database, and Redis cache) using Docker Compose, execute the following from the repository root:
+To spin up the production relay stack (Python FastAPI relay, SolidJS web frontend, Redis cache, and Caddy reverse proxy) using Docker Compose:
 
-1. Build the Docker image:
+1. Configure your environment variables in `.env` (ensure `SECRET_KEY` and `RELAY_DOMAIN` are set).
+2. Start the services from the repository root:
    ```bash
-   docker build -t anonymus -f build/Dockerfile .
+   docker compose up -d
    ```
-2. Start the services:
-   ```bash
-   docker-compose -f build/docker-compose.yml up -d
-   ```
-The Flask relay will expose port `5000` to the host machine.
+This command builds the immutable relay backend via `Dockerfile.relay` and compiles the SolidJS frontend assets via a Node build service into a shared volume. Caddy automatically serves the static assets and reverse-proxies `/v3/*` API requests to the relay container, exposing port `80` and `443` on the host machine.
 
 ---
 

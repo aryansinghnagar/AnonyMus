@@ -15,6 +15,7 @@ class TestPagination(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         database.DB_FILE = "test_pagination.db"
+        database.close_pool()
         if os.path.exists(database.DB_FILE):
             os.remove(database.DB_FILE)
         database.init_db()
@@ -28,6 +29,7 @@ class TestPagination(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         database.DB_FILE = "test_pagination.db"
+        database.close_pool()
         if os.path.exists(database.DB_FILE):
             os.remove(database.DB_FILE)
 

@@ -1,6 +1,10 @@
 """
 Server Module for AnonyMus (P2P Decentralized Architecture).
 
+[DEPRECATED] This Flask server is deprecated.
+Use FastAPI v3 application factory (app_v3.py) for all production routing.
+This file is retained exclusively for running legacy test suite fixtures.
+
 Implements the local node interface and public Tor peer-to-peer message endpoints.
 Local routes (/api/*, /, /chat) are secured to localhost only.
 Public P2P routes (/p2p/*) process incoming requests routed through the Tor onion service.
@@ -299,7 +303,8 @@ p2p_origins = [
 socketio = SocketIO(app, cors_allowed_origins=p2p_origins, transports=["websocket"])
 
 # Ensure P2P database tables exist
-database.init_db()
+if "unittest" not in sys.modules and "pytest" not in sys.modules:
+    database.init_db()
 
 # Outbound Tor SOCKS proxy config
 SOCKS_PORT = 9050

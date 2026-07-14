@@ -1,0 +1,36 @@
+# Pinned SHA-256 base image digest for python 3.12 alpine (Reproducible Build Constraint)
+FROM python:3.12-alpine@sha256:d8be92383c8479e0f63b4009cdde6f1e84323cb11202ec56b02660a5e81d7637
+
+# Prevent python from writing pyc to disk and enable unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=5001
+
+# Set secure working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev git
+
+# Install uv package manager (fast, reproducible resolver)
+RUN pip install --no-cache-dir uv==0.1.29
+
+# Copy only dependencies configuration to leverage cache
+COPY requirements.txt /app/
+
+# Install dependencies using pinned requirements
+RUN uv pip install --system --no-cache -r requirements.txt
+
+# Copy the rest of the application source code
+COPY . /app
+
+# Create a non-privileged system user for executing the process
+RUN addgroup -S anonymus && adduser -S anonymus -G anonymus
+RUN chown -R anonymus:anonymus /app
+USER anonymus
+
+# Document exposed ports
+EXPOSE 5001
+
+# Run FastAPI backend using uvicorn
+CMD ["uvicorn", "transports.relay.app_relay:app", "--host", "0.0.0.0", "--port", "5001"]

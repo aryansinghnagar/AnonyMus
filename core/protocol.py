@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from core import pq_kem
 from core.queue_cryptobox import QueueCryptobox
 
-PADDED_SIZE = 16384
+PADDED_SIZE = 2048
 
 # ---------------------------------------------------------------------------
 # Post-Quantum KEM helpers (thin wrappers over core.pq_kem)
@@ -146,6 +146,27 @@ def pad_plaintext(text: str) -> bytes:
     if padded_len > text_len + 4:
         padded_buffer[4 + text_len :] = os.urandom(padded_len - text_len - 4)
     return bytes(padded_buffer)
+
+
+def encrypt_message(
+    message_key: bytes,
+    plaintext: str,
+    role: str,
+    seq_num: int,
+    session_id: str,
+) -> dict:
+    """
+    Encrypts a message (v1 format) with length prefix and padding.
+    """
+    padded_data = pad_plaintext(plaintext)
+    iv = os.urandom(12)
+    aad = construct_aad(role, seq_num, session_id, 2)
+    aesgcm = AESGCM(message_key)
+    ciphertext = aesgcm.encrypt(iv, padded_data, aad)
+    return {
+        "iv": base64.b64encode(iv).decode("utf-8"),
+        "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
+    }
 
 
 def encrypt_message_v2(

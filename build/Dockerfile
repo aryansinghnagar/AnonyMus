@@ -27,8 +27,8 @@ EXPOSE 5000
 
 # Define env variables
 ENV PORT=5000
-ENV FLASK_DEBUG=False
-ENV DISABLE_SSL=False
+ENV ANONYMUS_LOG_LEVEL=info
+ENV ANONYMUS_PRODUCTION=True
 
-# Run with Gunicorn eventlet worker
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "-b", "0.0.0.0:5000", "server:app"]
+# Run with Granian Rust ASGI server
+CMD ["granian", "--interface", "asgi", "--host", "0.0.0.0", "--port", "5000", "transports.p2p.app_v3:app"]

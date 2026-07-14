@@ -121,6 +121,16 @@ mod tests {
     }
 
     #[test]
+    fn encrypt_with_nonce_kat() {
+        let key = [0x42u8; KEY_LEN];
+        let nonce = [0x01u8; NONCE_LEN];
+        let plaintext = b"AnonyMus v3 AEAD test vector";
+        let aad = b"session_id:deadbeef";
+        let ct = encrypt_with_nonce(&key, &nonce, plaintext, aad).unwrap();
+        assert_eq!(hex::encode(&ct), "d128df9521fa4c13a0e107f9c8bf228be0bc368297b767eb326d9c490218ab28e469ea7d9f7a77e3fb24");
+    }
+
+    #[test]
     fn wrong_aad_fails() {
         let key = test_key();
         let nonce = [0x02u8; NONCE_LEN];

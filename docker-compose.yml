@@ -10,26 +10,25 @@ version: "3.9"
 x-relay-env: &relay-env
   RELAY_MODE: relay
   RELAY_PORT: "5001"
-  FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY in .env}
+  SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
   RELAY_DOMAIN: ${RELAY_DOMAIN:-}
   RELAY_AS_ONION: ${RELAY_AS_ONION:-false}
   REDIS_URL: redis://redis:6379/0
+  ENVIRONMENT: production
+  DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/anonymus.db}
 
 services:
   # ── AnonyMus relay ──────────────────────────────────────────────────────────
   relay:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.relay
     container_name: anonymus-relay
     restart: unless-stopped
-    working_dir: /app
     volumes:
-      - .:/app:ro
       - relay-data:/app/data
     environment:
       <<: *relay-env
-    command: >
-      sh -c "pip install --quiet -r requirements.txt &&
-             python server.py --relay-only"
     expose:
       - "5001"
     depends_on:
@@ -38,7 +37,7 @@ services:
     networks:
       - internal
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/healthz')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -57,6 +56,16 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── Frontend Builder ────────────────────────────────────────────────────────
+  frontend-builder:
+    image: node:20-alpine
+    container_name: anonymus-frontend-builder
+    working_dir: /app
+    volumes:
+      - ./web:/app
+      - web-dist:/app/dist
+    command: sh -c "npm install && npm run build"
+
   # ── Caddy (TLS termination, clearnet mode) ───────────────────────────────────
   caddy:
     image: caddy:2-alpine
@@ -68,14 +77,13 @@ services:
       - "443:443/udp"
     volumes:
       - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - web-dist:/usr/share/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:
       - internal
     depends_on:
       - relay
-    profiles:
-      - clearnet
 
   # ── Tor (onion-only mode) ────────────────────────────────────────────────────
   tor:
@@ -120,3 +128,4 @@ volumes:
   caddy-data:
   caddy-config:
   tor-data:
+  web-dist:

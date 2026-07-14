@@ -7,6 +7,7 @@ import android.util.Log
 import com.anonymus.app.data.PreferencesHelper
 import kotlinx.coroutines.*
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -101,12 +102,12 @@ class PushService : Service() {
         try {
             client.newCall(contactsRequest).execute().use { response ->
                 if (response.isSuccessful) {
-                    val bodyStr = response.body()?.string()
+                    val bodyStr = response.body?.string()
                     if (!bodyStr.isNullOrBlank()) {
                         contactsList = JSONArray(bodyStr)
                     }
                 } else {
-                    Log.w(TAG, "Failed to fetch contacts: ${response.code()}")
+                    Log.w(TAG, "Failed to fetch contacts: ${response.code}")
                 }
             }
         } catch (e: IOException) {
@@ -136,13 +137,13 @@ class PushService : Service() {
                 val regRequest = Request.Builder()
                     .url(registerUrl)
                     .addHeader("Cookie", "session=${prefs.sessionCookie}")
-                    .post(RequestBody.create(MediaType.parse("application/json"), regPayload.toString()))
+                    .post(RequestBody.create("application/json".toMediaTypeOrNull(), regPayload.toString()))
                     .build()
 
                 try {
                     client.newCall(regRequest).execute().use { response ->
                         if (response.isSuccessful) {
-                            val respBody = response.body()?.string()
+                            val respBody = response.body?.string()
                             if (!respBody.isNullOrBlank()) {
                                 token = JSONObject(respBody).optString("token")
                                 Log.i(TAG, "Successfully registered new notification token for contact $onion")
@@ -176,7 +177,7 @@ class PushService : Service() {
         try {
             client.newCall(pollRequest).execute().use { response ->
                 if (response.isSuccessful) {
-                    val respStr = response.body()?.string()
+                    val respStr = response.body?.string()
                     if (!respStr.isNullOrBlank()) {
                         val pollObj = JSONObject(respStr)
                         val hasNewMap = pollObj.optJSONObject("has_new")
@@ -217,7 +218,7 @@ class PushService : Service() {
             val clearRequest = Request.Builder()
                 .url(clearUrl)
                 .addHeader("Cookie", "session=${prefs.sessionCookie}")
-                .post(RequestBody.create(MediaType.parse("application/json"), clearPayload.toString()))
+                .post(RequestBody.create("application/json".toMediaTypeOrNull(), clearPayload.toString()))
                 .build()
 
             try {

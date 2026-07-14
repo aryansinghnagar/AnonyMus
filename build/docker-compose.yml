@@ -6,11 +6,9 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:?FLASK_SECRET_KEY must be set}
-      - FLASK_DEBUG=False
-      - DISABLE_SSL=True  # Usually disabled behind reverse proxy/Docker networking
-      - DATABASE_URL=postgresql://anonymus:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/anonymus_db
-      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://anonymus:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/anonymus_db
     depends_on:
       - db
       - redis

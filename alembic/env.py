@@ -37,12 +37,15 @@ def run_migrations_offline() -> None:
     """Emit SQL to stdout without a live DB connection (used for SQL diff generation)."""
     from core.config import settings
 
-    url = config.get_main_option("sqlalchemy.url") or settings.database_url
+    url = config.get_main_option("sqlalchemy.url")
+    if not url or "driver://user" in url:
+        url = settings.database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -52,7 +55,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -62,7 +69,8 @@ async def run_async_migrations() -> None:
 
     configuration = config.get_section(config.config_ini_section) or {}
     # Allow alembic.ini override; fall back to settings.database_url
-    if not configuration.get("sqlalchemy.url"):
+    url = configuration.get("sqlalchemy.url")
+    if not url or "driver://user" in url:
         configuration["sqlalchemy.url"] = settings.database_url
 
     connectable = async_engine_from_config(

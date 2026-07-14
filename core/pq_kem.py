@@ -49,7 +49,7 @@ if not os.environ.get("ANONYMUS_PQ_DISABLE"):
         del _probe
         _oqs = _oqs_module
         log.info("liboqs loaded — ML-KEM-768 (Kyber768) available")
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         log.warning("liboqs not available — PQ hybrid mode disabled: %s", e)
         _oqs = None
 

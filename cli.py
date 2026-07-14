@@ -141,6 +141,98 @@ class AnonyMusShell(cmd.Cmd):
             print(f"[{local_time}] {sender_label}: {m['text']}")
         print("---------------------------------\n")
 
+    def do_creategroup(self, arg):
+        """Create a new secure MLS group: creategroup <group_id> <comma_separated_member_usernames>"""
+        parts = arg.split(maxsplit=1)
+        if len(parts) < 2:
+            print("Usage: creategroup <group_id> <comma_separated_member_usernames>")
+            return
+        group_id = parts[0].strip()
+        members = [m.strip() for m in parts[1].split(",") if m.strip()]
+
+        try:
+            res = self.client.session.post(
+                f"{self.client.base_url}/api/v3/groups",
+                json={"group_id": group_id, "members": members},
+            )
+            if res.status_code == 200:
+                print(
+                    f"MLS Group '{group_id}' created successfully with members: {members}"
+                )
+            else:
+                print(f"Failed to create group: {res.text}")
+        except Exception as e:
+            print(f"Error creating group: {e}")
+
+    def do_joingroup(self, arg):
+        """Join an existing secure MLS group: joingroup <group_id>"""
+        group_id = arg.strip()
+        if not group_id:
+            print("Usage: joingroup <group_id>")
+            return
+
+        try:
+            res = self.client.session.post(
+                f"{self.client.base_url}/api/v3/groups/join",
+                json={"group_id": group_id},
+            )
+            if res.status_code == 200:
+                print(f"Successfully joined MLS group '{group_id}'!")
+            else:
+                print(f"Failed to join group: {res.text}")
+        except Exception as e:
+            print(f"Error joining group: {e}")
+
+    def do_groupsend(self, arg):
+        """Send an encrypted message to an MLS group: groupsend <group_id> <message_text>"""
+        parts = arg.split(maxsplit=1)
+        if len(parts) < 2:
+            print("Usage: groupsend <group_id> <message_text>")
+            return
+        group_id = parts[0].strip()
+        text = parts[1].strip()
+
+        try:
+            res = self.client.session.post(
+                f"{self.client.base_url}/api/v3/groups/messages",
+                json={"group_id": group_id, "message_text": text},
+            )
+            if res.status_code == 200:
+                print("Message encrypted and broadcast to MLS group.")
+            else:
+                print(f"Failed to send group message: {res.text}")
+        except Exception as e:
+            print(f"Error sending group message: {e}")
+
+    def do_grouphistory(self, arg):
+        """Retrieve message history for an MLS group: grouphistory <group_id>"""
+        group_id = arg.strip()
+        if not group_id:
+            print("Usage: grouphistory <group_id>")
+            return
+
+        try:
+            res = self.client.session.get(
+                f"{self.client.base_url}/api/v3/groups/{group_id}/messages"
+            )
+            if res.status_code != 200:
+                print("Error fetching group message history.")
+                return
+            msgs = res.json()
+            if not msgs:
+                print("No group messages found.")
+                return
+
+            print(f"\n--- Group Chat History for '{group_id}' ---")
+            for m in msgs:
+                local_time = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(m["timestamp"] / 1000.0)
+                )
+                print(f"[{local_time}] {m['sender']}: {m['text']}")
+            print("-------------------------------------------\n")
+        except Exception as e:
+            print(f"Error: {e}")
+
     def do_quit(self, arg):
         """Exit the terminal client: quit"""
         print("Goodbye!")
@@ -155,7 +247,7 @@ class AnonyMusShell(cmd.Cmd):
 
 def main():
     print(ASCII_ART)
-    port = os.environ.get("PORT", 5000)
+    port = os.environ.get("PORT", 5001)
     base_url = f"http://127.0.0.1:{port}"
 
     client = AnonyMusClient(base_url=base_url)
