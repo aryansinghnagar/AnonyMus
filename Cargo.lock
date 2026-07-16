@@ -105,7 +105,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "uniffi",
  "wasm-bindgen",
  "x25519-dalek",
