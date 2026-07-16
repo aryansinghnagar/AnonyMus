@@ -22,7 +22,7 @@ httpx>=0.28
 orjson>=3.10
 
 # Async event loop
-uvloop>=0.21; sys_platform == "linux"
+uvloop>=0.22.1; sys_platform == "linux"
 
 # Async DNS (for Tor integration)
 aiodns>=3.2
