@@ -47,7 +47,9 @@ pub fn unpad(padded: &[u8], block_size: usize) -> Result<Vec<u8>> {
     let start_idx = padded.len() - pad_len;
     for &byte in &padded[start_idx..] {
         if byte as usize != pad_len {
-            return Err(AnonymusError::Decrypt("invalid PKCS#7 padding bytes".into()));
+            return Err(AnonymusError::Decrypt(
+                "invalid PKCS#7 padding bytes".into(),
+            ));
         }
     }
 

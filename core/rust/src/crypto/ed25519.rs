@@ -4,7 +4,7 @@
 //! - Supporter badge verification (root developer key).
 //! - Identity key binding proofs.
 
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey, Signer, Verifier};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
 use crate::{AnonymusError, Result};
 

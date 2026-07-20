@@ -2,11 +2,7 @@
 //!
 //! Synthesizes X25519 DH steps with ML-KEM-768 key encapsulation.
 
-use crate::crypto::{
-    hkdf,
-    ml_kem,
-    x25519::StaticKeypair,
-};
+use crate::crypto::{hkdf, ml_kem, x25519::StaticKeypair};
 use crate::Result;
 
 pub struct PqxdhInitiatorResult {

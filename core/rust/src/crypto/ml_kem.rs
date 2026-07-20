@@ -4,9 +4,9 @@
 //!
 //! ML-KEM-768 provides ~180-bit post-quantum security (NIST PQ Level 3).
 
-use ml_kem::{KemCore, MlKem768};
 use ml_kem::kem::{Decapsulate, Encapsulate};
-use ml_kem::{EncodedSizeUser, Encoded};
+use ml_kem::{Encoded, EncodedSizeUser};
+use ml_kem::{KemCore, MlKem768};
 
 use crate::{AnonymusError, Result};
 
@@ -54,7 +54,9 @@ impl MlKemKeypair {
         let ct = Ct::try_from(ct_bytes)
             .map_err(|_| AnonymusError::InvalidKey("ct length mismatch".into()))?;
 
-        let ss = dk.decapsulate(&ct).map_err(|_| AnonymusError::Decrypt("decapsulation failed".into()))?;
+        let ss = dk
+            .decapsulate(&ct)
+            .map_err(|_| AnonymusError::Decrypt("decapsulation failed".into()))?;
         let ss_bytes: [u8; SS_LEN] = ss[..SS_LEN]
             .try_into()
             .expect("shared secret length guaranteed");

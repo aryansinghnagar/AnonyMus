@@ -73,11 +73,7 @@ impl PqRatchetState {
             .last_ss
             .as_ref()
             .ok_or_else(|| AnonymusError::Internal("no PQ SS to mix".into()))?;
-        hkdf::derive_32(
-            ss,
-            Some(chain_key),
-            b"AnonyMus v3 SPQR chain mix",
-        )
+        hkdf::derive_32(ss, Some(chain_key), b"AnonyMus v3 SPQR chain mix")
     }
 }
 

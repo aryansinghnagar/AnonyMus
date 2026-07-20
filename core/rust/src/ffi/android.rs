@@ -1,11 +1,11 @@
 #![cfg(feature = "android")]
 
-use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::{jbyteArray, jstring};
-use rand_core::{RngCore, OsRng};
+use jni::JNIEnv;
+use rand_core::{OsRng, RngCore};
 
-use crate::crypto::{aead, hkdf, x25519, ml_kem};
+use crate::crypto::{aead, hkdf, ml_kem, x25519};
 
 #[no_mangle]
 pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_generateKeypairNative(
@@ -47,7 +47,8 @@ pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_x25519DhNati
 
     let kp = x25519::StaticKeypair::from_bytes(priv_arr);
     match kp.dh(&pub_arr) {
-        Ok(ss) => env.byte_array_from_slice(&ss)
+        Ok(ss) => env
+            .byte_array_from_slice(&ss)
             .map(|arr| arr.into_raw())
             .unwrap_or(std::ptr::null_mut()),
         Err(_) => std::ptr::null_mut(),
@@ -130,7 +131,8 @@ pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_aeadDecryptN
     };
 
     match aead::decrypt_with_nonce(&key_arr, nonce_arr, ct, &aad_bytes) {
-        Ok(pt) => env.byte_array_from_slice(&pt)
+        Ok(pt) => env
+            .byte_array_from_slice(&pt)
             .map(|arr| arr.into_raw())
             .unwrap_or(std::ptr::null_mut()),
         Err(_) => std::ptr::null_mut(),
@@ -161,10 +163,15 @@ pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_hkdfDeriveNa
 
     let len = output_len as usize;
     let mut okm = vec![0u8; len];
-    let salt_opt = if salt_bytes.is_empty() { None } else { Some(salt_bytes.as_slice()) };
+    let salt_opt = if salt_bytes.is_empty() {
+        None
+    } else {
+        Some(salt_bytes.as_slice())
+    };
 
     match hkdf::derive(salt_opt, &ikm_bytes, &info_bytes, &mut okm) {
-        Ok(_) => env.byte_array_from_slice(&okm)
+        Ok(_) => env
+            .byte_array_from_slice(&okm)
             .map(|arr| arr.into_raw())
             .unwrap_or(std::ptr::null_mut()),
         Err(_) => std::ptr::null_mut(),
@@ -359,7 +366,8 @@ pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_pqxdhRespond
         &alice_eph_arr,
         &ct,
     ) {
-        Ok(ss) => env.byte_array_from_slice(&ss)
+        Ok(ss) => env
+            .byte_array_from_slice(&ss)
             .map(|arr| arr.into_raw())
             .unwrap_or(std::ptr::null_mut()),
         Err(_) => std::ptr::null_mut(),
@@ -456,10 +464,11 @@ pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_sealedSender
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let envelope: crate::protocol::sealed_sender::SealedSenderEnvelope = match serde_json::from_slice(&env_bytes) {
-        Ok(e) => e,
-        Err(_) => return std::ptr::null_mut(),
-    };
+    let envelope: crate::protocol::sealed_sender::SealedSenderEnvelope =
+        match serde_json::from_slice(&env_bytes) {
+            Ok(e) => e,
+            Err(_) => return std::ptr::null_mut(),
+        };
 
     match envelope.unseal(&key_arr) {
         Ok(payload) => {
@@ -504,7 +513,8 @@ pub extern "system" fn Java_com_anonymus_app_data_JniCryptoProvider_paddingUnpad
         Err(_) => return std::ptr::null_mut(),
     };
     match crate::protocol::padding::unpad(&pad_bytes, block_size as usize) {
-        Ok(unpadded) => env.byte_array_from_slice(&unpadded)
+        Ok(unpadded) => env
+            .byte_array_from_slice(&unpadded)
             .map(|arr| arr.into_raw())
             .unwrap_or(std::ptr::null_mut()),
         Err(_) => std::ptr::null_mut(),

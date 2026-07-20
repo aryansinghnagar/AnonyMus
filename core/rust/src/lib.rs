@@ -5,8 +5,8 @@
 
 pub mod crypto;
 pub mod ffi;
-pub mod protocol;
 pub mod identity;
+pub mod protocol;
 
 use thiserror::Error;
 
