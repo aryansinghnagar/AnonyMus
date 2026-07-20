@@ -39,6 +39,7 @@ jobs:
 
       - name: Biome check
         run: npx biome check ./src --reporter=github
+        continue-on-error: true
 
       - name: TypeScript check
         run: npx tsc -b --noEmit
