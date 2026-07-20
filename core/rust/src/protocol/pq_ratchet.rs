@@ -39,7 +39,7 @@ impl PqRatchetState {
 
     /// Check whether it is time to perform a PQ ratchet step.
     pub fn should_ratchet(&self) -> bool {
-        self.counter % PQ_RATCHET_PERIOD == 0 && self.counter > 0
+        self.counter.is_multiple_of(PQ_RATCHET_PERIOD) && self.counter > 0
     }
 
     /// Advance the counter and optionally generate an encapsulation for the peer.

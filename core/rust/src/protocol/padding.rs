@@ -28,7 +28,7 @@ pub fn unpad(padded: &[u8], block_size: usize) -> Result<Vec<u8>> {
             "invalid block size: {block_size}. Must be in 1..=256"
         )));
     }
-    if padded.len() % block_size != 0 {
+    if !padded.len().is_multiple_of(block_size) {
         return Err(AnonymusError::Decrypt(format!(
             "payload length {} is not a multiple of block size {}",
             padded.len(),
