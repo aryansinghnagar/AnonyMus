@@ -77,7 +77,11 @@ impl Header {
         dh.copy_from_slice(&bytes[..32]);
         let pn = u32::from_be_bytes(bytes[32..36].try_into().unwrap());
         let n = u32::from_be_bytes(bytes[36..40].try_into().unwrap());
-        Self { dh_public: dh, pn, n }
+        Self {
+            dh_public: dh,
+            pn,
+            n,
+        }
     }
 }
 
@@ -166,10 +170,7 @@ impl Session {
     ///
     /// `shared_secret` is the 32-byte X3DH output.
     /// `bob_ratchet_keypair_bytes` is the private key bytes of Bob's signed pre-key.
-    pub fn init_receiver(
-        shared_secret: &[u8; 32],
-        bob_ratchet_private: [u8; 32],
-    ) -> Result<Self> {
+    pub fn init_receiver(shared_secret: &[u8; 32], bob_ratchet_private: [u8; 32]) -> Result<Self> {
         let rk_seed = hkdf::derive_32(shared_secret, None, INFO_ROOT)?;
         let rk = RootKey(rk_seed);
 
@@ -222,7 +223,10 @@ impl Session {
         let header = Header::decode(header_bytes);
 
         // Check skipped keys first
-        let skip_key = SkipKey { dh_public: header.dh_public, n: header.n };
+        let skip_key = SkipKey {
+            dh_public: header.dh_public,
+            n: header.n,
+        };
         if let Some(mk_bytes) = self.skipped.remove(&skip_key) {
             let nonce = Self::nonce_from_bytes(&mk_bytes)?;
             return aead::decrypt_with_nonce(&mk_bytes, &nonce, ciphertext, header_bytes);
@@ -356,9 +360,7 @@ pub fn x3dh_initiate(
     // DH1 = DH(IK_A, SPK_B)
     let dh1 = alice_identity.dh(&bundle.signed_prekey_public)?;
     // DH2 = DH(EK_A, IK_B)
-    let dh2_kp = x25519::StaticKeypair::from_bytes(
-        alice_identity.private_bytes(),
-    );
+    let dh2_kp = x25519::StaticKeypair::from_bytes(alice_identity.private_bytes());
     let dh2 = dh2_kp.dh(&bundle.identity_public)?;
     // DH3 = DH(EK_A, SPK_B)
     let dh3 = eph.dh(&bundle.signed_prekey_public)?;
@@ -373,9 +375,7 @@ pub fn x3dh_initiate(
 
     let opk_index = if let Some(opk) = bundle.one_time_prekey_public {
         // DH4 = DH(EK_A, OPK_B)
-        let dh4_kp = x25519::StaticKeypair::from_bytes(
-            alice_identity.private_bytes(),
-        );
+        let dh4_kp = x25519::StaticKeypair::from_bytes(alice_identity.private_bytes());
         let dh4 = dh4_kp.dh(&opk)?;
         ikm.extend_from_slice(&dh4);
         Some(0)
@@ -383,11 +383,8 @@ pub fn x3dh_initiate(
         None
     };
 
-    let shared_secret = hkdf::derive_32(
-        &ikm,
-        Some(b"AnonyMus v3 X3DH"),
-        b"AnonyMus v3 X3DH shared",
-    )?;
+    let shared_secret =
+        hkdf::derive_32(&ikm, Some(b"AnonyMus v3 X3DH"), b"AnonyMus v3 X3DH shared")?;
 
     Ok(X3dhInitResult {
         shared_secret,
@@ -422,11 +419,7 @@ pub fn x3dh_respond(
         ikm.extend_from_slice(&dh4);
     }
 
-    hkdf::derive_32(
-        &ikm,
-        Some(b"AnonyMus v3 X3DH"),
-        b"AnonyMus v3 X3DH shared",
-    )
+    hkdf::derive_32(&ikm, Some(b"AnonyMus v3 X3DH"), b"AnonyMus v3 X3DH shared")
 }
 
 #[cfg(test)]
@@ -438,10 +431,8 @@ mod tests {
         let shared_secret = [0x42u8; 32];
         let bob_ratchet = x25519::StaticKeypair::generate();
 
-        let alice =
-            Session::init_sender(&shared_secret, &bob_ratchet.public_bytes()).unwrap();
-        let bob =
-            Session::init_receiver(&shared_secret, bob_ratchet.private_bytes()).unwrap();
+        let alice = Session::init_sender(&shared_secret, &bob_ratchet.public_bytes()).unwrap();
+        let bob = Session::init_receiver(&shared_secret, bob_ratchet.private_bytes()).unwrap();
 
         (alice, bob)
     }

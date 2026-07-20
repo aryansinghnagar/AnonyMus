@@ -12,7 +12,7 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::crypto::{aead, hkdf, x25519, ed25519, ml_kem};
+use crate::crypto::{aead, ed25519, hkdf, ml_kem, x25519};
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 
@@ -28,8 +28,16 @@ fn js_err(e: impl ToString) -> JsValue {
 pub fn generate_identity_keypair() -> Result<js_sys::Object, JsValue> {
     let kp = x25519::StaticKeypair::generate();
     let obj = js_sys::Object::new();
-    js_sys::Reflect::set(&obj, &"privateKey".into(), &js_sys::Uint8Array::from(kp.private_bytes().as_ref()))?;
-    js_sys::Reflect::set(&obj, &"publicKey".into(), &js_sys::Uint8Array::from(kp.public_bytes().as_ref()))?;
+    js_sys::Reflect::set(
+        &obj,
+        &"privateKey".into(),
+        &js_sys::Uint8Array::from(kp.private_bytes().as_ref()),
+    )?;
+    js_sys::Reflect::set(
+        &obj,
+        &"publicKey".into(),
+        &js_sys::Uint8Array::from(kp.public_bytes().as_ref()),
+    )?;
     Ok(obj)
 }
 
@@ -38,8 +46,12 @@ pub fn generate_identity_keypair() -> Result<js_sys::Object, JsValue> {
 /// Perform X25519 DH. Returns a 32-byte shared secret.
 #[wasm_bindgen(js_name = x25519Dh)]
 pub fn x25519_dh(private_key: &[u8], peer_public_key: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let priv_arr: [u8; 32] = private_key.try_into().map_err(|_| js_err("private key must be 32 bytes"))?;
-    let pub_arr: [u8; 32] = peer_public_key.try_into().map_err(|_| js_err("peer public key must be 32 bytes"))?;
+    let priv_arr: [u8; 32] = private_key
+        .try_into()
+        .map_err(|_| js_err("private key must be 32 bytes"))?;
+    let pub_arr: [u8; 32] = peer_public_key
+        .try_into()
+        .map_err(|_| js_err("peer public key must be 32 bytes"))?;
     let kp = x25519::StaticKeypair::from_bytes(priv_arr);
     kp.dh(&pub_arr).map(|ss| ss.to_vec()).map_err(|e| js_err(e))
 }
@@ -78,8 +90,12 @@ pub fn hkdf_derive(
 /// Verify an Ed25519 signature. Throws on failure.
 #[wasm_bindgen(js_name = ed25519Verify)]
 pub fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), JsValue> {
-    let pk: [u8; 32] = public_key.try_into().map_err(|_| js_err("public key must be 32 bytes"))?;
-    let sig: [u8; 64] = signature.try_into().map_err(|_| js_err("signature must be 64 bytes"))?;
+    let pk: [u8; 32] = public_key
+        .try_into()
+        .map_err(|_| js_err("public key must be 32 bytes"))?;
+    let sig: [u8; 64] = signature
+        .try_into()
+        .map_err(|_| js_err("signature must be 64 bytes"))?;
     ed25519::verify(&pk, message, &sig).map_err(|e| js_err(e))
 }
 
@@ -87,9 +103,16 @@ pub fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Re
 
 /// Compute safety number for verified connections.
 #[wasm_bindgen(js_name = computeSafetyNumber)]
-pub fn compute_safety_number(our_identity: &[u8], their_identity: &[u8]) -> Result<String, JsValue> {
-    let our_id: [u8; 32] = our_identity.try_into().map_err(|_| js_err("our identity must be 32 bytes"))?;
-    let their_id: [u8; 32] = their_identity.try_into().map_err(|_| js_err("their identity must be 32 bytes"))?;
+pub fn compute_safety_number(
+    our_identity: &[u8],
+    their_identity: &[u8],
+) -> Result<String, JsValue> {
+    let our_id: [u8; 32] = our_identity
+        .try_into()
+        .map_err(|_| js_err("our identity must be 32 bytes"))?;
+    let their_id: [u8; 32] = their_identity
+        .try_into()
+        .map_err(|_| js_err("their identity must be 32 bytes"))?;
     Ok(crate::identity::compute_safety_number(&our_id, &their_id))
 }
 
@@ -103,14 +126,24 @@ pub fn pqxdh_initiate(
     bob_one_time_prekey_pub: Option<Vec<u8>>,
     bob_pq_signed_prekey_ek: &[u8],
 ) -> Result<js_sys::Object, JsValue> {
-    let alice_priv_arr: [u8; 32] = alice_identity_priv.try_into().map_err(|_| js_err("alice_identity_priv must be 32 bytes"))?;
+    let alice_priv_arr: [u8; 32] = alice_identity_priv
+        .try_into()
+        .map_err(|_| js_err("alice_identity_priv must be 32 bytes"))?;
     let alice_identity = x25519::StaticKeypair::from_bytes(alice_priv_arr);
 
-    let bob_id_arr: [u8; 32] = bob_identity_pub.try_into().map_err(|_| js_err("bob_identity_pub must be 32 bytes"))?;
-    let bob_spk_arr: [u8; 32] = bob_signed_prekey_pub.try_into().map_err(|_| js_err("bob_signed_prekey_pub must be 32 bytes"))?;
+    let bob_id_arr: [u8; 32] = bob_identity_pub
+        .try_into()
+        .map_err(|_| js_err("bob_identity_pub must be 32 bytes"))?;
+    let bob_spk_arr: [u8; 32] = bob_signed_prekey_pub
+        .try_into()
+        .map_err(|_| js_err("bob_signed_prekey_pub must be 32 bytes"))?;
 
     let bob_otk_arr: Option<[u8; 32]> = match bob_one_time_prekey_pub {
-        Some(otk) => Some(otk.as_slice().try_into().map_err(|_| js_err("bob_one_time_prekey_pub must be 32 bytes"))?),
+        Some(otk) => Some(
+            otk.as_slice()
+                .try_into()
+                .map_err(|_| js_err("bob_one_time_prekey_pub must be 32 bytes"))?,
+        ),
         None => None,
     };
 
@@ -124,9 +157,21 @@ pub fn pqxdh_initiate(
     .map_err(|e| js_err(e))?;
 
     let obj = js_sys::Object::new();
-    js_sys::Reflect::set(&obj, &"sharedSecret".into(), &js_sys::Uint8Array::from(res.shared_secret.as_ref()))?;
-    js_sys::Reflect::set(&obj, &"aliceEphemeralPub".into(), &js_sys::Uint8Array::from(res.alice_ephemeral_pub.as_ref()))?;
-    js_sys::Reflect::set(&obj, &"mlKemCiphertext".into(), &js_sys::Uint8Array::from(res.ml_kem_ciphertext.as_ref()))?;
+    js_sys::Reflect::set(
+        &obj,
+        &"sharedSecret".into(),
+        &js_sys::Uint8Array::from(res.shared_secret.as_ref()),
+    )?;
+    js_sys::Reflect::set(
+        &obj,
+        &"aliceEphemeralPub".into(),
+        &js_sys::Uint8Array::from(res.alice_ephemeral_pub.as_ref()),
+    )?;
+    js_sys::Reflect::set(
+        &obj,
+        &"mlKemCiphertext".into(),
+        &js_sys::Uint8Array::from(res.ml_kem_ciphertext.as_ref()),
+    )?;
 
     Ok(obj)
 }
@@ -142,15 +187,22 @@ pub fn pqxdh_respond(
     alice_ephemeral_pub: &[u8],
     ml_kem_ciphertext: &[u8],
 ) -> Result<Vec<u8>, JsValue> {
-    let bob_id_arr: [u8; 32] = bob_identity_priv.try_into().map_err(|_| js_err("bob_identity_priv must be 32 bytes"))?;
+    let bob_id_arr: [u8; 32] = bob_identity_priv
+        .try_into()
+        .map_err(|_| js_err("bob_identity_priv must be 32 bytes"))?;
     let bob_identity = x25519::StaticKeypair::from_bytes(bob_id_arr);
 
-    let bob_spk_arr: [u8; 32] = bob_signed_prekey_priv.try_into().map_err(|_| js_err("bob_signed_prekey_priv must be 32 bytes"))?;
+    let bob_spk_arr: [u8; 32] = bob_signed_prekey_priv
+        .try_into()
+        .map_err(|_| js_err("bob_signed_prekey_priv must be 32 bytes"))?;
     let bob_signed_prekey = x25519::StaticKeypair::from_bytes(bob_spk_arr);
 
     let bob_otk = match bob_one_time_prekey_priv {
         Some(otk) => {
-            let otk_arr: [u8; 32] = otk.as_slice().try_into().map_err(|_| js_err("bob_one_time_prekey_priv must be 32 bytes"))?;
+            let otk_arr: [u8; 32] = otk
+                .as_slice()
+                .try_into()
+                .map_err(|_| js_err("bob_one_time_prekey_priv must be 32 bytes"))?;
             Some(x25519::StaticKeypair::from_bytes(otk_arr))
         }
         None => None,
@@ -158,8 +210,12 @@ pub fn pqxdh_respond(
 
     let bob_pq_dk = ml_kem::MlKemKeypair::from_bytes(Vec::new(), bob_pq_signed_prekey_dk.to_vec());
 
-    let alice_id_arr: [u8; 32] = alice_identity_pub.try_into().map_err(|_| js_err("alice_identity_pub must be 32 bytes"))?;
-    let alice_eph_arr: [u8; 32] = alice_ephemeral_pub.try_into().map_err(|_| js_err("alice_ephemeral_pub must be 32 bytes"))?;
+    let alice_id_arr: [u8; 32] = alice_identity_pub
+        .try_into()
+        .map_err(|_| js_err("alice_identity_pub must be 32 bytes"))?;
+    let alice_eph_arr: [u8; 32] = alice_ephemeral_pub
+        .try_into()
+        .map_err(|_| js_err("alice_ephemeral_pub must be 32 bytes"))?;
 
     let ss = crate::protocol::x3dh::pqxdh_respond(
         &bob_identity,
@@ -185,9 +241,15 @@ pub fn sealed_sender_seal(
     sender_dh_pub: &[u8],
     inner_message: &[u8],
 ) -> Result<Vec<u8>, JsValue> {
-    let key: [u8; 32] = sealed_sender_key.try_into().map_err(|_| js_err("sealed_sender_key must be 32 bytes"))?;
-    let signing_pub: [u8; 32] = sender_signing_pub.try_into().map_err(|_| js_err("sender_signing_pub must be 32 bytes"))?;
-    let dh_pub: [u8; 32] = sender_dh_pub.try_into().map_err(|_| js_err("sender_dh_pub must be 32 bytes"))?;
+    let key: [u8; 32] = sealed_sender_key
+        .try_into()
+        .map_err(|_| js_err("sealed_sender_key must be 32 bytes"))?;
+    let signing_pub: [u8; 32] = sender_signing_pub
+        .try_into()
+        .map_err(|_| js_err("sender_signing_pub must be 32 bytes"))?;
+    let dh_pub: [u8; 32] = sender_dh_pub
+        .try_into()
+        .map_err(|_| js_err("sender_dh_pub must be 32 bytes"))?;
 
     let payload = crate::protocol::sealed_sender::SealedSenderPayload {
         sender_username: sender_username.to_string(),
@@ -203,8 +265,7 @@ pub fn sealed_sender_seal(
     )
     .map_err(|e| js_err(e))?;
 
-    serde_json::to_vec(&envelope)
-        .map_err(|e| js_err(format!("failed to serialize envelope: {e}")))
+    serde_json::to_vec(&envelope).map_err(|e| js_err(format!("failed to serialize envelope: {e}")))
 }
 
 /// Unseal a Sealed Sender envelope.
@@ -214,18 +275,37 @@ pub fn sealed_sender_unseal(
     envelope_bytes: &[u8],
     sealed_sender_key: &[u8],
 ) -> Result<js_sys::Object, JsValue> {
-    let key: [u8; 32] = sealed_sender_key.try_into().map_err(|_| js_err("sealed_sender_key must be 32 bytes"))?;
+    let key: [u8; 32] = sealed_sender_key
+        .try_into()
+        .map_err(|_| js_err("sealed_sender_key must be 32 bytes"))?;
 
-    let envelope: crate::protocol::sealed_sender::SealedSenderEnvelope = serde_json::from_slice(envelope_bytes)
-        .map_err(|e| js_err(format!("failed to parse envelope: {e}")))?;
+    let envelope: crate::protocol::sealed_sender::SealedSenderEnvelope =
+        serde_json::from_slice(envelope_bytes)
+            .map_err(|e| js_err(format!("failed to parse envelope: {e}")))?;
 
     let payload = envelope.unseal(&key).map_err(|e| js_err(e))?;
 
     let obj = js_sys::Object::new();
-    js_sys::Reflect::set(&obj, &"senderUsername".into(), &JsValue::from_str(&payload.sender_username))?;
-    js_sys::Reflect::set(&obj, &"senderSigningPub".into(), &js_sys::Uint8Array::from(payload.sender_signing_pub.as_ref()))?;
-    js_sys::Reflect::set(&obj, &"senderDhPub".into(), &js_sys::Uint8Array::from(payload.sender_dh_pub.as_ref()))?;
-    js_sys::Reflect::set(&obj, &"innerMessage".into(), &js_sys::Uint8Array::from(payload.inner_message.as_ref()))?;
+    js_sys::Reflect::set(
+        &obj,
+        &"senderUsername".into(),
+        &JsValue::from_str(&payload.sender_username),
+    )?;
+    js_sys::Reflect::set(
+        &obj,
+        &"senderSigningPub".into(),
+        &js_sys::Uint8Array::from(payload.sender_signing_pub.as_ref()),
+    )?;
+    js_sys::Reflect::set(
+        &obj,
+        &"senderDhPub".into(),
+        &js_sys::Uint8Array::from(payload.sender_dh_pub.as_ref()),
+    )?;
+    js_sys::Reflect::set(
+        &obj,
+        &"innerMessage".into(),
+        &js_sys::Uint8Array::from(payload.inner_message.as_ref()),
+    )?;
 
     Ok(obj)
 }

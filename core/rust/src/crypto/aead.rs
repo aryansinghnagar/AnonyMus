@@ -51,7 +51,13 @@ pub fn encrypt_with_nonce(
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
     let nonce = Nonce::from_slice(nonce);
     cipher
-        .encrypt(nonce, Payload { msg: plaintext, aad })
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .map_err(|e| AnonymusError::Encrypt(e.to_string()))
 }
 
@@ -66,7 +72,13 @@ pub fn decrypt_with_nonce(
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
     let nonce = Nonce::from_slice(nonce);
     cipher
-        .decrypt(nonce, Payload { msg: ciphertext, aad })
+        .decrypt(
+            nonce,
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|e| AnonymusError::Decrypt(e.to_string()))
 }
 
@@ -127,7 +139,10 @@ mod tests {
         let plaintext = b"AnonyMus v3 AEAD test vector";
         let aad = b"session_id:deadbeef";
         let ct = encrypt_with_nonce(&key, &nonce, plaintext, aad).unwrap();
-        assert_eq!(hex::encode(&ct), "d128df9521fa4c13a0e107f9c8bf228be0bc368297b767eb326d9c490218ab28e469ea7d9f7a77e3fb24");
+        assert_eq!(
+            hex::encode(&ct),
+            "d128df9521fa4c13a0e107f9c8bf228be0bc368297b767eb326d9c490218ab28e469ea7d9f7a77e3fb24"
+        );
     }
 
     #[test]

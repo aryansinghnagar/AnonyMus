@@ -3,7 +3,7 @@
 //! Provides the core data structures and key derivation logic for group messaging
 //! conforming to the RFC 9420 epoch transitions and TreeKEM group key agreement principles.
 
-use crate::crypto::{hkdf, aead};
+use crate::crypto::{aead, hkdf};
 use crate::Result;
 
 /// Represents an MLS group session with epoch-based forward secrecy.
@@ -56,7 +56,9 @@ impl MlsGroup {
     /// Encrypt a message payload for the group under the current epoch.
     pub fn encrypt_message(&self, sender_username: &str, plaintext: &[u8]) -> Result<Vec<u8>> {
         if !self.member_usernames.contains(&sender_username.to_string()) {
-            return Err(crate::AnonymusError::Internal("sender is not a member of this group".into()));
+            return Err(crate::AnonymusError::Internal(
+                "sender is not a member of this group".into(),
+            ));
         }
 
         let sender_key = self.derive_sender_key(sender_username)?;
@@ -66,7 +68,9 @@ impl MlsGroup {
     /// Decrypt a message payload under the current epoch.
     pub fn decrypt_message(&self, sender_username: &str, ciphertext: &[u8]) -> Result<Vec<u8>> {
         if !self.member_usernames.contains(&sender_username.to_string()) {
-            return Err(crate::AnonymusError::Internal("sender is not a member of this group".into()));
+            return Err(crate::AnonymusError::Internal(
+                "sender is not a member of this group".into(),
+            ));
         }
 
         let sender_key = self.derive_sender_key(sender_username)?;

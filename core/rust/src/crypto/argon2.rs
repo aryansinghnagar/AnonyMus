@@ -3,9 +3,7 @@
 //! Used to derive the SQLCipher database encryption key from the user's password.
 //! Parameters match OWASP 2024 recommendations for interactive logins.
 
-use argon2::{
-    Argon2, Params, Algorithm, Version,
-};
+use argon2::{Algorithm, Argon2, Params, Version};
 
 use crate::{AnonymusError, Result};
 
@@ -13,8 +11,8 @@ pub const KEY_LEN: usize = 32;
 
 // OWASP 2024 interactive parameters
 const M_COST: u32 = 65536; // 64 MiB
-const T_COST: u32 = 3;     // iterations
-const P_COST: u32 = 4;     // parallelism
+const T_COST: u32 = 3; // iterations
+const P_COST: u32 = 4; // parallelism
 
 /// Derive a 32-byte key from `password` and `salt` (should be 16+ random bytes).
 /// This is deliberately slow — do NOT call on the hot path.

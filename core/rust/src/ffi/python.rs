@@ -8,8 +8,8 @@
 
 #![cfg(feature = "python")]
 
-use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 
 use crate::crypto;
 
@@ -23,8 +23,7 @@ fn aead_encrypt(key: &[u8], plaintext: &[u8]) -> PyResult<Vec<u8>> {
     let key: [u8; 32] = key
         .try_into()
         .map_err(|_| PyValueError::new_err("key must be exactly 32 bytes"))?;
-    crypto::aead::encrypt(&key, plaintext)
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+    crypto::aead::encrypt(&key, plaintext).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 /// Decrypt a blob produced by `aead_encrypt`.
@@ -33,8 +32,7 @@ fn aead_decrypt(key: &[u8], blob: &[u8]) -> PyResult<Vec<u8>> {
     let key: [u8; 32] = key
         .try_into()
         .map_err(|_| PyValueError::new_err("key must be exactly 32 bytes"))?;
-    crypto::aead::decrypt(&key, blob)
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+    crypto::aead::decrypt(&key, blob).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -44,7 +42,12 @@ fn aead_decrypt(key: &[u8], blob: &[u8]) -> PyResult<Vec<u8>> {
 /// Derive `output_len` bytes via HKDF-SHA256.
 #[pyfunction]
 #[pyo3(signature = (ikm, info, output_len, salt=None))]
-fn hkdf_derive(ikm: &[u8], info: &[u8], output_len: usize, salt: Option<&[u8]>) -> PyResult<Vec<u8>> {
+fn hkdf_derive(
+    ikm: &[u8],
+    info: &[u8],
+    output_len: usize,
+    salt: Option<&[u8]>,
+) -> PyResult<Vec<u8>> {
     crypto::hkdf::derive(ikm, salt, info, output_len)
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
@@ -70,7 +73,9 @@ fn x25519_dh(private_bytes: &[u8], peer_public_bytes: &[u8]) -> PyResult<Vec<u8>
         .try_into()
         .map_err(|_| PyValueError::new_err("public key must be 32 bytes"))?;
     let kp = crypto::x25519::StaticKeypair::from_bytes(priv_arr);
-    let ss = kp.dh(&pub_arr).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let ss = kp
+        .dh(&pub_arr)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(ss.to_vec())
 }
 
@@ -87,8 +92,7 @@ fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> PyResu
     let sig: [u8; 64] = signature
         .try_into()
         .map_err(|_| PyValueError::new_err("signature must be 64 bytes"))?;
-    crypto::ed25519::verify(&pk, message, &sig)
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+    crypto::ed25519::verify(&pk, message, &sig).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -195,7 +199,8 @@ fn pqxdh_respond(
         None => None,
     };
 
-    let bob_pq_dk = crypto::ml_kem::MlKemKeypair::from_bytes(Vec::new(), bob_pq_signed_prekey_dk.to_vec());
+    let bob_pq_dk =
+        crypto::ml_kem::MlKemKeypair::from_bytes(Vec::new(), bob_pq_signed_prekey_dk.to_vec());
 
     let alice_id_arr: [u8; 32] = alice_identity_pub
         .try_into()
@@ -266,10 +271,12 @@ fn sealed_sender_unseal(
         .try_into()
         .map_err(|_| PyValueError::new_err("sealed_sender_key must be 32 bytes"))?;
 
-    let envelope: crate::protocol::sealed_sender::SealedSenderEnvelope = serde_json::from_slice(envelope_bytes)
-        .map_err(|e| PyValueError::new_err(format!("failed to parse envelope: {e}")))?;
+    let envelope: crate::protocol::sealed_sender::SealedSenderEnvelope =
+        serde_json::from_slice(envelope_bytes)
+            .map_err(|e| PyValueError::new_err(format!("failed to parse envelope: {e}")))?;
 
-    let payload = envelope.unseal(&key)
+    let payload = envelope
+        .unseal(&key)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
     Ok((

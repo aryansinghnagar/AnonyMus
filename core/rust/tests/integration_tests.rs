@@ -1,8 +1,8 @@
 //! Integration tests — exercises public API of anonymus-core.
 //! Loads KAT vectors from tests/kat/v3-vectors.json and verifies each primitive.
 
-use std::fs;
 use serde_json::Value;
+use std::fs;
 
 fn hex(s: &str) -> Vec<u8> {
     (0..s.len())
@@ -24,7 +24,7 @@ fn kat_hkdf_rfc5869_tc1() {
     let vecs = load_vectors();
     let v = &vecs["vectors"][0]; // hkdf-1
 
-    let ikm  = hex(v["ikm"].as_str().unwrap());
+    let ikm = hex(v["ikm"].as_str().unwrap());
     let salt = hex(v["salt"].as_str().unwrap());
     let info = hex(v["info"].as_str().unwrap());
     let expected = hex(v["okm"].as_str().unwrap());
@@ -40,14 +40,17 @@ fn kat_x25519_rfc7748_tc1() {
 
     let vecs = load_vectors();
     let v = vecs["vectors"]
-        .as_array().unwrap()
+        .as_array()
+        .unwrap()
         .iter()
         .find(|v| v["id"] == "x25519-1")
         .expect("x25519-1 vector missing");
 
-    let alice_priv: [u8; 32] = hex(v["alice_private"].as_str().unwrap()).try_into().unwrap();
-    let bob_pub: [u8; 32]    = hex(v["bob_public"].as_str().unwrap()).try_into().unwrap();
-    let expected: Vec<u8>    = hex(v["shared_secret"].as_str().unwrap());
+    let alice_priv: [u8; 32] = hex(v["alice_private"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let bob_pub: [u8; 32] = hex(v["bob_public"].as_str().unwrap()).try_into().unwrap();
+    let expected: Vec<u8> = hex(v["shared_secret"].as_str().unwrap());
 
     let alice_kp = StaticKeypair::from_bytes(alice_priv);
     let ss = alice_kp.dh(&bob_pub).unwrap();
