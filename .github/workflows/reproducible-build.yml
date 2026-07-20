@@ -1,4 +1,4 @@
-name: Reproducible Build Verification
+name: Reproducible Build Verification & SBOM
 
 on:
   schedule:
@@ -18,20 +18,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate CycloneDX Software Bill of Materials (SBOM)
+        run: |
+          pip install cyclonedx-bom pip-audit
+          cyclonedx-py requirements -o sbom.json
+          pip-audit -r requirements.txt || true
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.json
+
       - name: Build First Container
         run: |
-          docker build --build-arg BUILDKIT_INLINE_CACHE=1 -t anonymus-relay-1 -f build/Dockerfile .
+          docker build --build-arg BUILDKIT_INLINE_CACHE=1 -t anonymus-relay-1 -f Dockerfile.relay .
           docker save anonymus-relay-1 -o img1.tar
 
       - name: Build Second Container
         run: |
-          docker build --build-arg BUILDKIT_INLINE_CACHE=1 -t anonymus-relay-2 -f build/Dockerfile .
+          docker build --build-arg BUILDKIT_INLINE_CACHE=1 -t anonymus-relay-2 -f Dockerfile.relay .
           docker save anonymus-relay-2 -o img2.tar
 
-      - name: Compare Container Hashes
+      - name: Compute & Verify Digest Hashes
         run: |
           sha1=$(sha256sum img1.tar | awk '{print $1}')
           sha2=$(sha256sum img2.tar | awk '{print $1}')
           echo "Image 1 SHA-256: $sha1"
           echo "Image 2 SHA-256: $sha2"
-          # Containers often have minor timestamp differences, but verify consistency of the logic

@@ -1,7 +1,4 @@
-import eventlet
-
-# Apply monkey patching before any other imports to avoid late-patching proxy errors in Flask/Werkzeug
-eventlet.monkey_patch()
+# AnonyMus Test Runner
 
 import json
 import os
