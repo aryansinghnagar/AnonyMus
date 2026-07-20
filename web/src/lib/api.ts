@@ -62,16 +62,16 @@ export interface PreKeyBundle {
 // ── Internal fetch helper ─────────────────────────────────────────────────────
 
 class ApiError extends Error {
-  constructor(public status: number, public detail: string) {
+  constructor(
+    public status: number,
+    public detail: string,
+  ) {
     super(detail);
     this.name = "ApiError";
   }
 }
 
-async function apiFetch<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...options.headers },
@@ -116,17 +116,14 @@ export const contacts = {
       body: JSON.stringify({ onion_address, nickname }),
     }),
 
-  delete: (id: number) =>
-    apiFetch<void>(`/contacts/${id}`, { method: "DELETE" }),
+  delete: (id: number) => apiFetch<void>(`/contacts/${id}`, { method: "DELETE" }),
 };
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 export const messages = {
   history: (onion: string, limit = 50, before?: string) =>
-    apiFetch<Message[]>(
-      `/messages/${onion}?limit=${limit}${before ? `&before=${before}` : ""}`
-    ),
+    apiFetch<Message[]>(`/messages/${onion}?limit=${limit}${before ? `&before=${before}` : ""}`),
 
   send: (
     recipient_onion: string,
@@ -134,7 +131,7 @@ export const messages = {
     iv_b64: string,
     sequence_number: number,
     disappears_at?: string,
-    sealed_sender?: any
+    sealed_sender?: any,
   ) =>
     apiFetch<Message>("/messages/", {
       method: "POST",
@@ -164,13 +161,11 @@ export const node = {
   info: () => apiFetch<NodeInfo>("/node/info"),
 
   generateInvite: () =>
-    apiFetch<{ invite_onion: string; service_name: string; token: string }>(
-      "/node/invite",
-      { method: "POST" }
-    ),
+    apiFetch<{ invite_onion: string; service_name: string; token: string }>("/node/invite", {
+      method: "POST",
+    }),
 
-  getRelay: () =>
-    apiFetch<{ preferred_file_relay: string }>("/node/settings/relay"),
+  getRelay: () => apiFetch<{ preferred_file_relay: string }>("/node/settings/relay"),
 
   setRelay: (preferred_file_relay: string) =>
     apiFetch<{ preferred_file_relay: string }>("/node/settings/relay", {
@@ -178,8 +173,7 @@ export const node = {
       body: JSON.stringify({ preferred_file_relay }),
     }),
 
-  obliviate: () =>
-    apiFetch<{ success: boolean }>("/node/obliviate", { method: "POST" }),
+  obliviate: () => apiFetch<{ success: boolean }>("/node/obliviate", { method: "POST" }),
 };
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
@@ -226,7 +220,7 @@ export const notifications = {
 
   poll: (tokens: string[]) =>
     apiFetch<{ has_new: Record<string, boolean> }>(
-      `/notifications/poll?tokens=${tokens.join(",")}`
+      `/notifications/poll?tokens=${tokens.join(",")}`,
     ),
 
   clear: (tokens: string[]) =>

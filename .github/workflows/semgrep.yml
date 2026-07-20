@@ -2,10 +2,11 @@ name: Semgrep SAST Scanning
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: semgrep-${{ github.ref }}

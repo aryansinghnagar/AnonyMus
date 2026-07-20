@@ -12,9 +12,7 @@ let peerConnection: RTCPeerConnection | null = null;
 let pendingOfferSdp: string | null = null;
 
 // Default STUN server list for NAT traversal
-const ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" }
-];
+const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
 export { callState, activePeerOnion, localStream, remoteStream };
 
@@ -24,16 +22,19 @@ export async function startCall(peerOnion: string, myOnion: string): Promise<voi
   setActivePeerOnion(peerOnion);
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    const stream = await navigator.mediaDevices
+      .getUserMedia({ audio: true, video: false })
       .catch(() => {
-        console.warn("[Call] No microphone found or permission denied. Falling back to silent capture.");
+        console.warn(
+          "[Call] No microphone found or permission denied. Falling back to silent capture.",
+        );
         return new MediaStream();
       });
     setLocalStream(stream);
 
     peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    stream.getTracks().forEach(track => {
+    stream.getTracks().forEach((track) => {
       peerConnection?.addTrack(track, stream);
     });
 
@@ -64,16 +65,19 @@ export async function answerCall(myOnion: string): Promise<void> {
   if (callState() !== "incoming" || !peerOnion) return;
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    const stream = await navigator.mediaDevices
+      .getUserMedia({ audio: true, video: false })
       .catch(() => {
-        console.warn("[Call] No microphone found or permission denied. Falling back to silent capture.");
+        console.warn(
+          "[Call] No microphone found or permission denied. Falling back to silent capture.",
+        );
         return new MediaStream();
       });
     setLocalStream(stream);
 
     peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    stream.getTracks().forEach(track => {
+    stream.getTracks().forEach((track) => {
       peerConnection?.addTrack(track, stream);
     });
 
@@ -90,7 +94,9 @@ export async function answerCall(myOnion: string): Promise<void> {
     };
 
     if (pendingOfferSdp) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: pendingOfferSdp }));
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription({ type: "offer", sdp: pendingOfferSdp }),
+      );
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
       await sendSignal(peerOnion, myOnion, { type: "answer", sdp: answer.sdp });
@@ -102,7 +108,11 @@ export async function answerCall(myOnion: string): Promise<void> {
   }
 }
 
-export async function handleIncomingSignal(peerOnion: string, myOnion: string, signal: any): Promise<void> {
+export async function handleIncomingSignal(
+  peerOnion: string,
+  myOnion: string,
+  signal: any,
+): Promise<void> {
   console.log("[Call] Received signaling message:", signal);
 
   if (signal.type === "offer") {
@@ -116,7 +126,9 @@ export async function handleIncomingSignal(peerOnion: string, myOnion: string, s
     pendingOfferSdp = signal.sdp;
   } else if (signal.type === "answer") {
     if (callState() === "calling" && peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: signal.sdp }));
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription({ type: "answer", sdp: signal.sdp }),
+      );
       setCallState("connected");
     }
   } else if (signal.type === "ice") {
@@ -138,7 +150,9 @@ export function hangupCall(myOnion?: string): void {
 
 function cleanupCall() {
   if (localStream()) {
-    localStream()?.getTracks().forEach(track => track.stop());
+    localStream()
+      ?.getTracks()
+      .forEach((track) => track.stop());
   }
   setLocalStream(null);
   setRemoteStream(null);

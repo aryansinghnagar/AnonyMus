@@ -5,7 +5,7 @@
  * so UI development can proceed without the Rust toolchain.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // Mock the WASM pkg so the stub path is taken
 vi.mock("../lib/pkg/anonymus_core.js", () => {

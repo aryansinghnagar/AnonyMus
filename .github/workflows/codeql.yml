@@ -2,12 +2,13 @@ name: CodeQL Security Scanning
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   schedule:
     - cron: '0 0 * * 0' # Weekly on Sundays
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: codeql-${{ github.ref }}
@@ -31,7 +32,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: python, javascript
+          languages: python, javascript-typescript
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3

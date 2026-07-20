@@ -2,10 +2,13 @@ name: Software Bill of Materials (SBOM)
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
   schedule:
     - cron: '0 4 * * 0' # Sundays at 04:00
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: sbom-${{ github.ref }}

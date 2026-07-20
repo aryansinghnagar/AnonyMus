@@ -1,21 +1,10 @@
 /* ChatArea.tsx — Message thread + composer for a single conversation */
 
-import type { Component } from "solid-js";
-import {
-  createEffect,
-  createSignal,
-  For,
-  Show,
-} from "solid-js";
-import {
-  getMessages,
-  loadMessages,
-  sendMessage,
-  messageError,
-  sending,
-} from "@stores/messages";
 import { activeContact } from "@stores/contacts";
+import { getMessages, loadMessages, messageError, sendMessage, sending } from "@stores/messages";
 import { user } from "@stores/session";
+import type { Component } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 
 import { startCall } from "@stores/calls";
 
@@ -104,7 +93,10 @@ export const ChatArea: Component<Props> = (props) => {
         <Show
           when={msgs().length > 0}
           fallback={
-            <div class="flex flex-col items-center justify-center h-full" style="gap:0.5rem;opacity:0.5;">
+            <div
+              class="flex flex-col items-center justify-center h-full"
+              style="gap:0.5rem;opacity:0.5;"
+            >
               <p class="text-sm text-muted">No messages yet</p>
               <p class="text-xs text-muted">Send a message to start the conversation</p>
             </div>
@@ -114,12 +106,20 @@ export const ChatArea: Component<Props> = (props) => {
             {(msg) => {
               const sent = msg.sender_onion === myOnion();
               return (
-                <Show when={!msg.is_deleted} fallback={
-                  <div class={`msg-bubble ${sent ? "sent" : "recv"}`} style="opacity:0.4;font-style:italic;">
-                    Message deleted
-                  </div>
-                }>
-                  <div style={`display:flex;flex-direction:column;align-items:${sent ? "flex-end" : "flex-start"};`}>
+                <Show
+                  when={!msg.is_deleted}
+                  fallback={
+                    <div
+                      class={`msg-bubble ${sent ? "sent" : "recv"}`}
+                      style="opacity:0.4;font-style:italic;"
+                    >
+                      Message deleted
+                    </div>
+                  }
+                >
+                  <div
+                    style={`display:flex;flex-direction:column;align-items:${sent ? "flex-end" : "flex-start"};`}
+                  >
                     <div
                       class={`msg-bubble ${sent ? "sent" : "recv"}`}
                       role="article"
@@ -141,10 +141,7 @@ export const ChatArea: Component<Props> = (props) => {
 
       {/* Error banner */}
       <Show when={messageError()}>
-        <div
-          style="padding:0.5rem 1.25rem;background:rgba(248,113,113,0.1);"
-          role="alert"
-        >
+        <div style="padding:0.5rem 1.25rem;background:rgba(248,113,113,0.1);" role="alert">
           <p class="text-error text-xs">{messageError()}</p>
         </div>
       </Show>
@@ -182,9 +179,14 @@ export const ChatArea: Component<Props> = (props) => {
         >
           <Show when={!sending()} fallback={<span>…</span>}>
             <svg
-              width="18" height="18" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
               aria-hidden="true"
             >
               <line x1="22" y1="2" x2="11" y2="13" />

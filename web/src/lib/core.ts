@@ -40,7 +40,7 @@ async function loadWasmCore(): Promise<AnonymusCore> {
       throw new Error("WASM core is missing or failed to initialize in production environment.");
     }
     console.warn(
-      "[AnonyMus] WASM core not found — using stub. Run `npm run wasm:build` to build it."
+      "[AnonyMus] WASM core not found — using stub. Run `npm run wasm:build` to build it.",
     );
     setIsStub(true);
     return getStubCore();
@@ -58,8 +58,7 @@ export async function getCore(): Promise<AnonymusCore> {
 // ── Stub implementation for development without Rust toolchain ────────────────
 
 function getStubCore(): AnonymusCore {
-  const warn = (fn: string) =>
-    console.warn(`[AnonyMus stub] ${fn} called — using dummy output`);
+  const warn = (fn: string) => console.warn(`[AnonyMus stub] ${fn} called — using dummy output`);
 
   return {
     generateIdentityKeypair() {

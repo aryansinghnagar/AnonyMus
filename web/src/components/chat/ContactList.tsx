@@ -1,15 +1,15 @@
 /* ContactList.tsx — Sidebar contact list with add-contact form */
 
-import type { Component } from "solid-js";
-import { createSignal, For, Show } from "solid-js";
+import type { Contact } from "@lib/api";
 import {
-  contactList,
   activeOnion,
-  setActiveOnion,
   addContact,
   contactError,
+  contactList,
+  setActiveOnion,
 } from "@stores/contacts";
-import type { Contact } from "@lib/api";
+import type { Component } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 
 export const ContactList: Component = () => {
   const [showAdd, setShowAdd] = createSignal(false);
@@ -29,8 +29,7 @@ export const ContactList: Component = () => {
     }
   };
 
-  const initials = (c: Contact) =>
-    (c.nickname || c.onion_address).slice(0, 2).toUpperCase();
+  const initials = (c: Contact) => (c.nickname || c.onion_address).slice(0, 2).toUpperCase();
 
   return (
     <div class="flex-col h-full" style="display:flex;">
@@ -48,9 +47,14 @@ export const ContactList: Component = () => {
           onClick={() => setShowAdd((v) => !v)}
         >
           <svg
-            width="18" height="18" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             aria-hidden="true"
           >
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -86,14 +90,11 @@ export const ContactList: Component = () => {
             onInput={(e) => setNewNick(e.currentTarget.value)}
           />
           <Show when={contactError()}>
-            <p class="text-error text-xs" role="alert">{contactError()}</p>
+            <p class="text-error text-xs" role="alert">
+              {contactError()}
+            </p>
           </Show>
-          <button
-            type="submit"
-            id="contact-add-submit"
-            class="btn btn-primary"
-            disabled={adding()}
-          >
+          <button type="submit" id="contact-add-submit" class="btn btn-primary" disabled={adding()}>
             {adding() ? "Adding…" : "Add Contact"}
           </button>
         </form>
@@ -106,12 +107,7 @@ export const ContactList: Component = () => {
           fallback={
             <div class="flex-col gap-2" style="display:flex;padding:0.5rem;">
               <For each={[1, 2, 3]}>
-                {() => (
-                  <div
-                    class="skeleton"
-                    style="height:56px;border-radius:var(--radius-md);"
-                  />
-                )}
+                {() => <div class="skeleton" style="height:56px;border-radius:var(--radius-md);" />}
               </For>
             </div>
           }
@@ -132,11 +128,11 @@ export const ContactList: Component = () => {
                   tabIndex={0}
                   aria-label={`Chat with ${contact.nickname}`}
                   onClick={() => setActiveOnion(contact.onion_address)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && setActiveOnion(contact.onion_address)
-                  }
+                  onKeyDown={(e) => e.key === "Enter" && setActiveOnion(contact.onion_address)}
                 >
-                  <div class="avatar" aria-hidden="true">{initials(contact)}</div>
+                  <div class="avatar" aria-hidden="true">
+                    {initials(contact)}
+                  </div>
                   <div style="flex:1;min-width:0;">
                     <p class="font-medium text-sm truncate">{contact.nickname}</p>
                     <p class="text-xs font-mono truncate" style="color:var(--clr-text-3);">

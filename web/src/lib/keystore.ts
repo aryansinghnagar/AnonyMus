@@ -12,7 +12,7 @@
  *   - store "contacts"    — contact metadata (onion, nickname, verified)
  */
 
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 
 // ── DB Schema ──────────────────────────────────────────────────────────────────
 
@@ -72,7 +72,7 @@ async function getDB(): Promise<IDBPDatabase<AnonymusKeyDB>> {
 
 export async function storeIdentityKey(
   privateKey: Uint8Array,
-  publicKey: Uint8Array
+  publicKey: Uint8Array,
 ): Promise<void> {
   const db = await getDB();
   await db.put("identity", {
@@ -129,7 +129,7 @@ export async function storePreKey(
   id: string,
   type: "signed" | "one-time" | "pq",
   keyBytes: Uint8Array,
-  signature?: Uint8Array
+  signature?: Uint8Array,
 ): Promise<void> {
   const db = await getDB();
   await db.put("prekeys", {
@@ -142,9 +142,7 @@ export async function storePreKey(
   });
 }
 
-export async function consumeOneTimePreKey(): Promise<
-  { id: string; keyBytes: Uint8Array } | null
-> {
+export async function consumeOneTimePreKey(): Promise<{ id: string; keyBytes: Uint8Array } | null> {
   const db = await getDB();
   const tx = db.transaction("prekeys", "readwrite");
   const index = tx.store.index("by-type");

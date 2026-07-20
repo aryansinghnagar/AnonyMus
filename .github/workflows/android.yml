@@ -2,11 +2,12 @@ name: Android App Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths: ['android/**', '.github/workflows/android.yml']
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: android-${{ github.ref }}

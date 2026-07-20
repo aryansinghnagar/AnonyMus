@@ -131,7 +131,7 @@ def validate_json_schema(required_fields):
             for field, expected_type in required_fields.items():
                 if field not in data:
                     return jsonify({"error": f"Missing required field: {field}"}), 400
-                if expected_type == int:
+                if expected_type is int:
                     try:
                         int(data[field])
                     except (ValueError, TypeError):

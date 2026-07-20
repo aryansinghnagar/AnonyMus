@@ -5,11 +5,17 @@
  * The DR session state is persisted to IndexedDB via keystore.ts.
  */
 
-import { createSignal } from "solid-js";
-import { messages as api, type Message } from "@lib/api";
-import { loadSession, saveSession, loadIdentityKey } from "@lib/keystore";
-import { DoubleRatchetSession, fromBase64, toBase64, encryptSealedSender, decryptSealedSender } from "@lib/crypto";
+import { type Message, messages as api } from "@lib/api";
 import { getCore } from "@lib/core";
+import {
+  DoubleRatchetSession,
+  decryptSealedSender,
+  encryptSealedSender,
+  fromBase64,
+  toBase64,
+} from "@lib/crypto";
+import { loadIdentityKey, loadSession, saveSession } from "@lib/keystore";
+import { createSignal } from "solid-js";
 import { contactList } from "./contacts";
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -58,7 +64,10 @@ export async function decryptMessage(onion: string, msg: Message): Promise<strin
     let resolvedOnion = onion;
     if (msg.sender_onion === "sealed" && (msg as any).sealed_sender) {
       try {
-        const decryptedSender = await decryptSealedSender((msg as any).sealed_sender, identity.privateKey);
+        const decryptedSender = await decryptSealedSender(
+          (msg as any).sealed_sender,
+          identity.privateKey,
+        );
         await api.resolveSender(msg.message_id, decryptedSender);
         msg.sender_onion = decryptedSender;
         resolvedOnion = decryptedSender;
@@ -84,7 +93,7 @@ export async function decryptMessage(onion: string, msg: Message): Promise<strin
       // Sent by peer — decrypt Bob's ciphertext using Double Ratchet
       let sessionObj = await loadSession(onion);
       if (!sessionObj) {
-        const contact = contactList()?.find(c => c.onion_address === onion);
+        const contact = contactList()?.find((c) => c.onion_address === onion);
         if (!contact || !contact.shared_secret_b64 || !contact.public_key_b64) {
           throw new Error("Double Ratchet session not established with peer");
         }
@@ -108,7 +117,7 @@ export async function decryptMessage(onion: string, msg: Message): Promise<strin
         iv,
         ciphertext,
         envelope.seq,
-        envelope.prev_chain_len
+        envelope.prev_chain_len,
       );
 
       // Save updated ratchet state
@@ -157,7 +166,7 @@ export async function loadMessages(onion: string, limit = 50): Promise<void> {
 export async function sendMessage(
   onion: string,
   plaintext: string,
-  _myOnion: string
+  _myOnion: string,
 ): Promise<boolean> {
   setSending(true);
   setMessageError(null);
@@ -173,7 +182,7 @@ export async function sendMessage(
 
     const ourPubB64 = toBase64(identity.publicKey);
 
-    const contact = contactList()?.find(c => c.onion_address === onion);
+    const contact = contactList()?.find((c) => c.onion_address === onion);
 
     // Load or initialize Double Ratchet session
     let sessionObj = await loadSession(onion);
@@ -209,7 +218,7 @@ export async function sendMessage(
       self_ciphertext: selfCiphertextB64,
       dh_pub: enc.dhPubB64,
       seq: enc.seq,
-      prev_chain_len: enc.prevChainLen
+      prev_chain_len: enc.prevChainLen,
     };
     const envelopeB64 = btoa(JSON.stringify(envelope));
 
@@ -227,7 +236,7 @@ export async function sendMessage(
     // Append the plaintext message locally in UI store
     const uiMsg = {
       ...msg,
-      ciphertext_b64: btoa(plaintext)
+      ciphertext_b64: btoa(plaintext),
     };
     setMessages(onion, [...existing, uiMsg]);
     return true;
@@ -243,9 +252,7 @@ export async function softDeleteMessage(onion: string, messageId: string): Promi
   await api.softDelete(messageId).catch(() => {});
   setMessages(
     onion,
-    getMessages(onion).map((m) =>
-      m.message_id === messageId ? { ...m, is_deleted: true } : m
-    )
+    getMessages(onion).map((m) => (m.message_id === messageId ? { ...m, is_deleted: true } : m)),
   );
 }
 

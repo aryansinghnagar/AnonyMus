@@ -1,10 +1,10 @@
 /* App.tsx — Root application component with auth routing */
 
-import type { Component } from "solid-js";
-import { createEffect, Show } from "solid-js";
-import { initSession, loading, user } from "@stores/session";
 import { AuthPage } from "@components/auth/AuthPage";
 import { ChatShell } from "@components/chat/ChatShell";
+import { initSession, loading, user } from "@stores/session";
+import type { Component } from "solid-js";
+import { Show, createEffect } from "solid-js";
 
 export const App: Component = () => {
   // Initialise session from cookie on mount
@@ -28,7 +28,9 @@ export const App: Component = () => {
       fallback={
         <div class="auth-page" aria-label="Loading AnonyMus">
           <div class="flex flex-col items-center gap-4">
-            <div class="avatar" style="width:64px;height:64px;font-size:2rem;">A</div>
+            <div class="avatar" style="width:64px;height:64px;font-size:2rem;">
+              A
+            </div>
             <div class="skeleton" style="width:120px;height:16px;" />
           </div>
         </div>
