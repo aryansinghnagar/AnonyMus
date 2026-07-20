@@ -16,7 +16,7 @@ jobs:
   improve:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Self Improvement Evaluation
         run: |
           echo "Evaluating code performance and lint logs for automatic improvements..."
