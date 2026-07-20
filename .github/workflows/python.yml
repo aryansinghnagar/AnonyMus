@@ -2,11 +2,12 @@ name: Python Code Quality & Testing
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths: ['**/*.py', 'requirements*.txt', 'requirements*.in', '.github/workflows/python.yml']
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: python-${{ github.ref }}
@@ -37,7 +38,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install uv and dependencies
         run: |
@@ -70,11 +71,8 @@ jobs:
       - name: Run Pyright Type Checker
         run: pyright
 
-      - name: Run Legacy Test Suite
-        run: pytest tests/unit/ tests/integration/ --ignore=tests/integration/test_fastapi_v3.py --cov=core --cov=transports --cov-report=xml || true
-
-      - name: Run FastAPI v3 Integration Tests
-        run: pytest tests/integration/test_fastapi_v3.py -v -m "not legacy"
+      - name: Run Unit & Integration Test Suite
+        run: pytest tests/unit/ tests/integration/ --cov=core --cov=transports --cov-report=xml -m "not legacy"
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4

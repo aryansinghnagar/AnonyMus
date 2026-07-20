@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -36,6 +37,17 @@ engine = create_async_engine(
     pool_pre_ping=True,
 )
 
+if settings.database_url.startswith("sqlite"):
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode = WAL;")
+        cursor.execute("PRAGMA synchronous = NORMAL;")
+        cursor.execute("PRAGMA mmap_size = 268435456;")
+        cursor.execute("PRAGMA cache_size = -8000;")
+        cursor.close()
+
 # ── Session Factory ────────────────────────────────────────────────────────────
 
 AsyncSessionLocal = async_sessionmaker(
@@ -54,15 +66,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency that yields an async DB session and commits/rolls back
     on success/failure.
-
-    Usage::
-
-        @router.get("/users/{user_id}")
-        async def get_user(
-            user_id: int,
-            session: AsyncSession = Depends(get_session),
-        ):
-            ...
     """
     async with AsyncSessionLocal() as session:
         try:

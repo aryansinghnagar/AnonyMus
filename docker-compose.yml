@@ -1,8 +1,8 @@
 # =============================================================================
-# AnonyMus Relay — Docker Compose Configuration
+# AnonyMus Production Docker Compose Configuration
 # Usage:
-#   docker compose up -d              # Start relay with Caddy TLS (set DOMAIN)
-#   docker compose --profile onion up -d  # Start with Tor hidden service
+#   docker compose --profile relay up -d   # Start Pairwise Relay service
+#   docker compose --profile node up -d    # Start Local P2P Node service
 # =============================================================================
 
 version: "3.9"
@@ -14,17 +14,19 @@ x-relay-env: &relay-env
   RELAY_DOMAIN: ${RELAY_DOMAIN:-}
   RELAY_AS_ONION: ${RELAY_AS_ONION:-false}
   REDIS_URL: redis://redis:6379/0
-  ENVIRONMENT: production
+  ENVIRONMENT: ${ENVIRONMENT:-production}
   DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/anonymus.db}
 
 services:
-  # ── AnonyMus relay ──────────────────────────────────────────────────────────
+  # ── AnonyMus Pairwise Relay ──────────────────────────────────────────────────
   relay:
     build:
       context: .
       dockerfile: Dockerfile.relay
     container_name: anonymus-relay
     restart: unless-stopped
+    profiles:
+      - relay
     volumes:
       - relay-data:/app/data
     environment:
@@ -34,6 +36,30 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── AnonyMus Local P2P Node ──────────────────────────────────────────────────
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile.relay
+    container_name: anonymus-node
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "transports.p2p.app_v3:app", "--host", "0.0.0.0", "--port", "5001"]
+    profiles:
+      - node
+    volumes:
+      - node-data:/app/data
+    environment:
+      <<: *relay-env
+    expose:
+      - "5001"
     networks:
       - internal
     healthcheck:
@@ -64,9 +90,9 @@ services:
     volumes:
       - ./web:/app
       - web-dist:/app/dist
-    command: sh -c "npm install && npm run build"
+    command: sh -c "npm install && (npm run wasm:build || true) && npm run build"
 
-  # ── Caddy (TLS termination, clearnet mode) ───────────────────────────────────
+  # ── Caddy (TLS termination) ─────────────────────────────────────────────────
   caddy:
     image: caddy:2-alpine
     container_name: anonymus-caddy
@@ -75,6 +101,8 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:-localhost}
     volumes:
       - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
       - web-dist:/usr/share/caddy:ro
@@ -82,8 +110,6 @@ services:
       - caddy-config:/config
     networks:
       - internal
-    depends_on:
-      - relay
 
   # ── Tor (onion-only mode) ────────────────────────────────────────────────────
   tor:
@@ -95,12 +121,10 @@ services:
       - ./torrc.docker:/etc/tor/torrc:ro
     networks:
       - internal
-    depends_on:
-      - relay
     profiles:
       - onion
 
-  # ── Coturn (TURN/STUN server for WebRTC NAT traversal) ────────────────────────
+  # ── Coturn (TURN/STUN server) ────────────────────────────────────────────────
   coturn:
     image: coturn/coturn:latest
     container_name: anonymus-coturn
@@ -125,6 +149,7 @@ networks:
 
 volumes:
   relay-data:
+  node-data:
   caddy-data:
   caddy-config:
   tor-data:
