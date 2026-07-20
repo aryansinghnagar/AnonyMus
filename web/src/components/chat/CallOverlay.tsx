@@ -1,7 +1,7 @@
-import type { Component } from "solid-js";
-import { createEffect, createSignal, onCleanup, Show } from "solid-js";
-import { callState, activePeerOnion, remoteStream, answerCall, hangupCall } from "@stores/calls";
+import { activePeerOnion, answerCall, callState, hangupCall, remoteStream } from "@stores/calls";
 import { user } from "@stores/session";
+import type { Component } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 export const CallOverlay: Component = () => {
   let audioEl: HTMLAudioElement | undefined;
@@ -12,7 +12,7 @@ export const CallOverlay: Component = () => {
     if (callState() === "connected") {
       setDuration(0);
       timerId = setInterval(() => {
-        setDuration(d => d + 1);
+        setDuration((d) => d + 1);
       }, 1000);
     } else {
       clearInterval(timerId);
@@ -29,12 +29,16 @@ export const CallOverlay: Component = () => {
     const stream = remoteStream();
     if (stream && audioEl) {
       audioEl.srcObject = stream;
-      audioEl.play().catch(e => console.warn("[Call] Failed to autoplay remote audio stream:", e));
+      audioEl
+        .play()
+        .catch((e) => console.warn("[Call] Failed to autoplay remote audio stream:", e));
     }
   });
 
   const formatDuration = (sec: number) => {
-    const m = Math.floor(sec / 60).toString().padStart(2, "0");
+    const m = Math.floor(sec / 60)
+      .toString()
+      .padStart(2, "0");
     const s = (sec % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
@@ -75,12 +79,18 @@ export const CallOverlay: Component = () => {
             <div style="font-size:2.25rem;font-weight:700;font-family:monospace;color:var(--clr-accent);">
               {formatDuration(duration())}
             </div>
-            <div class="text-xs text-accent animate-pulse" style="letter-spacing:1.5px;text-transform:uppercase;">
+            <div
+              class="text-xs text-accent animate-pulse"
+              style="letter-spacing:1.5px;text-transform:uppercase;"
+            >
               Secured Peer-to-Peer Loop
             </div>
           </Show>
 
-          <div class="flex items-center gap-4" style="margin-top:1rem;width:100%;justify-content:center;">
+          <div
+            class="flex items-center gap-4"
+            style="margin-top:1rem;width:100%;justify-content:center;"
+          >
             <Show when={callState() === "incoming"}>
               <button
                 class="btn btn-accent"

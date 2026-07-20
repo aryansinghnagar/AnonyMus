@@ -1,8 +1,8 @@
 /* TopBar.tsx — Application top bar with logo, node status, and settings */
 
-import type { Component } from "solid-js";
-import { user, logout, triggerPanicWipe } from "@stores/session";
 import { isStub } from "@lib/core";
+import { logout, triggerPanicWipe, user } from "@stores/session";
+import type { Component } from "solid-js";
 
 export const TopBar: Component = () => {
   return (
@@ -19,11 +19,7 @@ export const TopBar: Component = () => {
         <span style="font-weight:700;font-size:var(--font-size-md);letter-spacing:-0.3px;">
           AnonyMus
         </span>
-        <span
-          class="badge badge-accent"
-          style="font-size:10px;"
-          title="Protocol version 3"
-        >
+        <span class="badge badge-accent" style="font-size:10px;" title="Protocol version 3">
           v3
         </span>
         {isStub() && (
@@ -41,9 +37,7 @@ export const TopBar: Component = () => {
       <div class="flex items-center gap-2" aria-label="Node status">
         <span class="status-dot online" title="Node online" />
         <span class="text-xs text-muted font-mono">
-          {user()?.onion_address
-            ? user()!.onion_address!.slice(0, 8) + "…"
-            : "no onion"}
+          {user()?.onion_address ? user()!.onion_address!.slice(0, 8) + "…" : "no onion"}
         </span>
       </div>
 

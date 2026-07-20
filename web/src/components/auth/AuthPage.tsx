@@ -1,8 +1,8 @@
 /* AuthPage.tsx — Login and registration page */
 
+import { authError, login, register } from "@stores/session";
 import type { Component } from "solid-js";
-import { createSignal, Show } from "solid-js";
-import { login, register, authError } from "@stores/session";
+import { Show, createSignal } from "solid-js";
 
 type Mode = "login" | "register";
 
@@ -140,18 +140,14 @@ export const AuthPage: Component = () => {
               style="margin-top:0.5rem;padding:0.75rem;"
               disabled={busy()}
             >
-              {busy()
-                ? "Please wait…"
-                : mode() === "login"
-                ? "Sign In"
-                : "Create Account"}
+              {busy() ? "Please wait…" : mode() === "login" ? "Sign In" : "Create Account"}
             </button>
           </div>
         </form>
 
         <p class="text-muted text-xs" style="text-align:center;margin-top:1.5rem;">
-          All messages are end-to-end encrypted using the Signal Protocol
-          + ML-KEM-768 post-quantum ratchet.
+          All messages are end-to-end encrypted using the Signal Protocol + ML-KEM-768 post-quantum
+          ratchet.
         </p>
       </div>
     </div>

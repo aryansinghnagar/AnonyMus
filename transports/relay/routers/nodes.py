@@ -10,12 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.db.engine import get_session
 from core.logging_v3 import get_logger
 
 logger = get_logger(__name__)
@@ -52,7 +49,9 @@ _nodes: dict[str, dict] = {}
 
 
 def _is_online(last_seen: datetime) -> bool:
-    return datetime.now(timezone.utc) - last_seen < timedelta(minutes=STALE_AFTER_MINUTES)
+    return datetime.now(timezone.utc) - last_seen < timedelta(
+        minutes=STALE_AFTER_MINUTES
+    )
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -90,7 +89,10 @@ async def register_node(body: NodeRegisterRequest) -> NodeResponse:
 async def heartbeat(body: NodeHeartbeatRequest) -> NodeResponse:
     node = _nodes.get(body.onion_address)
     if not node:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found — register first")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Node not found — register first",
+        )
     node["last_seen"] = datetime.now(timezone.utc)
     return NodeResponse(**node, online=True)
 
@@ -115,6 +117,8 @@ async def list_nodes() -> list[NodeResponse]:
 )
 async def deregister_node(onion_address: str) -> None:
     if onion_address not in _nodes:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Node not found"
+        )
     del _nodes[onion_address]
     logger.info("node_deregistered", onion=onion_address[:12])

@@ -2,8 +2,8 @@
  * Contacts store — reactive contact list and active-contact selection.
  */
 
-import { createSignal, createResource } from "solid-js";
-import { contacts as api, type Contact } from "@lib/api";
+import { type Contact, contacts as api } from "@lib/api";
+import { createResource, createSignal } from "solid-js";
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -11,15 +11,13 @@ const [activeOnion, setActiveOnion] = createSignal<string | null>(null);
 const [contactError, setContactError] = createSignal<string | null>(null);
 
 // Resource — auto-fetches and tracks loading/error states
-const [contactList, { refetch: refetchContacts }] = createResource<Contact[]>(
-  async () => {
-    try {
-      return await api.list();
-    } catch {
-      return [];
-    }
+const [contactList, { refetch: refetchContacts }] = createResource<Contact[]>(async () => {
+  try {
+    return await api.list();
+  } catch {
+    return [];
   }
-);
+});
 
 export { activeOnion, setActiveOnion, contactList, refetchContacts, contactError };
 

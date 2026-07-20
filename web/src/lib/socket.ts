@@ -6,9 +6,9 @@
  * and maintains connection status indicators.
  */
 
-import { io, type Socket } from "socket.io-client";
-import { receiveMessage } from "@stores/messages";
 import { refetchContacts } from "@stores/contacts";
+import { receiveMessage } from "@stores/messages";
+import { type Socket, io } from "socket.io-client";
 
 let socket: Socket | null = null;
 

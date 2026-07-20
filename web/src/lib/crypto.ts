@@ -3,13 +3,13 @@
 import { getCore } from "./core";
 
 export function toHex(arr: Uint8Array): string {
-  return Array.prototype.map.call(arr, (x: number) => ('00' + x.toString(16)).slice(-2)).join('');
+  return Array.prototype.map.call(arr, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
 }
 
 export function fromHex(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+    bytes[i] = Number.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }
@@ -52,7 +52,10 @@ export class DoubleRatchetSession {
   public prevChainLength = 0;
   public skippedMessageKeys: Record<string, string> = {}; // { "peer_dh_b64_seq": "key_hex" }
 
-  public static async initAlice(sharedSecret: Uint8Array, peerDhPub: Uint8Array): Promise<DoubleRatchetSession> {
+  public static async initAlice(
+    sharedSecret: Uint8Array,
+    peerDhPub: Uint8Array,
+  ): Promise<DoubleRatchetSession> {
     const core = await getCore();
     const session = new DoubleRatchetSession();
     const keyPair = core.generateIdentityKeypair();
@@ -61,7 +64,12 @@ export class DoubleRatchetSession {
     session.dhRemotePublicKey = peerDhPub;
 
     const dhOut = core.x25519Dh(session.dhPrivateKey, session.dhRemotePublicKey);
-    const derived = core.hkdfDerive(dhOut, new TextEncoder().encode("AnonyMus-DR-RootRatchet"), 64, sharedSecret);
+    const derived = core.hkdfDerive(
+      dhOut,
+      new TextEncoder().encode("AnonyMus-DR-RootRatchet"),
+      64,
+      sharedSecret,
+    );
 
     session.rootKey = derived.slice(0, 32);
     session.sendingChainKey = derived.slice(32, 64);
@@ -69,7 +77,10 @@ export class DoubleRatchetSession {
     return session;
   }
 
-  public static async initBob(sharedSecret: Uint8Array, myDhPriv: Uint8Array): Promise<DoubleRatchetSession> {
+  public static async initBob(
+    sharedSecret: Uint8Array,
+    myDhPriv: Uint8Array,
+  ): Promise<DoubleRatchetSession> {
     const session = new DoubleRatchetSession();
     session.dhPrivateKey = myDhPriv;
     session.dhRemotePublicKey = null;
@@ -79,12 +90,25 @@ export class DoubleRatchetSession {
     return session;
   }
 
-  public async encrypt(plaintext: string): Promise<{ ciphertextB64: string; ivB64: string; dhPubB64: string; seq: number; prevChainLen: number }> {
+  public async encrypt(
+    plaintext: string,
+  ): Promise<{
+    ciphertextB64: string;
+    ivB64: string;
+    dhPubB64: string;
+    seq: number;
+    prevChainLen: number;
+  }> {
     const core = await getCore();
     if (!this.sendingChainKey) {
       throw new Error("Sending chain key not initialized");
     }
-    const derived = core.hkdfDerive(new Uint8Array(32), new TextEncoder().encode("AnonyMus-DR-ChainRatchet"), 64, this.sendingChainKey);
+    const derived = core.hkdfDerive(
+      new Uint8Array(32),
+      new TextEncoder().encode("AnonyMus-DR-ChainRatchet"),
+      64,
+      this.sendingChainKey,
+    );
     const messageKey = derived.slice(0, 32);
     this.sendingChainKey = derived.slice(32, 64);
 
@@ -119,11 +143,17 @@ export class DoubleRatchetSession {
       ivB64: toBase64(iv),
       dhPubB64: toBase64(this.dhPublicKey!),
       seq,
-      prevChainLen: this.prevChainLength
+      prevChainLen: this.prevChainLength,
     };
   }
 
-  public async decrypt(peerDhPub: Uint8Array, iv: Uint8Array, ciphertext: Uint8Array, seq: number, prevChainLen: number): Promise<string> {
+  public async decrypt(
+    peerDhPub: Uint8Array,
+    iv: Uint8Array,
+    ciphertext: Uint8Array,
+    seq: number,
+    prevChainLen: number,
+  ): Promise<string> {
     const core = await getCore();
     const peerB64 = toBase64(peerDhPub);
     const skipKey = `${peerB64}_${seq}`;
@@ -142,7 +172,12 @@ export class DoubleRatchetSession {
           throw new Error("Decryption keys not fully initialized");
         }
         const dhOut1 = core.x25519Dh(this.dhPrivateKey, this.dhRemotePublicKey);
-        const derived1 = core.hkdfDerive(dhOut1, new TextEncoder().encode("AnonyMus-DR-RootRatchet"), 64, this.rootKey);
+        const derived1 = core.hkdfDerive(
+          dhOut1,
+          new TextEncoder().encode("AnonyMus-DR-RootRatchet"),
+          64,
+          this.rootKey,
+        );
         this.rootKey = derived1.slice(0, 32);
         this.receivingChainKey = derived1.slice(32, 64);
 
@@ -151,7 +186,12 @@ export class DoubleRatchetSession {
         this.dhPublicKey = keyPair.publicKey;
 
         const dhOut2 = core.x25519Dh(this.dhPrivateKey, this.dhRemotePublicKey);
-        const derived2 = core.hkdfDerive(dhOut2, new TextEncoder().encode("AnonyMus-DR-RootRatchet"), 64, this.rootKey);
+        const derived2 = core.hkdfDerive(
+          dhOut2,
+          new TextEncoder().encode("AnonyMus-DR-RootRatchet"),
+          64,
+          this.rootKey,
+        );
         this.rootKey = derived2.slice(0, 32);
         this.sendingChainKey = derived2.slice(32, 64);
 
@@ -165,7 +205,12 @@ export class DoubleRatchetSession {
       if (!this.receivingChainKey) {
         throw new Error("Receiving chain key not initialized");
       }
-      const derived = core.hkdfDerive(new Uint8Array(32), new TextEncoder().encode("AnonyMus-DR-ChainRatchet"), 64, this.receivingChainKey);
+      const derived = core.hkdfDerive(
+        new Uint8Array(32),
+        new TextEncoder().encode("AnonyMus-DR-ChainRatchet"),
+        64,
+        this.receivingChainKey,
+      );
       messageKey = derived.slice(0, 32);
       this.receivingChainKey = derived.slice(32, 64);
       this.seqRecv += 1;
@@ -177,7 +222,11 @@ export class DoubleRatchetSession {
     blob.set(ciphertext, iv.length);
 
     const decryptedBytes = core.aeadDecrypt(messageKey, blob);
-    const view = new DataView(decryptedBytes.buffer, decryptedBytes.byteOffset, decryptedBytes.byteLength);
+    const view = new DataView(
+      decryptedBytes.buffer,
+      decryptedBytes.byteOffset,
+      decryptedBytes.byteLength,
+    );
     const len = view.getUint32(0, false);
     if (len > decryptedBytes.length - 4) {
       throw new Error("Decrypted length header exceeds message buffer bounds.");
@@ -193,7 +242,12 @@ export class DoubleRatchetSession {
       throw new Error("Too many skipped messages");
     }
     while (this.seqRecv < untilSeq) {
-      const derived = core.hkdfDerive(new Uint8Array(32), new TextEncoder().encode("AnonyMus-DR-ChainRatchet"), 64, this.receivingChainKey);
+      const derived = core.hkdfDerive(
+        new Uint8Array(32),
+        new TextEncoder().encode("AnonyMus-DR-ChainRatchet"),
+        64,
+        this.receivingChainKey,
+      );
       const msgKey = derived.slice(0, 32);
       this.receivingChainKey = derived.slice(32, 64);
 
@@ -218,7 +272,7 @@ export class DoubleRatchetSession {
       seqSend: this.seqSend,
       seqRecv: this.seqRecv,
       prevChainLength: this.prevChainLength,
-      skippedMessageKeys: this.skippedMessageKeys
+      skippedMessageKeys: this.skippedMessageKeys,
     };
     return JSON.stringify(obj);
   }
@@ -248,7 +302,7 @@ export interface SealedSenderBlock {
 
 export async function encryptSealedSender(
   senderOnion: string,
-  recipientPubKeyB64: string
+  recipientPubKeyB64: string,
 ): Promise<SealedSenderBlock> {
   const core = await getCore();
   const recipientPubKey = fromBase64(recipientPubKeyB64);
@@ -270,7 +324,7 @@ export async function encryptSealedSender(
 
 export async function decryptSealedSender(
   sealedBlock: SealedSenderBlock,
-  myPrivateKey: Uint8Array
+  myPrivateKey: Uint8Array,
 ): Promise<string> {
   const core = await getCore();
   const ephemeralPub = fromBase64(sealedBlock.ephemeral_pub);

@@ -4,10 +4,10 @@
  * Uses Solid.js reactive primitives for fine-grained reactivity.
  */
 
-import { createSignal } from "solid-js";
-import { auth, node, type User } from "@lib/api";
-import { loadIdentityKey, storeIdentityKey } from "@lib/keystore";
+import { type User, auth, node } from "@lib/api";
 import { getCore } from "@lib/core";
+import { loadIdentityKey, storeIdentityKey } from "@lib/keystore";
+import { createSignal } from "solid-js";
 
 const [user, setUser] = createSignal<User | null>(null);
 const [loading, setLoading] = createSignal(true);
@@ -70,7 +70,7 @@ export async function logout(): Promise<void> {
 
 export async function triggerPanicWipe(): Promise<void> {
   const confirmWipe = confirm(
-    "WARNING: You are about to initiate the Panic Wipe. This will securely erase all local chats, cryptographic identity keys, and configurations immediately. This action CANNOT BE UNDONE. Proceed?"
+    "WARNING: You are about to initiate the Panic Wipe. This will securely erase all local chats, cryptographic identity keys, and configurations immediately. This action CANNOT BE UNDONE. Proceed?",
   );
   if (!confirmWipe) return;
 

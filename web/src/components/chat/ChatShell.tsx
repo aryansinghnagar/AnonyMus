@@ -1,12 +1,12 @@
 /* ChatShell.tsx — Main authenticated layout: sidebar + chat area */
 
+import { CallOverlay } from "@components/chat/CallOverlay";
+import { ChatArea } from "@components/chat/ChatArea";
+import { ContactList } from "@components/chat/ContactList";
+import { TopBar } from "@components/chat/TopBar";
+import { activeOnion } from "@stores/contacts";
 import type { Component } from "solid-js";
 import { Show } from "solid-js";
-import { activeOnion } from "@stores/contacts";
-import { ContactList } from "@components/chat/ContactList";
-import { ChatArea } from "@components/chat/ChatArea";
-import { TopBar } from "@components/chat/TopBar";
-import { CallOverlay } from "@components/chat/CallOverlay";
 
 export const ChatShell: Component = () => {
   return (
@@ -17,10 +17,7 @@ export const ChatShell: Component = () => {
         <ContactList />
       </aside>
       <main class="app-main" aria-label="Chat area">
-        <Show
-          when={activeOnion()}
-          fallback={<WelcomePane />}
-        >
+        <Show when={activeOnion()} fallback={<WelcomePane />}>
           <ChatArea onion={activeOnion()!} />
         </Show>
       </main>
