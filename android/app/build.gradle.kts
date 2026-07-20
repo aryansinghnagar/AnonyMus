@@ -102,7 +102,7 @@ dependencies {
   implementation(libs.socketio.client)
 
   // QR Code generation
-  implementation("com.google.zxing:core:3.5.3")
+  implementation("com.google.zxing:core:3.5.4")
   implementation(libs.androidx.security.crypto)
   implementation(libs.tink.android)
   implementation(libs.androidx.biometric)
