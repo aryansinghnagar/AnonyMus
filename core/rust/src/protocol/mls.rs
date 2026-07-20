@@ -82,7 +82,7 @@ mod tests {
     fn mls_group_encryption_roundtrip() {
         let members = vec!["alice".to_string(), "bob".to_string()];
         let start_secret = [1u8; 32];
-        let mut group = MlsGroup::new(b"group-123".to_vec(), start_secret, members);
+        let group = MlsGroup::new(b"group-123".to_vec(), start_secret, members);
 
         let plaintext = b"Hello, MLS group members!";
         let ciphertext = group.encrypt_message("alice", plaintext).unwrap();
