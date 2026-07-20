@@ -1,0 +1,33 @@
+{
+  "_type": "https://in-toto.io/Statement/v0.1",
+  "predicateType": "https://slsa.dev/provenance/v0.2",
+  "subject": [
+    {
+      "name": "anonymus-launcher.py",
+      "digest": {
+        "sha256": "4853bac84555c4a65f274f19c507e2cfe5b0bad8515ec1aa0c27db4790c684eb"
+      }
+    },
+    {
+      "name": "requirements.txt",
+      "digest": {
+        "sha256": "b7c589429e639b893da2c44ce02de015a907f4e155a1db887966ac05bde14cd3"
+      }
+    },
+    {
+      "name": "Dockerfile.relay",
+      "digest": {
+        "sha256": "973480a50bbbfbd064f2a8d9249b7dc60bbb4d43e3f4cd3a628f31aa5358e8ac"
+      }
+    },
+    {
+      "name": "web/package.json",
+      "digest": {
+        "sha256": "4e732b69fcd37e5bfbd3954efc5b4cdc47245e83a2782609f597c05556cc521a"
+      }
+    }
+  ],
+  "builder": {
+    "id": "anonymus-reproducible-builder-v1"
+  }
+}

@@ -26,6 +26,7 @@ Usage:
 import base64
 import logging
 import os
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -35,10 +36,33 @@ PQ_HYBRID_ENABLED: bool = os.environ.get("ANONYMUS_PQ_HYBRID", "0") == "1"
 # The algorithm name used in liboqs (Kyber768 == ML-KEM-768 per NIST FIPS 203)
 _KEM_ALG = "Kyber768"
 
+
+# Dynamic DLL / Shared Library resolution for bundled liboqs binaries
+def _configure_native_dll_paths():
+    """Adds local binary folders to DLL search paths on Windows/Linux."""
+    base_dir = Path(__file__).resolve().parent.parent
+    possible_paths = [
+        base_dir / "lib",
+        base_dir / "bin",
+        Path("C:/Users/Aryan/_oqs/liboqs/build/bin"),
+        Path("C:/Users/Aryan/_oqs/lib"),
+    ]
+    for p in possible_paths:
+        if p.exists() and p.is_dir():
+            if hasattr(os, "add_dll_directory"):
+                try:
+                    os.add_dll_directory(str(p))
+                except Exception:
+                    pass
+            os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+
+
+_configure_native_dll_paths()
+
 # Attempt to load liboqs at import time.
-# liboqs-python requires a pre-compiled native liboqs.so/.dll.
-# On Windows without cmake the auto-installer will fail; we catch that gracefully.
 _oqs = None
+_load_error = None
+
 if not os.environ.get("ANONYMUS_PQ_DISABLE"):
     try:
         import oqs as _oqs_module  # type: ignore
@@ -50,6 +74,7 @@ if not os.environ.get("ANONYMUS_PQ_DISABLE"):
         _oqs = _oqs_module
         log.info("liboqs loaded — ML-KEM-768 (Kyber768) available")
     except (Exception, SystemExit) as e:
+        _load_error = str(e)
         log.warning("liboqs not available — PQ hybrid mode disabled: %s", e)
         _oqs = None
 
@@ -57,6 +82,24 @@ if not os.environ.get("ANONYMUS_PQ_DISABLE"):
 def is_available() -> bool:
     """Returns True if liboqs is installed and ML-KEM-768 is usable."""
     return _oqs is not None
+
+
+def get_pq_status() -> dict:
+    """
+    Returns diagnostic information regarding Post-Quantum ML-KEM-768 status.
+    """
+    return {
+        "available": is_available(),
+        "algorithm": _KEM_ALG,
+        "hybrid_enabled": PQ_HYBRID_ENABLED,
+        "load_error": _load_error,
+        "parameters": {
+            "public_key_bytes": 1184,
+            "private_key_bytes": 2400,
+            "ciphertext_bytes": 1088,
+            "shared_secret_bytes": 32,
+        },
+    }
 
 
 def generate_ml_kem_keypair() -> tuple[bytes, bytes] | None:
