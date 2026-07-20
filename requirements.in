@@ -34,7 +34,7 @@ structlog>=24.4
 prometheus-client>=0.21
 
 # Error monitoring
-sentry-sdk[fastapi]>=2.0
+sentry-sdk[fastapi]>=2.66.0
 
 # Session signing
 itsdangerous>=2.2
