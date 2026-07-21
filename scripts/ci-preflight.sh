@@ -25,7 +25,13 @@ case "$WORKFLOW_NAME" in
       SKIP="true"
     fi
     ;;
-  js|web)
+  js)
+    if [ ! -d "packages/typescript-sdk" ]; then
+      echo "=== [PREFLIGHT NOTICE] Optional JS SDK directory 'packages/typescript-sdk' not found. Skipping ==="
+      SKIP="true"
+    fi
+    ;;
+  web)
     if [ ! -f "web/package.json" ]; then
       echo "=== [PREFLIGHT ERROR] Required Web configuration 'web/package.json' missing! ==="
       if [ "$STRICT_MODE" = "--required" ]; then exit 1; else SKIP="true"; fi
