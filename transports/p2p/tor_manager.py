@@ -341,10 +341,10 @@ def write_torrc(socks_port, control_port, peer_port):
     torrc_content = f"""SocksPort 127.0.0.1:{socks_port}
 ControlPort 127.0.0.1:{control_port}
 CookieAuthentication 1
-DataDirectory {TOR_DATA_DIR.replace(os.sep, '/')}
+DataDirectory {TOR_DATA_DIR.replace(os.sep, "/")}
 """
     for s_dir in subdirs:
-        torrc_content += f"""HiddenServiceDir {s_dir.replace(os.sep, '/')}
+        torrc_content += f"""HiddenServiceDir {s_dir.replace(os.sep, "/")}
 HiddenServicePort 80 127.0.0.1:{peer_port}
 """
 

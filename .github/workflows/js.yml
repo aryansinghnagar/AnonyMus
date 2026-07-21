@@ -2,11 +2,12 @@ name: JavaScript Code Quality & Testing
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths: ['web/**', 'packages/typescript-sdk/**', '.github/workflows/js.yml']
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: js-${{ github.ref }}
@@ -21,10 +22,10 @@ jobs:
     outputs:
       skip: ${{ steps.check.outputs.skip }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - name: Preflight Check
         id: check
-        run: bash scripts/ci-preflight.sh js
+        run: bash scripts/ci-preflight.sh js --optional
 
   test:
     needs: preflight
@@ -32,12 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies and compile
         run: |
