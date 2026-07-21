@@ -14,6 +14,7 @@ AnonyMus is a metadata-resistant, privacy-focused instant messenger operating ov
 * **Architecture Specification**: [Overview & Design](file:///docs/architecture/overview.md)
 * **API Documentation**: [REST & Socket.IO Events](file:///docs/api/socket-io-events.md)
 * **Self-Hosting**: [Self-Host Guide](file:///docs/guides/self-hosting.md)
+* **Master Testing Guide**: [Testing Guide & Failure Matrix](file:///TESTING.md)
 * **Reproducing Builds**: [Reproducible Builds Guide](file:///docs/guides/reproduce-build.md)
 
 ## Development Doctrine
