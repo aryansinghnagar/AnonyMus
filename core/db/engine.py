@@ -41,11 +41,14 @@ if settings.database_url.startswith("sqlite"):
 
     @event.listens_for(engine.sync_engine, "connect")
     def _set_sqlite_pragmas(dbapi_connection, connection_record):
+        from core.capability_tiers import detect_capability_tier
+
+        profile = detect_capability_tier()
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode = WAL;")
         cursor.execute("PRAGMA synchronous = NORMAL;")
         cursor.execute("PRAGMA mmap_size = 268435456;")
-        cursor.execute("PRAGMA cache_size = -8000;")
+        cursor.execute(f"PRAGMA cache_size = -{profile.db_cache_size_kb};")
         cursor.close()
 
 # ── Session Factory ────────────────────────────────────────────────────────────

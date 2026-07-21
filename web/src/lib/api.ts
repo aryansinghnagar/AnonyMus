@@ -121,6 +121,12 @@ export const contacts = {
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 
+export interface SealedSenderBlock {
+  ephemeral_pub: string;
+  ciphertext: string;
+  iv: string;
+}
+
 export const messages = {
   history: (onion: string, limit = 50, before?: string) =>
     apiFetch<Message[]>(`/messages/${onion}?limit=${limit}${before ? `&before=${before}` : ""}`),
@@ -131,7 +137,7 @@ export const messages = {
     iv_b64: string,
     sequence_number: number,
     disappears_at?: string,
-    sealed_sender?: any,
+    sealed_sender?: SealedSenderBlock | null,
   ) =>
     apiFetch<Message>("/messages/", {
       method: "POST",
