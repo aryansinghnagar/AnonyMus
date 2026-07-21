@@ -1,0 +1,22 @@
+# AnonyMus Code Owners & Security Policy
+
+# Global default maintainers
+* @aryansinghnagar
+
+# Cryptographic Core & Security
+/core/crypto.py @aryansinghnagar
+/core/rust/ @aryansinghnagar
+
+# Transports & Network Routers
+/transports/ @aryansinghnagar
+
+# Web Frontend Client
+/web/ @aryansinghnagar
+
+# Mobile Native Applications
+/android/ @aryansinghnagar
+/ios/ @aryansinghnagar
+
+# CI/CD Workflows & Automation
+/.github/workflows/ @aryansinghnagar
+/scripts/ @aryansinghnagar
