@@ -115,7 +115,7 @@ python-socketio==5.16.3
     # via -r requirements.in
 pyyaml==6.0.3
     # via uvicorn
-sentry-sdk[fastapi]==2.64.0
+sentry-sdk[fastapi]==2.66.0
     # via -r requirements.in
 simple-websocket==1.1.0
     # via python-engineio
