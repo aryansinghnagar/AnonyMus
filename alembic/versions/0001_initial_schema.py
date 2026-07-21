@@ -121,13 +121,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("is_deleted", sa.Boolean, nullable=False, server_default="0"),
-        sa.ForeignKeyConstraint(
-            ["group_id"], ["groups.group_id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["group_id"], ["groups.group_id"], ondelete="CASCADE"),
     )
-    op.create_index(
-        "ix_group_messages_group_id", "group_messages", ["group_id"]
-    )
+    op.create_index("ix_group_messages_group_id", "group_messages", ["group_id"])
 
 
 def downgrade() -> None:

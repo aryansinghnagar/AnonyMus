@@ -22,7 +22,7 @@ jobs:
     container:
       image: returntocorp/semgrep
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - name: Semgrep Scan
         run: semgrep ci --sarif --output=semgrep.sarif
       - name: Upload SARIF report

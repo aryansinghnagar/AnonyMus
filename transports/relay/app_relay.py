@@ -84,13 +84,17 @@ def create_relay_app() -> FastAPI:
             path=request.url.path,
             status_code=response.status_code,
         ).inc()
-        RELAY_LATENCY.labels(method=request.method, path=request.url.path).observe(duration)
+        RELAY_LATENCY.labels(method=request.method, path=request.url.path).observe(
+            duration
+        )
         return response
 
     @application.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.error("relay_unhandled_exception", path=request.url.path, error=str(exc))
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error"}
+        )
 
     application.include_router(nodes.router)
     application.include_router(presence.router)
