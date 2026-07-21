@@ -72,6 +72,8 @@ jobs:
         run: pyright || true
 
       - name: Run Unit & Integration Test Suite
+        env:
+          PYTHONPATH: .
         run: pytest tests/unit/ tests/integration/ --cov=core --cov=transports --cov-report=xml -m "not legacy"
 
       - name: Upload Coverage to Codecov
