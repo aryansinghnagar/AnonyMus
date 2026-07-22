@@ -309,9 +309,12 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @application.get(
-        "/readyz", tags=["observability"], summary="Readiness probe — checks DB"
+        "/readyz",
+        tags=["observability"],
+        summary="Readiness probe — checks DB",
+        response_model=None,
     )
-    async def readyz() -> dict[str, Any]:
+    async def readyz() -> Response | dict[str, Any]:
         try:
             async with engine.connect() as conn:
                 await conn.execute(

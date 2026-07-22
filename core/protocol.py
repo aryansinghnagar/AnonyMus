@@ -96,6 +96,23 @@ def hkdf_derive(ikm: bytes, info: bytes, salt: bytes = b"\x00" * 32) -> bytes:
     return hkdf.derive(ikm)
 
 
+def derive_chain_keys(chain_key: bytes) -> dict[str, bytes]:
+    """
+    Derives next chain key and message key from current chain key using HKDF-SHA256.
+    """
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=64,
+        salt=chain_key,
+        info=b"AnonyMus-DR-ChainRatchet",
+    )
+    derived = hkdf.derive(b"\x00" * 32)
+    return {
+        "message_key": derived[:32],
+        "next_chain_key": derived[32:],
+    }
+
+
 def compute_safety_number(pubkey1_b64: str, pubkey2_b64: str) -> str:
     """
     Computes a human-verifiable safety number as 12 groups of 5 decimal digits.
@@ -251,9 +268,9 @@ def decrypt_message(
     role: str,
     seq_num: int,
     session_id: str,
-    my_private_key_bytes: bytes = None,
-    peer_public_key_bytes: bytes = None,
-    payload: dict = None,
+    my_private_key_bytes: bytes | None = None,
+    peer_public_key_bytes: bytes | None = None,
+    payload: dict | None = None,
 ) -> str:
     """
     Decrypts a message, automatically choosing v2 Double Ratchet/Cryptobox or v1 fallback.
@@ -264,8 +281,8 @@ def decrypt_message(
             payload,
             role,
             session_id,
-            my_private_key_bytes,
-            peer_public_key_bytes,
+            my_private_key_bytes or b"",
+            peer_public_key_bytes or b"",
         )
     else:
         # Fallback to old v1 decryption

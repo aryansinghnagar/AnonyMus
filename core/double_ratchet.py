@@ -28,15 +28,18 @@ def _pq_combine(x25519_secret: bytes, kem_secret: bytes) -> bytes:
 
 class DoubleRatchetSession:
     def __init__(self):
-        self.dh_private = None
-        self.dh_remote = None
-        self.root_key = None
-        self.sending_chain_key = None
-        self.receiving_chain_key = None
+        self.dh_private: x25519.X25519PrivateKey | None = None
+        self.dh_remote: x25519.X25519PublicKey | None = None
+        self.root_key: bytes | None = None
+        self.sending_chain_key: bytes | None = None
+        self.receiving_chain_key: bytes | None = None
         self.seq_send = 0
         self.seq_recv = 0
         self.prev_chain_length = 0
-        self.skipped_message_keys = {}  # { "peer_dh_b64_seq": "key_hex" }
+        self.skipped_message_keys: dict[
+            str, str
+        ] = {}  # { "peer_dh_b64_seq": "key_hex" }
+        self.kem_ciphertext_b64: str | None = None
 
     @classmethod
     def init_alice(cls, shared_secret: bytes, peer_dh_pub_bytes: bytes):
@@ -210,6 +213,9 @@ class DoubleRatchetSession:
         Returns:
             (message_key: bytes, my_dh_public_bytes: bytes, seq: int, prev_chain_len: int)
         """
+        if self.dh_private is None or self.sending_chain_key is None:
+            raise ValueError("Session keys not initialized")
+
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=64,
@@ -252,6 +258,8 @@ class DoubleRatchetSession:
             self._skip_messages(prev_chain_len)
 
             self.dh_remote = peer_dh_pub
+            if self.dh_private is None or self.root_key is None:
+                raise ValueError("Keys not initialized for ratchet step")
             dh_out1 = self.dh_private.exchange(self.dh_remote)
 
             rk_hkdf1 = HKDF(
@@ -283,6 +291,9 @@ class DoubleRatchetSession:
 
         self._skip_messages(seq)
 
+        if self.receiving_chain_key is None:
+            raise ValueError("Receiving chain key not initialized")
+
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=64,
@@ -297,7 +308,7 @@ class DoubleRatchetSession:
         return message_key
 
     def _skip_messages(self, until_seq: int):
-        if not self.receiving_chain_key:
+        if not self.receiving_chain_key or self.dh_remote is None:
             return
         if self.seq_recv + 100 < until_seq:
             raise ValueError("Too many skipped messages, refusing to ratchet.")
