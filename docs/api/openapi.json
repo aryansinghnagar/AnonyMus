@@ -1,0 +1,3872 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AnonyMus API v3",
+    "description": "Privacy-first encrypted messaging \u2014 FastAPI backend",
+    "version": "3.0.0"
+  },
+  "paths": {
+    "/v3/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register a new local user account",
+        "operationId": "register_v3_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/transports__p2p__routers__auth__RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Authenticate and start a session",
+        "operationId": "login_v3_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Invalidate the current session",
+        "operationId": "logout_v3_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/v3/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Return the currently authenticated user",
+        "operationId": "me_v3_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/contacts/": {
+      "get": {
+        "tags": [
+          "contacts"
+        ],
+        "summary": "List all contacts for the current user",
+        "operationId": "list_contacts_v3_contacts__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContactResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Contacts V3 Contacts  Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "contacts"
+        ],
+        "summary": "Add a new contact",
+        "operationId": "add_contact_v3_contacts__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/contacts/{contact_id}": {
+      "delete": {
+        "tags": [
+          "contacts"
+        ],
+        "summary": "Remove a contact",
+        "operationId": "remove_contact_v3_contacts__contact_id__delete",
+        "parameters": [
+          {
+            "name": "contact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contact Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/messages/": {
+      "post": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Send an E2E-encrypted message to a contact",
+        "operationId": "send_message_v3_messages__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/messages/{peer_onion}": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Fetch message history with a contact",
+        "operationId": "message_history_v3_messages__peer_onion__get",
+        "parameters": [
+          {
+            "name": "peer_onion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Peer Onion"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MessageResponse"
+                  },
+                  "title": "Response Message History V3 Messages  Peer Onion  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/messages/{message_id}": {
+      "delete": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Soft-delete a message (mark as deleted)",
+        "operationId": "delete_message_v3_messages__message_id__delete",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/messages/{message_id}/resolve_sender": {
+      "post": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Resolve the sender of a sealed-sender message",
+        "operationId": "resolve_sender_v3_messages__message_id__resolve_sender_post",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveSenderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/groups/": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "List groups the current user belongs to",
+        "operationId": "list_groups_v3_groups__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Groups V3 Groups  Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Create a new group or broadcast channel",
+        "operationId": "create_group_v3_groups__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/groups/messages": {
+      "post": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Send a message to a group",
+        "operationId": "send_group_message_v3_groups_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendGroupMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/info": {
+      "get": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Get local node onion address and username",
+        "operationId": "get_node_info_v3_node_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/invite": {
+      "post": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Generate a pairwise invite link (spawns a new hidden service)",
+        "operationId": "generate_invite_v3_node_invite_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateInviteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/invite/accept": {
+      "post": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Accept a pairwise invite link and initiate the X3DH handshake",
+        "operationId": "accept_invite_v3_node_invite_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInviteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Accept Invite V3 Node Invite Accept Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/settings/relay": {
+      "get": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Get preferred file-relay URL",
+        "operationId": "get_relay_setting_v3_node_settings_relay_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelaySettingResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Set preferred file-relay URL",
+        "operationId": "set_relay_setting_v3_node_settings_relay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelaySettingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelaySettingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/reset": {
+      "post": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Wipe all local data \u2014 IRREVERSIBLE",
+        "operationId": "reset_data_v3_node_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/tor/status": {
+      "get": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Get Tor background process status",
+        "operationId": "get_tor_status_v3_node_tor_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Tor Status V3 Node Tor Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/tor/restart": {
+      "post": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Restart background Tor service",
+        "operationId": "restart_tor_v3_node_tor_restart_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Restart Tor V3 Node Tor Restart Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/lan_peers": {
+      "get": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Discover active peers on the local area network (LAN) via mDNS",
+        "operationId": "get_lan_peers_v3_node_lan_peers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array",
+                  "title": "Response Get Lan Peers V3 Node Lan Peers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/node/obliviate": {
+      "post": {
+        "tags": [
+          "node"
+        ],
+        "summary": "Obliviate Panic Wipe \u2014 secure zeroization of database and cryptographic identity keys",
+        "operationId": "obliviate_v3_node_obliviate_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/notifications/register": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Register a notification token for a contact",
+        "operationId": "register_v3_notifications_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/transports__p2p__routers__notifications__RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/notifications/poll": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Poll for pending notifications (no message content)",
+        "operationId": "poll_v3_notifications_poll_get",
+        "parameters": [
+          {
+            "name": "tokens",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated list of tokens (max 200)",
+              "title": "Tokens"
+            },
+            "description": "Comma-separated list of tokens (max 200)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Poll V3 Notifications Poll Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/notifications/clear": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Clear pending notification flags",
+        "operationId": "clear_v3_notifications_clear_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClearRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Clear V3 Notifications Clear Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/keys/publish": {
+      "post": {
+        "tags": [
+          "keys"
+        ],
+        "summary": "Publish my pre-key bundle to the relay",
+        "operationId": "publish_bundle_v3_keys_publish_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreKeyBundlePublish"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Publish Bundle V3 Keys Publish Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/keys/rotate": {
+      "post": {
+        "tags": [
+          "keys"
+        ],
+        "summary": "Rotate the signed pre-key (call weekly)",
+        "operationId": "rotate_signed_prekey_v3_keys_rotate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateSignedPreKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Rotate Signed Prekey V3 Keys Rotate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/keys/me": {
+      "get": {
+        "tags": [
+          "keys"
+        ],
+        "summary": "Get my own current pre-key bundle (without consuming OPKs)",
+        "operationId": "get_my_bundle_v3_keys_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreKeyBundleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/keys/{onion_address}": {
+      "get": {
+        "tags": [
+          "keys"
+        ],
+        "summary": "Fetch a peer's pre-key bundle (consumes one OPK atomically)",
+        "operationId": "fetch_bundle_v3_keys__onion_address__get",
+        "parameters": [
+          {
+            "name": "onion_address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "title": "Onion Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreKeyBundleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/files/upload/{chunk_id}": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Upload a file chunk (local client)",
+        "operationId": "local_upload_v3_files_upload__chunk_id__post",
+        "parameters": [
+          {
+            "name": "chunk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chunk Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Local Upload V3 Files Upload  Chunk Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/files/download/{chunk_id}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Download a file chunk (local client with Tor proxy option)",
+        "operationId": "local_download_v3_files_download__chunk_id__get",
+        "parameters": [
+          {
+            "name": "chunk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chunk Id"
+            }
+          },
+          {
+            "name": "onion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Peer onion address to proxy download over Tor",
+              "title": "Onion"
+            },
+            "description": "Peer onion address to proxy download over Tor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/files/p2p/upload/{chunk_id}": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Upload a file chunk (inbound P2P over Tor)",
+        "operationId": "p2p_upload_v3_files_p2p_upload__chunk_id__post",
+        "parameters": [
+          {
+            "name": "chunk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chunk Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response P2P Upload V3 Files P2P Upload  Chunk Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/files/p2p/download/{chunk_id}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Download a file chunk (inbound P2P over Tor)",
+        "operationId": "p2p_download_v3_files_p2p_download__chunk_id__get",
+        "parameters": [
+          {
+            "name": "chunk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chunk Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/p2p/handshake": {
+      "post": {
+        "tags": [
+          "p2p"
+        ],
+        "summary": "P2P Handshake",
+        "operationId": "p2p_handshake_p2p_handshake_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandshakeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response P2P Handshake P2P Handshake Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/p2p/accept": {
+      "post": {
+        "tags": [
+          "p2p"
+        ],
+        "summary": "P2P Accept",
+        "operationId": "p2p_accept_p2p_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response P2P Accept P2P Accept Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/p2p/message": {
+      "post": {
+        "tags": [
+          "p2p"
+        ],
+        "summary": "P2P Message",
+        "operationId": "p2p_message_p2p_message_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/P2PMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response P2P Message P2P Message Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/p2p/delete": {
+      "post": {
+        "tags": [
+          "p2p"
+        ],
+        "summary": "P2P Delete",
+        "operationId": "p2p_delete_p2p_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/P2PDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response P2P Delete P2P Delete Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profiles/": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "List all non-hidden profiles",
+        "operationId": "list_profiles_v3_profiles__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Profiles V3 Profiles  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profiles/create": {
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Create a new profile",
+        "operationId": "create_profile_v3_profiles_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Profile V3 Profiles Create Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profiles/unlock": {
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Unlock a hidden decoy profile",
+        "operationId": "unlock_profile_v3_profiles_unlock_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnlockProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Unlock Profile V3 Profiles Unlock Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profiles/switch": {
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Switch active profile",
+        "operationId": "switch_profile_v3_profiles_switch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Switch Profile V3 Profiles Switch Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profiles/active": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Get active profile",
+        "operationId": "active_profile_v3_profiles_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/sync/pair": {
+      "post": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Start the pairing broker server",
+        "operationId": "sync_pair_v3_sync_pair_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Sync Pair V3 Sync Pair Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/sync/push": {
+      "post": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Push current database to paired device",
+        "operationId": "sync_push_v3_sync_push_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Sync Push V3 Sync Push Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profile/supporter_badge/": {
+      "post": {
+        "tags": [
+          "supporter"
+        ],
+        "summary": "Verify and save a supporter badge",
+        "operationId": "verify_badge_v3_profile_supporter_badge__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupporterBadgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Verify Badge V3 Profile Supporter Badge  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v3/profile/supporter_badge/status": {
+      "get": {
+        "tags": [
+          "supporter"
+        ],
+        "summary": "Get supporter status of onion address",
+        "operationId": "get_badge_status_v3_profile_supporter_badge_status_get",
+        "parameters": [
+          {
+            "name": "onion_address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Onion Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupporterStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Login",
+        "operationId": "legacy_login_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Get Contacts",
+        "operationId": "legacy_get_contacts_api_contacts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts/add": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Add Contact",
+        "operationId": "legacy_add_contact_api_contacts_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyAddContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts/update_receipts": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Update Receipts",
+        "operationId": "legacy_update_receipts_api_contacts_update_receipts_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/messages/send": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Send Message",
+        "operationId": "legacy_send_message_api_messages_send_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacySendMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/messages": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Get Messages",
+        "operationId": "legacy_get_messages_api_messages_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/preferred_relay": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Get Preferred Relay",
+        "operationId": "legacy_get_preferred_relay_api_settings_preferred_relay_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Set Preferred Relay",
+        "operationId": "legacy_set_preferred_relay_api_settings_preferred_relay_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/pair": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Sync Pair",
+        "operationId": "legacy_sync_pair_api_sync_pair_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/push": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Sync Push",
+        "operationId": "legacy_sync_push_api_sync_push_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/create": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Create Group",
+        "operationId": "legacy_create_group_api_groups_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyCreateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/save_message": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Save Group Message",
+        "operationId": "legacy_save_group_message_api_groups_save_message_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacySaveGroupMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Profiles List",
+        "operationId": "legacy_profiles_list_api_profiles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/create": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Create Profile",
+        "operationId": "legacy_create_profile_api_profiles_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyCreateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/unlock": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Unlock Profile",
+        "operationId": "legacy_unlock_profile_api_profiles_unlock_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/switch": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Switch Profile",
+        "operationId": "legacy_switch_profile_api_profiles_switch_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/active": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Active Profile",
+        "operationId": "legacy_active_profile_api_profiles_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile/supporter_badge": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Supporter Badge",
+        "operationId": "legacy_supporter_badge_api_profile_supporter_badge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacySupporterBadgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile/supporter_badge/status": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Supporter Badge Status",
+        "operationId": "legacy_supporter_badge_status_api_profile_supporter_badge_status_get",
+        "parameters": [
+          {
+            "name": "onion_address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Onion Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/my_info": {
+      "get": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy My Info",
+        "operationId": "legacy_my_info_api_my_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts/save_secret": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Save Secret",
+        "operationId": "legacy_save_secret_api_contacts_save_secret_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacySaveSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts/accept": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Accept Contact",
+        "operationId": "legacy_accept_contact_api_contacts_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyAcceptContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts/delete": {
+      "post": {
+        "tags": [
+          "compatibility"
+        ],
+        "summary": "Legacy Delete Contact",
+        "operationId": "legacy_delete_contact_api_contacts_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyDeleteContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "observability"
+        ],
+        "summary": "Liveness probe",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "observability"
+        ],
+        "summary": "Readiness probe \u2014 checks DB",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "observability"
+        ],
+        "summary": "Prometheus metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptInviteRequest": {
+        "properties": {
+          "invite_onion": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Invite Onion"
+          },
+          "nickname": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Nickname"
+          },
+          "my_public_key": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "My Public Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_onion",
+          "nickname",
+          "my_public_key"
+        ],
+        "title": "AcceptInviteRequest"
+      },
+      "AcceptRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "public_key": {
+            "type": "string",
+            "title": "Public Key"
+          },
+          "preferred_file_relay": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred File Relay"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "public_key"
+        ],
+        "title": "AcceptRequest"
+      },
+      "AddContactRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Onion Address"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address"
+        ],
+        "title": "AddContactRequest"
+      },
+      "ClearRequest": {
+        "properties": {
+          "tokens": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tokens"
+        ],
+        "title": "ClearRequest"
+      },
+      "ContactResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "owner_onion": {
+            "type": "string",
+            "title": "Owner Onion"
+          },
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          },
+          "added_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Added At"
+          },
+          "public_key_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key B64"
+          },
+          "shared_secret_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Secret B64"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "owner_onion",
+          "onion_address",
+          "verified",
+          "added_at",
+          "status"
+        ],
+        "title": "ContactResponse"
+      },
+      "CreateGroupRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "member_onions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Member Onions"
+          },
+          "is_channel": {
+            "type": "boolean",
+            "title": "Is Channel",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateGroupRequest"
+      },
+      "CreateProfileRequest": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "hidden": {
+            "type": "boolean",
+            "title": "Hidden",
+            "default": false
+          },
+          "passphrase": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passphrase"
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "CreateProfileRequest"
+      },
+      "GenerateInviteResponse": {
+        "properties": {
+          "invite_onion": {
+            "type": "string",
+            "title": "Invite Onion"
+          },
+          "service_name": {
+            "type": "string",
+            "title": "Service Name"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_onion",
+          "service_name",
+          "token"
+        ],
+        "title": "GenerateInviteResponse"
+      },
+      "GroupMessageResponse": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "sender_onion": {
+            "type": "string",
+            "title": "Sender Onion"
+          },
+          "ciphertext_b64": {
+            "type": "string",
+            "title": "Ciphertext B64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "group_id",
+          "sender_onion",
+          "ciphertext_b64"
+        ],
+        "title": "GroupMessageResponse"
+      },
+      "GroupResponse": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "founder_onion": {
+            "type": "string",
+            "title": "Founder Onion"
+          },
+          "is_channel": {
+            "type": "boolean",
+            "title": "Is Channel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "name",
+          "founder_onion",
+          "is_channel"
+        ],
+        "title": "GroupResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HandshakeRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "nickname": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Nickname"
+          },
+          "public_key": {
+            "type": "string",
+            "title": "Public Key"
+          },
+          "preferred_file_relay": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred File Relay"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "nickname",
+          "public_key"
+        ],
+        "title": "HandshakeRequest"
+      },
+      "LegacyAcceptContactRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "my_public_key": {
+            "type": "string",
+            "title": "My Public Key"
+          },
+          "shared_secret": {
+            "type": "string",
+            "title": "Shared Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "my_public_key",
+          "shared_secret"
+        ],
+        "title": "LegacyAcceptContactRequest"
+      },
+      "LegacyAddContactRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "nickname": {
+            "type": "string",
+            "title": "Nickname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "nickname"
+        ],
+        "title": "LegacyAddContactRequest"
+      },
+      "LegacyCreateGroupRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "founder_onion": {
+            "type": "string",
+            "title": "Founder Onion"
+          },
+          "is_channel": {
+            "type": "integer",
+            "title": "Is Channel",
+            "default": 0
+          },
+          "member_onions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Member Onions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "founder_onion"
+        ],
+        "title": "LegacyCreateGroupRequest"
+      },
+      "LegacyCreateProfileRequest": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "hidden": {
+            "type": "integer",
+            "title": "Hidden",
+            "default": 0
+          },
+          "passphrase": {
+            "type": "string",
+            "title": "Passphrase",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "LegacyCreateProfileRequest"
+      },
+      "LegacyDeleteContactRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address"
+        ],
+        "title": "LegacyDeleteContactRequest"
+      },
+      "LegacyLoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LegacyLoginRequest"
+      },
+      "LegacySaveGroupMessageRequest": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "sender_onion": {
+            "type": "string",
+            "title": "Sender Onion"
+          },
+          "sender_nickname": {
+            "type": "string",
+            "title": "Sender Nickname"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "timestamp": {
+            "type": "integer",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "sender_onion",
+          "sender_nickname",
+          "message",
+          "timestamp"
+        ],
+        "title": "LegacySaveGroupMessageRequest"
+      },
+      "LegacySaveSecretRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "shared_secret": {
+            "type": "string",
+            "title": "Shared Secret"
+          },
+          "peer_public_key": {
+            "type": "string",
+            "title": "Peer Public Key"
+          },
+          "dr_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dr State"
+          },
+          "peer_kem_public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peer Kem Public Key"
+          },
+          "my_kem_private_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Kem Private Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "shared_secret",
+          "peer_public_key"
+        ],
+        "title": "LegacySaveSecretRequest"
+      },
+      "LegacySendMessageRequest": {
+        "properties": {
+          "recipient_onion": {
+            "type": "string",
+            "title": "Recipient Onion"
+          },
+          "ciphertext": {
+            "type": "string",
+            "title": "Ciphertext"
+          },
+          "iv": {
+            "type": "string",
+            "title": "Iv"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recipient_onion",
+          "ciphertext",
+          "iv",
+          "seq"
+        ],
+        "title": "LegacySendMessageRequest"
+      },
+      "LegacySupporterBadgeRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "signature": {
+            "type": "string",
+            "title": "Signature"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "signature"
+        ],
+        "title": "LegacySupporterBadgeRequest"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "MessageResponse": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "sender_onion": {
+            "type": "string",
+            "title": "Sender Onion"
+          },
+          "recipient_onion": {
+            "type": "string",
+            "title": "Recipient Onion"
+          },
+          "ciphertext_b64": {
+            "type": "string",
+            "title": "Ciphertext B64"
+          },
+          "iv_b64": {
+            "type": "string",
+            "title": "Iv B64"
+          },
+          "sequence_number": {
+            "type": "integer",
+            "title": "Sequence Number"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At"
+          },
+          "delivered": {
+            "type": "boolean",
+            "title": "Delivered"
+          },
+          "is_deleted": {
+            "type": "boolean",
+            "title": "Is Deleted"
+          },
+          "disappears_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disappears At"
+          },
+          "sealed_sender": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sealed Sender"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "sender_onion",
+          "recipient_onion",
+          "ciphertext_b64",
+          "iv_b64",
+          "sequence_number",
+          "sent_at",
+          "delivered",
+          "is_deleted",
+          "disappears_at"
+        ],
+        "title": "MessageResponse"
+      },
+      "NodeInfoResponse": {
+        "properties": {
+          "onion_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onion Address"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "username"
+        ],
+        "title": "NodeInfoResponse"
+      },
+      "P2PDeleteRequest": {
+        "properties": {
+          "sender": {
+            "type": "string",
+            "title": "Sender"
+          },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sender",
+          "message_id"
+        ],
+        "title": "P2PDeleteRequest"
+      },
+      "P2PMessageRequest": {
+        "properties": {
+          "sender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender"
+          },
+          "sealed_sender": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SealedSenderBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "iv": {
+            "type": "string",
+            "title": "Iv"
+          },
+          "ciphertext": {
+            "type": "string",
+            "title": "Ciphertext"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Seq"
+          },
+          "timestamp": {
+            "type": "integer",
+            "title": "Timestamp"
+          },
+          "disappears_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disappears At"
+          },
+          "ephemeral": {
+            "type": "boolean",
+            "title": "Ephemeral",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "iv",
+          "ciphertext",
+          "seq",
+          "timestamp"
+        ],
+        "title": "P2PMessageRequest"
+      },
+      "PreKeyBundlePublish": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Onion Address"
+          },
+          "identity_key": {
+            "type": "string",
+            "title": "Identity Key",
+            "description": "Ed25519 identity key (base64url, 32 bytes)"
+          },
+          "signed_prekey": {
+            "type": "string",
+            "title": "Signed Prekey",
+            "description": "X25519 signed pre-key (base64url, 32 bytes)"
+          },
+          "signed_prekey_sig": {
+            "type": "string",
+            "title": "Signed Prekey Sig",
+            "description": "Ed25519 signature over signed_prekey (base64url, 64 bytes)"
+          },
+          "pq_prekey": {
+            "type": "string",
+            "title": "Pq Prekey",
+            "description": "ML-KEM-768 encapsulation key (base64url, 1184 bytes)"
+          },
+          "pq_prekey_sig": {
+            "type": "string",
+            "title": "Pq Prekey Sig",
+            "description": "Ed25519 signature over pq_prekey (base64url, 64 bytes)"
+          },
+          "one_time_prekeys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "One Time Prekeys",
+            "description": "Pool of one-time X25519 pre-keys (base64url, each 32 bytes)"
+          },
+          "one_time_pq_prekeys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "One Time Pq Prekeys",
+            "description": "Pool of one-time ML-KEM-768 keys (base64url, each 1184 bytes)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "identity_key",
+          "signed_prekey",
+          "signed_prekey_sig",
+          "pq_prekey",
+          "pq_prekey_sig",
+          "one_time_prekeys",
+          "one_time_pq_prekeys"
+        ],
+        "title": "PreKeyBundlePublish",
+        "description": "All fields are base64url-encoded bytes from the anonymus-core WASM/PyO3 output."
+      },
+      "PreKeyBundleResponse": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "title": "Onion Address"
+          },
+          "identity_key": {
+            "type": "string",
+            "title": "Identity Key"
+          },
+          "signed_prekey": {
+            "type": "string",
+            "title": "Signed Prekey"
+          },
+          "signed_prekey_sig": {
+            "type": "string",
+            "title": "Signed Prekey Sig"
+          },
+          "pq_prekey": {
+            "type": "string",
+            "title": "Pq Prekey"
+          },
+          "pq_prekey_sig": {
+            "type": "string",
+            "title": "Pq Prekey Sig"
+          },
+          "one_time_prekey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Time Prekey"
+          },
+          "one_time_pq_prekey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Time Pq Prekey"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "opk_pool_size": {
+            "type": "integer",
+            "title": "Opk Pool Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "identity_key",
+          "signed_prekey",
+          "signed_prekey_sig",
+          "pq_prekey",
+          "pq_prekey_sig",
+          "one_time_prekey",
+          "one_time_pq_prekey",
+          "published_at",
+          "opk_pool_size"
+        ],
+        "title": "PreKeyBundleResponse"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "title": "Profile Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "hidden": {
+            "type": "boolean",
+            "title": "Hidden"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_id",
+          "display_name",
+          "hidden"
+        ],
+        "title": "ProfileResponse"
+      },
+      "PushSyncRequest": {
+        "properties": {
+          "ip": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Ip"
+          },
+          "port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port"
+          },
+          "k": {
+            "type": "string",
+            "minLength": 1,
+            "title": "K"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ip",
+          "port",
+          "k"
+        ],
+        "title": "PushSyncRequest"
+      },
+      "RegisterResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "RegisterResponse"
+      },
+      "RelaySettingRequest": {
+        "properties": {
+          "preferred_file_relay": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Preferred File Relay",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "RelaySettingRequest"
+      },
+      "RelaySettingResponse": {
+        "properties": {
+          "preferred_file_relay": {
+            "type": "string",
+            "title": "Preferred File Relay"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preferred_file_relay"
+        ],
+        "title": "RelaySettingResponse"
+      },
+      "ResetRequest": {
+        "properties": {
+          "confirm": {
+            "type": "string",
+            "maxLength": 5,
+            "minLength": 5,
+            "title": "Confirm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirm"
+        ],
+        "title": "ResetRequest"
+      },
+      "ResolveSenderRequest": {
+        "properties": {
+          "sender_onion": {
+            "type": "string",
+            "title": "Sender Onion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sender_onion"
+        ],
+        "title": "ResolveSenderRequest"
+      },
+      "RotateSignedPreKeyRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Onion Address"
+          },
+          "signed_prekey": {
+            "type": "string",
+            "title": "Signed Prekey"
+          },
+          "signed_prekey_sig": {
+            "type": "string",
+            "title": "Signed Prekey Sig"
+          },
+          "pq_prekey": {
+            "type": "string",
+            "title": "Pq Prekey"
+          },
+          "pq_prekey_sig": {
+            "type": "string",
+            "title": "Pq Prekey Sig"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "signed_prekey",
+          "signed_prekey_sig",
+          "pq_prekey",
+          "pq_prekey_sig"
+        ],
+        "title": "RotateSignedPreKeyRequest"
+      },
+      "SealedSenderBlock": {
+        "properties": {
+          "ephemeral_pub": {
+            "type": "string",
+            "title": "Ephemeral Pub"
+          },
+          "ciphertext": {
+            "type": "string",
+            "title": "Ciphertext"
+          },
+          "iv": {
+            "type": "string",
+            "title": "Iv"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ephemeral_pub",
+          "ciphertext",
+          "iv"
+        ],
+        "title": "SealedSenderBlock"
+      },
+      "SendGroupMessageRequest": {
+        "properties": {
+          "ciphertext_b64": {
+            "type": "string",
+            "title": "Ciphertext B64"
+          },
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ciphertext_b64",
+          "group_id"
+        ],
+        "title": "SendGroupMessageRequest"
+      },
+      "SendMessageRequest": {
+        "properties": {
+          "recipient_onion": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Recipient Onion"
+          },
+          "ciphertext_b64": {
+            "type": "string",
+            "title": "Ciphertext B64"
+          },
+          "iv_b64": {
+            "type": "string",
+            "title": "Iv B64"
+          },
+          "sequence_number": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sequence Number"
+          },
+          "disappears_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disappears At"
+          },
+          "sealed_sender": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SealedSenderBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "recipient_onion",
+          "ciphertext_b64",
+          "iv_b64",
+          "sequence_number"
+        ],
+        "title": "SendMessageRequest"
+      },
+      "SupporterBadgeRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Onion Address"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Signature"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address",
+          "signature"
+        ],
+        "title": "SupporterBadgeRequest"
+      },
+      "SupporterStatusResponse": {
+        "properties": {
+          "is_supporter": {
+            "type": "boolean",
+            "title": "Is Supporter"
+          },
+          "badge_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge Signature"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_supporter"
+        ],
+        "title": "SupporterStatusResponse"
+      },
+      "SwitchProfileRequest": {
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Profile Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_id"
+        ],
+        "title": "SwitchProfileRequest"
+      },
+      "UnlockProfileRequest": {
+        "properties": {
+          "passphrase": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Passphrase"
+          }
+        },
+        "type": "object",
+        "required": [
+          "passphrase"
+        ],
+        "title": "UnlockProfileRequest"
+      },
+      "UserResponse": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "onion_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onion Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username"
+        ],
+        "title": "UserResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "transports__p2p__routers__auth__RegisterRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "RegisterRequest"
+      },
+      "transports__p2p__routers__notifications__RegisterRequest": {
+        "properties": {
+          "onion_address": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Onion Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "onion_address"
+        ],
+        "title": "RegisterRequest"
+      }
+    }
+  }
+}

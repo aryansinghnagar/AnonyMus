@@ -16,7 +16,9 @@ import {
 } from "@lib/crypto";
 import { loadIdentityKey, loadSession, saveSession } from "@lib/keystore";
 import { createSignal } from "solid-js";
+import { handleIncomingSignal } from "./calls";
 import { contactList } from "./contacts";
+import { user } from "./session";
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -273,8 +275,6 @@ export async function receiveMessage(onion: string, msg: Message): Promise<void>
       const signalJson = plaintext.slice("__CALL_SIGNAL__:".length);
       try {
         const signalObj = JSON.parse(signalJson);
-        const { handleIncomingSignal } = await import("./calls");
-        const { user } = await import("./session");
         const myOnion = user()?.onion_address || "";
         await handleIncomingSignal(targetOnion, myOnion, signalObj);
       } catch (err) {

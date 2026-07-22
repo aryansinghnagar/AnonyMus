@@ -11,7 +11,6 @@ import threading
 
 import requests
 import socketio
-from cryptography.hazmat.primitives.asymmetric import ec
 
 from core import protocol
 
@@ -62,15 +61,7 @@ class AnonyMusClient:
 
             # Derive shared secret and save it
             peer_pubkey = protocol.import_public_key(peer_public_key_b64)
-            shared_secret = (
-                self.private_key.exchange(ec.ECDH(), peer_pubkey)
-                if hasattr(self.private_key, "exchange")
-                else None
-            )
-            if not shared_secret:
-                # Fallback to cryptography direct exchange
-                shared_secret = self.private_key.exchange(ec.ECDH(), peer_pubkey)
-
+            shared_secret = protocol.derive_shared_secret(self.private_key, peer_pubkey)
             shared_secret_b64 = base64.b64encode(shared_secret).decode("utf-8")
 
             # Save derived shared secret back to server database
@@ -118,7 +109,7 @@ class AnonyMusClient:
             print(f"[SDK] Login connection failed: {e}")
         return False
 
-    def _extract_csrf(self, html: str) -> str:
+    def _extract_csrf(self, html: str) -> str | None:
         match = re.search(r'meta name="csrf-token" content="([^"]+)"', html)
         return match.group(1) if match else None
 
@@ -211,10 +202,7 @@ class AnonyMusClient:
 
             peer_pub_key_b64 = contact["peer_public_key"]
             peer_pubkey = protocol.import_public_key(peer_pub_key_b64)
-
-            from cryptography.hazmat.primitives.asymmetric import ec as crypto_ec
-
-            shared_secret = self.private_key.exchange(crypto_ec.ECDH(), peer_pubkey)
+            shared_secret = protocol.derive_shared_secret(self.private_key, peer_pubkey)
             shared_secret_b64 = base64.b64encode(shared_secret).decode("utf-8")
 
             r = self.session.get(f"{self.base_url}/")
@@ -362,7 +350,7 @@ class AnonyMusClient:
             print(f"[SDK] Error fetching messages: {e}")
         return []
 
-    def decrypt_incoming(self, sender_onion, iv, ciphertext, seq) -> str:
+    def decrypt_incoming(self, sender_onion, iv, ciphertext, seq) -> str | None:
         """Decrypts a real-time incoming message and ratchets the recv chain key."""
         if sender_onion not in self.chain_keys:
             return None
