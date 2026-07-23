@@ -1,7 +1,7 @@
 # Modern v3.0 FastAPI async stack — direct dependencies
 
 # ASGI framework & servers
-fastapi>=0.115
+fastapi>=0.139.2
 uvicorn[standard]>=0.32
 granian>=1.6
 
