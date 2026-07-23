@@ -57,7 +57,7 @@ httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via -r requirements.in
-hypothesis==6.156.6
+hypothesis==6.161.0
     # via -r requirements.in
 idna==3.18
     # via
