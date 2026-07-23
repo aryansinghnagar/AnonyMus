@@ -45,7 +45,7 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Setup Gradle Cache
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Compile and Test
         run: |
