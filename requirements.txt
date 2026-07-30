@@ -79,7 +79,7 @@ pluggy==1.6.0
     # via
     #   pytest
     #   pytest-cov
-prometheus-client==0.25.0
+prometheus-client==0.26.0
     # via -r requirements.in
 pycares==5.0.1
     # via aiodns

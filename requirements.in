@@ -31,7 +31,7 @@ aiodns>=3.2
 structlog>=24.4
 
 # Observability
-prometheus-client>=0.21
+prometheus-client>=0.26.0
 
 # Error monitoring
 sentry-sdk[fastapi]>=2.0
