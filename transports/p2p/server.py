@@ -639,8 +639,8 @@ def add_contact():
     nickname = data.get("nickname", "").strip()
     try:
         nickname = validate_nickname(nickname)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "Invalid nickname."}), 400
     my_public_key = data.get("my_public_key")
     if not my_public_key or not is_valid_base64_like(my_public_key, max_len=5000):
         return jsonify({"error": "Invalid public key format or size."}), 400
