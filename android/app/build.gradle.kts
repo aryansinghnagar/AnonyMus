@@ -100,6 +100,7 @@ dependencies {
   // Navigation
   implementation("androidx.navigation:navigation-compose:2.7.7")
   implementation(libs.socketio.client)
+  implementation("io.socket:socket.io-parser:4.2.4")
 
   // QR Code generation
   implementation("com.google.zxing:core:3.5.4")
