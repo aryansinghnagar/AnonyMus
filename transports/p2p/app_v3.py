@@ -322,9 +322,10 @@ def create_app() -> FastAPI:
                 )
             return {"status": "ready", "database": "ok"}
         except Exception as exc:
+            logger.exception("Readiness DB check failed", exc_info=exc)
             return JSONResponse(
                 status_code=503,
-                content={"status": "not_ready", "database": str(exc)},
+                content={"status": "not_ready", "database": "error"},
             )
 
     @application.get("/metrics", tags=["observability"], summary="Prometheus metrics")
