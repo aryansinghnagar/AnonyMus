@@ -250,7 +250,8 @@ async def get_tor_status(
             "socks_port": SOCKS_PORT if is_running else None,
         }
     except Exception as e:
-        return {"is_running": False, "error": str(e)}
+        logger.error("tor_status_check_failed", error=str(e))
+        return {"is_running": False, "error": "Unable to determine Tor status"}
 
 
 @router.post(
