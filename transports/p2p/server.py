@@ -22,11 +22,28 @@ import uuid
 import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
-from flask_limiter import Limiter
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+except ImportError:
+
+    class Limiter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def limit(self, *args, **kwargs):
+            return lambda f: f
+
+    def get_remote_address():
+        return "127.0.0.1"
+
 
 logger = logging.getLogger(__name__)
-from flask_limiter.util import get_remote_address
-from flask_socketio import SocketIO
+try:
+    from flask_socketio import SocketIO
+except ImportError:
+    SocketIO = None
 
 import transports.p2p.database as database
 import transports.p2p.tor_manager as tor_manager
@@ -233,9 +250,20 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
 )
 
-from flask_wtf.csrf import CSRFProtect
+try:
+    from flask_wtf.csrf import CSRFProtect
 
-csrf = CSRFProtect(app)
+    csrf = CSRFProtect(app)
+except ImportError:
+
+    class DummyCSRF:
+        def init_app(self, app):
+            pass
+
+        def exempt(self, view):
+            return view
+
+    csrf = DummyCSRF()
 
 # Initialize local controller rate limiter
 limiter = Limiter(

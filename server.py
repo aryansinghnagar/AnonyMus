@@ -1,8 +1,11 @@
 import os
 import sys
 
-import eventlet
-import eventlet.wsgi
+try:
+    import eventlet
+    import eventlet.wsgi
+except ImportError:
+    eventlet = None
 from flask import Flask, jsonify, request
 
 # Ensure path includes root directory
