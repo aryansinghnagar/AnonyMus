@@ -11,6 +11,7 @@ Public P2P routes (/p2p/*) process incoming requests routed through the Tor onio
 """
 
 import json
+import logging
 import os
 import re
 import sys
@@ -22,6 +23,8 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
+
+logger = logging.getLogger(__name__)
 from flask_limiter.util import get_remote_address
 from flask_socketio import SocketIO
 
@@ -62,7 +65,7 @@ def validate_nickname(nickname: str) -> str:
     return nickname
 
 
-BASE64_RE = re.compile(r"^[A-Za-z0-9+/=-_]+$")
+BASE64_RE = re.compile(r"^[a-zA-Z0-9+/=_\-]+$")
 
 
 def is_valid_base64_like(val: str, max_len: int = 100000) -> bool:
@@ -2087,10 +2090,28 @@ def api_sync_push():
         aesgcm = AESGCM(aes_key)
         ciphertext = aesgcm.encrypt(iv, db_bytes, None)
 
+        import ipaddress
+        import urllib.parse
         import requests
 
+        try:
+            parsed_ip = ipaddress.ip_address(desktop_ip)
+        except ValueError:
+            return jsonify({"error": "Invalid desktop IP address"}), 400
+
+        try:
+            port_num = int(desktop_port)
+            if not (1 <= port_num <= 65535):
+                raise ValueError()
+        except ValueError:
+            return jsonify({"error": "Invalid desktop port number"}), 400
+
+        target_url = urllib.parse.urlunparse(
+            ("http", f"{parsed_ip}:{port_num}", "/api/sync/pairing", "", "", "")
+        )
+
         res = requests.post(
-            f"http://{desktop_ip}:{desktop_port}/api/sync/pairing",
+            target_url,
             json={
                 "client_public_key": base64.b64encode(
                     client_pub.public_bytes_raw()
@@ -2106,9 +2127,12 @@ def api_sync_push():
                 {"success": True, "message": "Database backup successfully fanned out!"}
             )
         else:
-            return jsonify({"error": f"Broker returned error: {res.text}"}), 400
+            return jsonify(
+                {"error": "Broker request failed with non-200 status code"}
+            ), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Pairing sync failed: {e}", exc_info=True)
+        return jsonify({"error": "Internal synchronization error"}), 500
 
 
 def run_legacy_migration():

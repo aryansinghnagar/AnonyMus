@@ -71,7 +71,6 @@ async def local_download(
         port = m.group(1)
         if port is not None and not (1 <= int(port) <= 65535):
             raise HTTPException(status_code=400, detail="Invalid onion port")
-
         logger.info(
             "proxying_chunk_download_over_tor", chunk_id=chunk_id, peer=normalized_onion[:12]
         )
