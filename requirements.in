@@ -43,7 +43,7 @@ itsdangerous>=2.2
 python-socketio>=5.11
 
 # Cryptography (shared)
-cryptography>=49.0
+cryptography>=50.0.0
 
 # Password hashing
 bcrypt>=4.0
