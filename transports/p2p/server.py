@@ -1584,7 +1584,8 @@ def p2p_handshake():
     try:
         nickname = validate_nickname(nickname)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        app.logger.info("Rejected handshake due to invalid nickname: %s", str(e))
+        return jsonify({"error": "Invalid nickname"}), 400
     public_key = data.get("public_key", "").strip()
     if not is_valid_base64_like(public_key, max_len=5000):
         return jsonify({"error": "Invalid public key"}), 400
