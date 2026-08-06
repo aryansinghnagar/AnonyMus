@@ -10,6 +10,7 @@ Ports the following Flask routes to FastAPI v3:
 
 from __future__ import annotations
 
+import re
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
@@ -18,6 +19,8 @@ from transports.p2p.routers.auth import get_current_user, UserOut
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/v3/files", tags=["files"])
+
+_ONION_V3_RE = re.compile(r"^[a-z2-7]{56}\.onion(?::([0-9]{1,5}))?$")
 
 # In-memory chunk store (XFTP temporary storage)
 # chunk_id -> bytes
@@ -57,8 +60,20 @@ async def local_download(
 ) -> Response:
     # If onion address is supplied, proxy the request over Tor to the peer's P2P endpoint
     if onion:
+        normalized_onion = onion.strip().lower()
+        if any(ch in normalized_onion for ch in ("/", "\\", "?", "#", "@")) or "://" in normalized_onion:
+            raise HTTPException(status_code=400, detail="Invalid onion address format")
+
+        m = _ONION_V3_RE.fullmatch(normalized_onion)
+        if not m:
+            raise HTTPException(status_code=400, detail="Invalid onion address format")
+
+        port = m.group(1)
+        if port is not None and not (1 <= int(port) <= 65535):
+            raise HTTPException(status_code=400, detail="Invalid onion port")
+
         logger.info(
-            "proxying_chunk_download_over_tor", chunk_id=chunk_id, peer=onion[:12]
+            "proxying_chunk_download_over_tor", chunk_id=chunk_id, peer=normalized_onion[:12]
         )
         try:
             # SOCKS proxy config for outbound Tor
@@ -70,7 +85,7 @@ async def local_download(
             }
             async with httpx.AsyncClient(proxies=proxies, timeout=60.0) as client:
                 # In v3, the public P2P URL is /v3/files/p2p/download/{chunk_id}
-                url = f"http://{onion}/v3/files/p2p/download/{chunk_id}"
+                url = f"http://{normalized_onion}/v3/files/p2p/download/{chunk_id}"
                 res = await client.get(url)
                 if res.status_code == 200:
                     return Response(
