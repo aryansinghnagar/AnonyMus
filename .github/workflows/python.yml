@@ -55,7 +55,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           uv pip install --system -r requirements.txt
-          uv pip install --system ruff pyright pytest pytest-cov pytest-asyncio black
+          uv pip install --system ruff pyright pytest pytest-cov pytest-asyncio black requests flask flask-limiter flask-socketio
 
       - name: Install v3 stack dependencies
         run: |
