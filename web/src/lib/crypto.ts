@@ -90,9 +90,7 @@ export class DoubleRatchetSession {
     return session;
   }
 
-  public async encrypt(
-    plaintext: string,
-  ): Promise<{
+  public async encrypt(plaintext: string): Promise<{
     ciphertextB64: string;
     ivB64: string;
     dhPubB64: string;

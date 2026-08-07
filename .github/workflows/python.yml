@@ -3,7 +3,12 @@ name: Python Code Quality & Testing
 on:
   push:
     branches: [main, dev]
-    paths: ['**/*.py', 'requirements*.txt', 'requirements*.in', '.github/workflows/python.yml']
+    paths:
+      - '**/*.py'
+      - 'requirements*.txt'
+      - 'requirements*.in'
+      - 'pyproject.toml'
+      - '.github/workflows/python.yml'
   pull_request:
     branches: [main, dev]
   workflow_dispatch: {}
@@ -11,7 +16,7 @@ on:
 
 concurrency:
   group: python-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -39,13 +44,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
 
-      - name: Install uv and dependencies
+      - name: Install uv package manager
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: |
           uv pip install --system -r requirements.txt
-          uv pip install --system ruff pyright pytest pytest-cov
+          uv pip install --system ruff pyright pytest pytest-cov pytest-asyncio black
 
       - name: Install v3 stack dependencies
         run: |
@@ -53,7 +63,6 @@ jobs:
             "fastapi[standard]>=0.115" \
             "aiosqlite>=0.20" \
             "sqlalchemy>=2.0.36" \
-            "pytest-asyncio>=0.24" \
             "httpx>=0.28" \
             "pydantic-settings>=2.6" \
             "structlog>=24.4" \
@@ -65,16 +74,16 @@ jobs:
       - name: Run Ruff Linter
         run: ruff check .
 
-      - name: Run Ruff Formatter
+      - name: Run Ruff Code Formatter Check
         run: ruff format --check .
 
       - name: Run Pyright Type Checker
-        run: pyright || true
+        run: pyright core/ || true
 
-      - name: Run Unit & Integration Test Suite
+      - name: Run Pytest Test Suite with Coverage Check
         env:
           PYTHONPATH: .
-        run: pytest tests/unit/ tests/integration/ --cov=core --cov=transports --cov-report=xml -m "not legacy"
+        run: pytest tests/unit/ tests/integration/ --cov=core --cov=transports --cov-report=xml --cov-report=term-missing -m "not legacy"
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4

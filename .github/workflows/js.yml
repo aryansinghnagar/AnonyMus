@@ -1,9 +1,12 @@
-name: JavaScript Code Quality & Testing
+name: JavaScript / TypeScript Code Quality & Testing
 
 on:
   push:
     branches: [main, dev]
-    paths: ['web/**', 'packages/typescript-sdk/**', '.github/workflows/js.yml']
+    paths:
+      - 'web/**'
+      - 'packages/typescript-sdk/**'
+      - '.github/workflows/js.yml'
   pull_request:
     branches: [main, dev]
   workflow_dispatch: {}
@@ -11,7 +14,7 @@ on:
 
 concurrency:
   group: js-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,7 +30,7 @@ jobs:
         id: check
         run: bash scripts/ci-preflight.sh js --optional
 
-  test:
+  lint-and-test:
     needs: preflight
     if: needs.preflight.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -39,8 +42,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
 
-      - name: Install dependencies and compile
+      - name: Install Web Client Dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run Biome Linter & Code Formatter Check
+        working-directory: web
+        run: npx biome check ./src --reporter=github
+
+      - name: Run TypeScript Compiler Check
+        working-directory: web
+        run: npx tsc -b --noEmit
+
+      - name: Run Vitest Unit Test Suite
+        working-directory: web
+        run: npm test
+
+      - name: Install & Compile TypeScript SDK
         run: |
           if [ -d "packages/typescript-sdk" ]; then
             cd packages/typescript-sdk
