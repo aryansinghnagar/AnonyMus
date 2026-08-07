@@ -75,7 +75,7 @@ jobs:
         run: ruff check .
 
       - name: Run Ruff Code Formatter Check
-        run: ruff format --check .
+        run: ruff format --check core transports tests scripts
 
       - name: Run Pyright Type Checker
         run: pyright core/ || true

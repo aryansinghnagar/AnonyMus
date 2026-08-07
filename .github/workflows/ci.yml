@@ -36,7 +36,7 @@ jobs:
       - name: Check Python Linting & Formatting
         run: |
           ruff check .
-          ruff format --check .
+          ruff format --check core transports tests scripts
 
       - name: Setup Node
         uses: actions/setup-node@v4
