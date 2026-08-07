@@ -2,7 +2,7 @@
 
 # ASGI framework & servers
 fastapi>=0.115
-uvicorn[standard]>=0.32
+uvicorn[standard]>=0.52.1
 granian>=1.6
 
 # Validation & settings
