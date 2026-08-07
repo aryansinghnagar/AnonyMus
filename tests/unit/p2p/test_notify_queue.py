@@ -8,6 +8,9 @@ import os
 import sys
 import tempfile
 import unittest
+import pytest
+
+pytestmark = pytest.mark.legacy
 
 # Make project root importable
 sys.path.insert(

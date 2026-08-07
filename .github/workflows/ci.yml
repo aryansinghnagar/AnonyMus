@@ -70,7 +70,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install uv pytest pytest-asyncio pytest-cov httpx pydantic-settings structlog prometheus-client sentry-sdk bcrypt itsdangerous aiosqlite sqlalchemy requests flask flask-limiter flask-socketio pynacl eventlet
+          pip install uv pytest pytest-asyncio pytest-cov pytest-timeout httpx pydantic-settings structlog prometheus-client sentry-sdk bcrypt itsdangerous aiosqlite sqlalchemy requests flask flask-limiter flask-socketio pynacl eventlet
           uv pip install --system -r requirements.txt
 
       - name: Run Pytest with Coverage
@@ -78,7 +78,7 @@ jobs:
           PYTHONPATH: .
           FLASK_SECRET_KEY: ci-testing-secret-key-do-not-use-in-production
           ANONYMUS_ENV: testing
-        run: pytest tests/unit/ tests/integration/ --cov=core --cov=transports --cov-report=xml -m "not legacy"
+        run: pytest tests/unit/ tests/integration/ --timeout=30 --cov=core --cov=transports --cov-report=xml -m "not legacy"
 
   test-web-client:
     name: Test Web Client

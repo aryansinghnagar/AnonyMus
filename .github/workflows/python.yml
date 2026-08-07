@@ -55,7 +55,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           uv pip install --system -r requirements.txt
-          uv pip install --system ruff pyright pytest pytest-cov pytest-asyncio black requests flask flask-limiter flask-socketio pynacl eventlet
+          uv pip install --system ruff pyright pytest pytest-cov pytest-asyncio pytest-timeout black requests flask flask-limiter flask-socketio pynacl eventlet
 
       - name: Install v3 stack dependencies
         run: |
@@ -85,7 +85,7 @@ jobs:
           PYTHONPATH: .
           FLASK_SECRET_KEY: ci-testing-secret-key-do-not-use-in-production
           ANONYMUS_ENV: testing
-        run: pytest tests/unit/ tests/integration/ --cov=core --cov=transports --cov-report=xml --cov-report=term-missing -m "not legacy"
+        run: pytest tests/unit/ tests/integration/ --timeout=30 --cov=core --cov=transports --cov-report=xml --cov-report=term-missing -m "not legacy"
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
