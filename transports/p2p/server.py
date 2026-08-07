@@ -21,7 +21,16 @@ import uuid
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 try:
     from flask_limiter import Limiter
@@ -481,7 +490,10 @@ def api_file_download(chunk_id):
         content, status = send_onion_get(onion, f"/p2p/file/download/{chunk_id}")
         if status != 200:
             return jsonify({"error": "Failed to download chunk from peer"}), status
-        return content, 200, {"Content-Type": "application/octet-stream"}
+        resp = Response(content, status=200, mimetype="application/octet-stream")
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["Content-Disposition"] = "attachment; filename=chunk.bin"
+        return resp
 
     # Local download from memory
     with file_chunks_lock:
@@ -490,7 +502,10 @@ def api_file_download(chunk_id):
     if chunk is None or chunk["expires_at"] < time.time():
         return jsonify({"error": "Chunk not found or expired"}), 404
 
-    return chunk["data"], 200, {"Content-Type": "application/octet-stream"}
+    resp = Response(chunk["data"], status=200, mimetype="application/octet-stream")
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Disposition"] = "attachment; filename=chunk.bin"
+    return resp
 
 
 # ---------------------------------------------------------------------------

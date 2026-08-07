@@ -61,7 +61,10 @@ async def local_download(
     # If onion address is supplied, proxy the request over Tor to the peer's P2P endpoint
     if onion:
         normalized_onion = onion.strip().lower()
-        if any(ch in normalized_onion for ch in ("/", "\\", "?", "#", "@")) or "://" in normalized_onion:
+        if (
+            any(ch in normalized_onion for ch in ("/", "\\", "?", "#", "@"))
+            or "://" in normalized_onion
+        ):
             raise HTTPException(status_code=400, detail="Invalid onion address format")
 
         m = _ONION_V3_RE.fullmatch(normalized_onion)
@@ -72,7 +75,9 @@ async def local_download(
         if port is not None and not (1 <= int(port) <= 65535):
             raise HTTPException(status_code=400, detail="Invalid onion port")
         logger.info(
-            "proxying_chunk_download_over_tor", chunk_id=chunk_id, peer=normalized_onion[:12]
+            "proxying_chunk_download_over_tor",
+            chunk_id=chunk_id,
+            peer=normalized_onion[:12],
         )
         try:
             # SOCKS proxy config for outbound Tor
