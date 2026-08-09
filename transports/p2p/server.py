@@ -869,8 +869,8 @@ def update_display_name():
         return jsonify({"error": "Invalid onion address"}), 400
     try:
         display_name = validate_nickname(display_name)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "Invalid display name format"}), 400
 
     database.update_contact_display_name(onion, display_name)
     return jsonify({"success": True})
@@ -1026,8 +1026,8 @@ def accept_invite():
     nickname = data.get("nickname", "").strip()
     try:
         nickname = validate_nickname(nickname)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "Invalid nickname format"}), 400
 
     my_public_key = data.get("my_public_key", "")
     if not is_valid_base64_like(my_public_key, max_len=5000):
