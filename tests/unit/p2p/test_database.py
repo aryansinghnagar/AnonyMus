@@ -2,6 +2,9 @@ import os
 import sys
 import time
 import unittest
+import pytest
+
+pytestmark = pytest.mark.legacy
 
 # Ensure project root directory is in path
 sys.path.insert(

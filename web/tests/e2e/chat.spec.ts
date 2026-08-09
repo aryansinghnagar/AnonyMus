@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 test.describe("AnonyMus E2E Auth & Chat Flow", () => {
   test.beforeEach(async ({ page }) => {

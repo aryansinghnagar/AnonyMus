@@ -13,7 +13,7 @@ render(
     <Suspense
       fallback={
         <div class="auth-page">
-          <div class="skeleton" style="width:120px;height:24px;"></div>
+          <div class="skeleton" style="width:120px;height:24px;" />
         </div>
       }
     >

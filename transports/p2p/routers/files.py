@@ -20,7 +20,7 @@ from transports.p2p.routers.auth import get_current_user, UserOut
 logger = get_logger(__name__)
 router = APIRouter(prefix="/v3/files", tags=["files"])
 
-_ONION_V3_RE = re.compile(r"^[a-z2-7]{56}\.onion(?::([0-9]{1,5}))?$")
+_ONION_V3_RE = re.compile(r"^([a-z2-7]{56}\.onion)(?::([0-9]{1,5}))?$")
 
 # In-memory chunk store (XFTP temporary storage)
 # chunk_id -> bytes
@@ -61,18 +61,31 @@ async def local_download(
     # If onion address is supplied, proxy the request over Tor to the peer's P2P endpoint
     if onion:
         normalized_onion = onion.strip().lower()
-        if any(ch in normalized_onion for ch in ("/", "\\", "?", "#", "@")) or "://" in normalized_onion:
+        if (
+            any(ch in normalized_onion for ch in ("/", "\\", "?", "#", "@"))
+            or "://" in normalized_onion
+        ):
             raise HTTPException(status_code=400, detail="Invalid onion address format")
 
         m = _ONION_V3_RE.fullmatch(normalized_onion)
         if not m:
             raise HTTPException(status_code=400, detail="Invalid onion address format")
 
-        port = m.group(1)
-        if port is not None and not (1 <= int(port) <= 65535):
+        clean_host = m.group(1)
+        clean_port = m.group(2)
+        if clean_port is not None and not (1 <= int(clean_port) <= 65535):
             raise HTTPException(status_code=400, detail="Invalid onion port")
+
+        target_url = (
+            f"http://{clean_host}:{clean_port}/v3/files/p2p/download/{chunk_id}"
+            if clean_port
+            else f"http://{clean_host}/v3/files/p2p/download/{chunk_id}"
+        )
+
         logger.info(
-            "proxying_chunk_download_over_tor", chunk_id=chunk_id, peer=normalized_onion[:12]
+            "proxying_chunk_download_over_tor",
+            chunk_id=chunk_id,
+            peer=clean_host[:12],
         )
         try:
             # SOCKS proxy config for outbound Tor
@@ -83,23 +96,26 @@ async def local_download(
                 "https://": f"socks5://127.0.0.1:{SOCKS_PORT}",
             }
             async with httpx.AsyncClient(proxies=proxies, timeout=60.0) as client:
-                # In v3, the public P2P URL is /v3/files/p2p/download/{chunk_id}
-                url = f"http://{normalized_onion}/v3/files/p2p/download/{chunk_id}"
-                res = await client.get(url)
+                res = await client.get(target_url)
                 if res.status_code == 200:
                     return Response(
-                        content=res.content, media_type="application/octet-stream"
+                        content=res.content,
+                        media_type="application/octet-stream",
+                        headers={
+                            "X-Content-Type-Options": "nosniff",
+                            "Content-Disposition": "attachment; filename=chunk.bin",
+                        },
                     )
                 else:
                     raise HTTPException(
                         status_code=res.status_code,
-                        detail=f"Peer returned error: {res.text}",
+                        detail="Peer returned download error",
                     )
         except Exception as e:
             logger.error("proxy_download_failed", chunk_id=chunk_id, error=str(e))
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to download from peer over Tor: {e}",
+                detail="Failed to download from peer over Tor",
             )
 
     # Local download from memory

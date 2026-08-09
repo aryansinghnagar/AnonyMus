@@ -2,7 +2,7 @@
 
 # ASGI framework & servers
 fastapi>=0.115
-uvicorn[standard]>=0.32
+uvicorn[standard]>=0.52.1
 granian>=2.8.0
 
 # Validation & settings
@@ -52,4 +52,4 @@ bcrypt>=4.0
 pytest>=8.0
 pytest-asyncio>=0.24
 pytest-cov>=6.0
-hypothesis>=6.0
+hypothesis>=6.165.0

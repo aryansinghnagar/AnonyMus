@@ -1,6 +1,9 @@
 import base64
 import struct
 import unittest
+import pytest
+
+pytestmark = pytest.mark.legacy
 
 from core import protocol
 from core.double_ratchet import DoubleRatchetSession

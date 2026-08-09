@@ -3,6 +3,9 @@ import sys
 import time
 import unittest
 from unittest.mock import patch
+import pytest
+
+pytestmark = pytest.mark.legacy
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 os.environ["FLASK_SECRET_KEY"] = "test-secret-key"

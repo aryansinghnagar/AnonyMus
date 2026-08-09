@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "tsc --noEmit"
   },
   "dependencies": {
     "socket.io-client": "^4.7.2"

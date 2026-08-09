@@ -36,7 +36,11 @@ class AnonyMusClient:
         self._setup_socket_handlers()
 
     def _setup_socket_handlers(self):
-        @self.sio.on("incoming_message")
+        sio = self.sio
+        if sio is None:
+            return
+
+        @sio.on("incoming_message")  # pyright: ignore[reportOptionalCall]
         def on_incoming_message(data):
             sender = data.get("sender")
             iv = data.get("iv")
@@ -53,7 +57,7 @@ class AnonyMusClient:
                     except Exception as e:
                         print(f"[SDK] Callback error: {e}")
 
-        @self.sio.on("handshake_accepted")
+        @sio.on("handshake_accepted")  # pyright: ignore[reportOptionalCall]
         def on_handshake_accepted(data):
             onion_address = data.get("onion_address")
             peer_public_key_b64 = data.get("peer_public_key")

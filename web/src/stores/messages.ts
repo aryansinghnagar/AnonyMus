@@ -91,41 +91,40 @@ export async function decryptMessage(onion: string, msg: Message): Promise<strin
       const core = await getCore();
       const decryptedBytes = core.aeadDecrypt(localKey, selfBlob);
       return new TextDecoder().decode(decryptedBytes);
-    } else {
-      // Sent by peer — decrypt Bob's ciphertext using Double Ratchet
-      let sessionObj = await loadSession(onion);
-      if (!sessionObj) {
-        const contact = contactList()?.find((c) => c.onion_address === onion);
-        if (!contact || !contact.shared_secret_b64 || !contact.public_key_b64) {
-          throw new Error("Double Ratchet session not established with peer");
-        }
-        const sharedSecret = fromBase64(contact.shared_secret_b64);
-        const peerPub = fromBase64(contact.public_key_b64);
-
-        const isAlice = ourPubB64 < contact.public_key_b64;
-        if (isAlice) {
-          sessionObj = await DoubleRatchetSession.initAlice(sharedSecret, peerPub);
-        } else {
-          sessionObj = await DoubleRatchetSession.initBob(sharedSecret, identity.privateKey);
-        }
-      }
-
-      const peerDhPub = fromBase64(envelope.dh_pub);
-      const iv = fromBase64(msg.iv_b64);
-      const ciphertext = fromBase64(envelope.ciphertext);
-
-      const plaintext = await sessionObj.decrypt(
-        peerDhPub,
-        iv,
-        ciphertext,
-        envelope.seq,
-        envelope.prev_chain_len,
-      );
-
-      // Save updated ratchet state
-      await saveSession(onion, sessionObj);
-      return plaintext;
     }
+    // Sent by peer — decrypt Bob's ciphertext using Double Ratchet
+    let sessionObj = await loadSession(onion);
+    if (!sessionObj) {
+      const contact = contactList()?.find((c) => c.onion_address === onion);
+      if (!contact || !contact.shared_secret_b64 || !contact.public_key_b64) {
+        throw new Error("Double Ratchet session not established with peer");
+      }
+      const sharedSecret = fromBase64(contact.shared_secret_b64);
+      const peerPub = fromBase64(contact.public_key_b64);
+
+      const isAlice = ourPubB64 < contact.public_key_b64;
+      if (isAlice) {
+        sessionObj = await DoubleRatchetSession.initAlice(sharedSecret, peerPub);
+      } else {
+        sessionObj = await DoubleRatchetSession.initBob(sharedSecret, identity.privateKey);
+      }
+    }
+
+    const peerDhPub = fromBase64(envelope.dh_pub);
+    const iv = fromBase64(msg.iv_b64);
+    const ciphertext = fromBase64(envelope.ciphertext);
+
+    const plaintext = await sessionObj.decrypt(
+      peerDhPub,
+      iv,
+      ciphertext,
+      envelope.seq,
+      envelope.prev_chain_len,
+    );
+
+    // Save updated ratchet state
+    await saveSession(onion, sessionObj);
+    return plaintext;
   } catch (err: any) {
     console.error("[Decrypt] Failed to decrypt message:", err);
     throw err;
@@ -225,7 +224,7 @@ export async function sendMessage(
     const envelopeB64 = btoa(JSON.stringify(envelope));
 
     let sealedSender = undefined;
-    if (contact && contact.public_key_b64) {
+    if (contact?.public_key_b64) {
       try {
         sealedSender = await encryptSealedSender(_myOnion, contact.public_key_b64);
       } catch (err) {
