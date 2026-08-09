@@ -1,7 +1,7 @@
-import { defineConfig } from "vitest/config";
-import solidPlugin from "vite-plugin-solid";
+import { resolve } from "node:path";
 import { VitePWA } from "vite-plugin-pwa";
-import { resolve } from "path";
+import solidPlugin from "vite-plugin-solid";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [

@@ -6,7 +6,7 @@ import type { Component } from "solid-js";
 
 export const TopBar: Component = () => {
   return (
-    <header class="app-topbar" role="banner">
+    <header class="app-topbar">
       {/* Brand */}
       <div class="flex items-center gap-2" style="flex:1;">
         <div
@@ -37,7 +37,7 @@ export const TopBar: Component = () => {
       <div class="flex items-center gap-2" aria-label="Node status">
         <span class="status-dot online" title="Node online" />
         <span class="text-xs text-muted font-mono">
-          {user()?.onion_address ? user()!.onion_address!.slice(0, 8) + "…" : "no onion"}
+          {user()?.onion_address ? `${user()?.onion_address?.slice(0, 8)}…` : "no onion"}
         </span>
       </div>
 

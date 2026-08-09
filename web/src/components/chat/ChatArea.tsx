@@ -61,7 +61,7 @@ export const ChatArea: Component<Props> = (props) => {
         </div>
         <div>
           <p class="font-semibold text-sm">
-            {contact()?.nickname ?? props.onion.slice(0, 16) + "…"}
+            {contact()?.nickname ?? `${props.onion.slice(0, 16)}…`}
           </p>
           <p class="text-xs font-mono" style="color:var(--clr-text-3);">
             {props.onion.slice(0, 20)}…
@@ -163,7 +163,7 @@ export const ChatArea: Component<Props> = (props) => {
             setText(e.currentTarget.value);
             // Auto-resize
             e.currentTarget.style.height = "auto";
-            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
+            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
           }}
           onKeyDown={handleKeyDown}
           disabled={sending()}

@@ -3,7 +3,7 @@
 import { getCore } from "./core";
 
 export function toHex(arr: Uint8Array): string {
-  return Array.prototype.map.call(arr, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
+  return Array.prototype.map.call(arr, (x: number) => `00${x.toString(16)}`.slice(-2)).join("");
 }
 
 export function fromHex(hex: string): Uint8Array {

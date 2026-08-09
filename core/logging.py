@@ -41,9 +41,7 @@ class RedactingFilter(logging.Filter):
                         new_args.append(redact_sensitive(v))
                     else:
                         new_args.append(v)
-                record.args = (
-                    tuple(new_args) if isinstance(record.args, tuple) else new_args
-                )
+                record.args = tuple(new_args)
         return True
 
 

@@ -39,7 +39,7 @@ export async function startCall(peerOnion: string, myOnion: string): Promise<voi
     });
 
     peerConnection.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
+      if (event.streams?.[0]) {
         setRemoteStream(event.streams[0]);
       }
     };
@@ -82,7 +82,7 @@ export async function answerCall(myOnion: string): Promise<void> {
     });
 
     peerConnection.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
+      if (event.streams?.[0]) {
         setRemoteStream(event.streams[0]);
       }
     };
