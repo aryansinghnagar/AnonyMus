@@ -76,10 +76,11 @@ async def local_download(
         if clean_port is not None and not (1 <= int(clean_port) <= 65535):
             raise HTTPException(status_code=400, detail="Invalid onion port")
 
-        target_url = (
-            f"http://{clean_host}:{clean_port}/v3/files/p2p/download/{chunk_id}"
-            if clean_port
-            else f"http://{clean_host}/v3/files/p2p/download/{chunk_id}"
+        parsed_target_url = httpx.URL(
+            scheme="http",
+            host=clean_host,
+            port=int(clean_port) if clean_port else None,
+            path=f"/v3/files/p2p/download/{chunk_id}",
         )
 
         logger.info(
@@ -96,7 +97,7 @@ async def local_download(
                 "https://": f"socks5://127.0.0.1:{SOCKS_PORT}",
             }
             async with httpx.AsyncClient(proxies=proxies, timeout=60.0) as client:
-                res = await client.get(target_url)
+                res = await client.get(parsed_target_url)
                 if res.status_code == 200:
                     return Response(
                         content=res.content,
