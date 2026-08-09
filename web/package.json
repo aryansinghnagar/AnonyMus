@@ -22,14 +22,14 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.5.6",
     "@types/node": "^26.1.2",
-    "@vitest/coverage-v8": "^3.2.4",
-    "jsdom": "^26.1.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^30.0.1",
     "typescript": "~7.0.2",
-    "vite": "^8.1.1",
+    "vite": "^8.2.0",
     "vite-plugin-pwa": "^1.0.0",
-    "vite-plugin-solid": "^2.11.12",
+    "vite-plugin-solid": "^2.11.14",
     "vitest": "^4.1.10"
   }
 }
