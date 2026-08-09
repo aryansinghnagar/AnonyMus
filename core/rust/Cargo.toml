@@ -33,7 +33,7 @@ pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 jni = { version = "0.22", optional = true }
-uniffi = { version = "0.28", features = ["cli"], optional = true }
+uniffi = { version = "0.32", features = ["cli"], optional = true }
 
 [dev-dependencies]
 criterion = "0.8"
