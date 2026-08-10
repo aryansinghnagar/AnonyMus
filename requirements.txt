@@ -111,7 +111,7 @@ python-dotenv==1.2.2
     #   uvicorn
 python-engineio==4.13.3
     # via python-socketio
-python-socketio==5.16.3
+python-socketio==5.16.4
     # via -r requirements.in
 pyyaml==6.0.3
     # via uvicorn
