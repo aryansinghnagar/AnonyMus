@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "@types/node": "^26.1.1"
+    "@types/node": "^26.2.0"
   },
   "author": "AnonyMus Developers",
   "license": "GPL-3.0"
