@@ -7,7 +7,7 @@ granian>=2.8.0
 
 # Validation & settings
 pydantic>=2.10
-pydantic-settings>=2.6
+pydantic-settings>=2.15.0
 
 # Async database
 sqlalchemy>=2.0.36
