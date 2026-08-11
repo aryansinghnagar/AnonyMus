@@ -2,8 +2,7 @@
 //! Implements conflict-free replicated state for peer message document merging.
 
 use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::{Doc, GetString, StateVector, Text, Transact, Update};
+use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update, WriteTxn};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -57,7 +56,7 @@ impl ChatDocument {
         } else {
             StateVector::default()
         };
-        let update = txn.encode_update_v1(&sv);
+        let update = txn.encode_state_as_update_v1(&sv);
         Ok(update)
     }
 

@@ -2,7 +2,7 @@
 //!
 //! Used in X3DH pre-key bundles and Double Ratchet DH ratchet steps.
 
-use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
+pub use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
 
 use crate::{AnonymusError, Result};
 
@@ -19,7 +19,9 @@ pub struct StaticKeypair {
 impl StaticKeypair {
     /// Generate a fresh keypair using OS RNG.
     pub fn generate() -> Self {
-        let private = StaticSecret::random_from_rng(rand_core::OsRng);
+        let mut bytes = [0u8; 32];
+        getrandom::getrandom(&mut bytes).expect("RNG failed");
+        let private = StaticSecret::from(bytes);
         let public = PublicKey::from(&private);
         Self { private, public }
     }
@@ -60,13 +62,15 @@ impl zeroize::ZeroizeOnDrop for StaticKeypair {}
 /// Generate an ephemeral keypair for a single use (X3DH initiator EK).
 /// The private key is consumed after the DH step.
 pub struct EphemeralKeypair {
-    secret: Option<EphemeralSecret>,
+    secret: Option<StaticSecret>,
     pub public: PublicKey,
 }
 
 impl EphemeralKeypair {
     pub fn generate() -> Self {
-        let secret = EphemeralSecret::random_from_rng(rand_core::OsRng);
+        let mut bytes = [0u8; 32];
+        getrandom::getrandom(&mut bytes).expect("RNG failed");
+        let secret = StaticSecret::from(bytes);
         let public = PublicKey::from(&secret);
         Self {
             secret: Some(secret),
