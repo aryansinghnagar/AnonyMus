@@ -3,10 +3,13 @@
 //! All platform clients (Python/PyO3, Web/WASM, Android/JNI, iOS/UniFFI)
 //! bind against this single audited code path.
 
+pub mod crdt;
 pub mod crypto;
 pub mod ffi;
 pub mod identity;
 pub mod protocol;
+pub mod quic;
+pub mod tor;
 
 use thiserror::Error;
 

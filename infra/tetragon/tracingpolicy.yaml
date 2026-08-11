@@ -1,0 +1,32 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: anonymus-relay-zero-leak-security
+  namespace: kube-system
+spec:
+  kprobes:
+  - call: "sys_ptrace"
+    syscall: true
+    args:
+    - index: 0
+      type: "int"
+    selectors:
+    - matchPIDs:
+      - operator: "In"
+        values: [8000]
+      matchActions:
+      - action: Sigkill
+  - call: "fd_install"
+    syscall: false
+    args:
+    - index: 0
+      type: "int"
+    - index: 1
+      type: "file"
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: "Prefix"
+        values: ["/unencrypted_leak"]
+      matchActions:
+      - action: Sigkill

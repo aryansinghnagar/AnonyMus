@@ -1,0 +1,24 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: anonymus-p2p-mesh-partition-chaos
+  namespace: default
+spec:
+  action: partition
+  mode: fixed
+  value: '2'
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: anonymus-relay
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: anonymus-tor-proxy
+  duration: '5m'
+  scheduler:
+    cron: '*/15 * * * *'

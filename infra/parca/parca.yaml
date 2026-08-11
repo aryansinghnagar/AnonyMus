@@ -1,0 +1,7 @@
+object_storage:
+  type: MEMORY
+scrape_configs:
+  - job_name: 'anonymus-relay-ebpf-profiling'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['127.0.0.1:7070']
