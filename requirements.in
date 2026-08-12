@@ -13,7 +13,7 @@ pydantic-settings>=2.6
 sqlalchemy>=2.0.36
 aiosqlite>=0.20           # async SQLite (P2P node)
 asyncpg>=0.30             # async PostgreSQL (relay)
-alembic>=1.14
+alembic>=1.19.1
 
 # HTTP client
 httpx>=0.28
