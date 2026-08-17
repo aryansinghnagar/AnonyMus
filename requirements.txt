@@ -121,7 +121,7 @@ simple-websocket==1.1.0
     # via python-engineio
 sortedcontainers==2.4.0
     # via hypothesis
-sqlalchemy==2.0.51
+sqlalchemy==2.0.52
     # via
     #   -r requirements.in
     #   alembic
