@@ -10,6 +10,7 @@ import base64
 import json
 import shutil
 import threading
+import ipaddress
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
@@ -278,9 +279,36 @@ async def sync_push(
             "pin": body.pin,
         }
 
+        try:
+            target_ip = ipaddress.ip_address(body.ip)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid target IP address",
+            )
+
+        if (
+            target_ip.is_private
+            or target_ip.is_loopback
+            or target_ip.is_link_local
+            or target_ip.is_multicast
+            or target_ip.is_unspecified
+            or target_ip.is_reserved
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Target IP address is not allowed",
+            )
+
+        if body.port < 1 or body.port > 65535:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid target port",
+            )
+
         async with httpx.AsyncClient(timeout=20.0) as http_client:
             res = await http_client.post(
-                f"http://{body.ip}:{body.port}/api/sync/pairing",
+                f"http://{target_ip.compressed}:{body.port}/api/sync/pairing",
                 json=payload,
             )
 
