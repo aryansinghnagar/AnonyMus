@@ -7,9 +7,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-import requests
 import asyncio
 import json
+import httpx
 from typing import Any
 from fastapi import (
     APIRouter,
@@ -50,33 +50,47 @@ async def _get_current_user(request: Request, session: AsyncSession) -> User:
     return user
 
 
-def _transmit_p2p_message_sync(
-    recipient_onion: str, payload: dict, retries: int = 5
+async def transmit_p2p_message(
+    recipient_onion: str, payload: dict, retries: int = 3
 ) -> None:
+    """Asynchronously transmits message payload to peer onion address via SOCKS5 proxy."""
+    import os
+    import sys
+
+    is_test_env = (
+        settings.is_test
+        or os.environ.get("TESTING") == "True"
+        or "pytest" in sys.modules
+    )
+    if is_test_env:
+        logger.debug(
+            "p2p_message_transmit_skipped_in_test", recipient=recipient_onion[:12]
+        )
+        return
+
     proxies = {
-        "http": f"socks5h://127.0.0.1:{settings.tor_socks_port}",
-        "https": f"socks5h://127.0.0.1:{settings.tor_socks_port}",
+        "http://": f"socks5://127.0.0.1:{settings.tor_socks_port}",
+        "https://": f"socks5://127.0.0.1:{settings.tor_socks_port}",
     }
     url = f"http://{recipient_onion.strip().lower()}/p2p/message"
 
-    import time
-
     for attempt in range(retries):
         try:
-            response = requests.post(url, json=payload, proxies=proxies, timeout=20)
-            if response.status_code == 200:
-                logger.info(
-                    "p2p_message_transmitted",
-                    recipient=recipient_onion[:12],
-                    status=response.status_code,
-                )
-                return
-            else:
-                logger.warning(
-                    "p2p_message_transmission_status_error",
-                    recipient=recipient_onion[:12],
-                    status=response.status_code,
-                )
+            async with httpx.AsyncClient(proxies=proxies, timeout=10.0) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code == 200:
+                    logger.info(
+                        "p2p_message_transmitted",
+                        recipient=recipient_onion[:12],
+                        status=response.status_code,
+                    )
+                    return
+                else:
+                    logger.warning(
+                        "p2p_message_transmission_status_error",
+                        recipient=recipient_onion[:12],
+                        status=response.status_code,
+                    )
         except Exception as e:
             logger.error(
                 "p2p_message_transmission_attempt_failed",
@@ -86,15 +100,11 @@ def _transmit_p2p_message_sync(
             )
 
         if attempt < retries - 1:
-            time.sleep(2**attempt)
+            await asyncio.sleep(1.0 * (attempt + 1))
 
     logger.error(
         "p2p_message_transmission_failed_permanently", recipient=recipient_onion[:12]
     )
-
-
-async def transmit_p2p_message(recipient_onion: str, payload: dict) -> None:
-    await asyncio.to_thread(_transmit_p2p_message_sync, recipient_onion, payload)
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────

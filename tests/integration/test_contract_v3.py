@@ -12,13 +12,40 @@ from httpx import ASGITransport, AsyncClient
 from transports.p2p.app_v3 import create_app
 
 
+from core.db.engine import get_session
+from core.db.models import Base
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+
 @pytest_asyncio.fixture
 async def v3_client():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     app = create_app()
+
+    async def _override_session():
+        factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        async with factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    app.dependency_overrides[get_session] = _override_session
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
+
+    await engine.dispose()
 
 
 @pytest.mark.asyncio

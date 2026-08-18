@@ -37,16 +37,20 @@ PQ_HYBRID_ENABLED: bool = os.environ.get("ANONYMUS_PQ_HYBRID", "0") == "1"
 _KEM_ALG = "Kyber768"
 
 
-# Dynamic DLL / Shared Library resolution for bundled liboqs binaries
 def _configure_native_dll_paths():
-    """Adds local binary folders to DLL search paths on Windows/Linux."""
+    """Adds local binary folders and environment paths to DLL search paths on Windows/Linux."""
     base_dir = Path(__file__).resolve().parent.parent
     possible_paths = [
         base_dir / "lib",
         base_dir / "bin",
-        Path("C:/Users/Aryan/_oqs/liboqs/build/bin"),
-        Path("C:/Users/Aryan/_oqs/lib"),
+        base_dir / "build" / "bin",
     ]
+    # Check optional environment variables
+    for env_var in ("LIBOQS_DIR", "OQS_INSTALL_PATH"):
+        if os.environ.get(env_var):
+            possible_paths.append(Path(os.environ[env_var]) / "bin")
+            possible_paths.append(Path(os.environ[env_var]) / "lib")
+
     for p in possible_paths:
         if p.exists() and p.is_dir():
             if hasattr(os, "add_dll_directory"):

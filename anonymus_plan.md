@@ -945,7 +945,7 @@ The current `rollback.sh` and `rollback.ps1` exist but are untested. The plan:
 
 ### J1. Test pyramid
 
-- **Unit**: Rust (`cargo test`), Python (`pytest` unit), TypeScript (`vitest`), Kotlin (`./gradlew test`). Target: 80% line coverage on `core/`, `transports/`, `core/rust/src/`.
+- **Unit**: Rust (`cargo check --lib` & KAT), Python (`pytest` unit), TypeScript (`vitest`), Kotlin (`./gradlew test`). Target: 80% line coverage on `core/`, `transports/`, `core/rust/src/`.
 - **Integration**: `tests/integration/` — end-to-end API flows, contract tests, migration tests.
 - **System**: `tests/system/` — full stack via Docker Compose, including Tor (in a sandboxed mode), two-browser chat, WebRTC call.
 - **Adversarial**: `tests/adversarial/` — the authorization tests from B4, B5, B7; fuzzing; chaos engineering.

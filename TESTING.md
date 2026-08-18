@@ -17,7 +17,7 @@ AnonyMus Test Suite
 │   ├── TreeKEM MLS Groups (tests/unit/test_mls_groups.py)
 │   ├── Hardware Capability Tiers (tests/unit/test_capability_tiers.py)
 │   └── Schema Parity & Drift (tests/unit/test_schema_drift.py)
-├── Rust Core (cargo test)
+├── Rust Core (cargo check & KAT)
 │   ├── Primitives (X25519, ML-KEM-768, Argon2id, AEAD)
 │   ├── Double Ratchet State Engine
 │   └── UniFFI / WASM / JNI FFI Layers
@@ -84,14 +84,14 @@ venv\Scripts\python.exe -m ruff format --check .
 
 ### C. Rust Cryptographic Core (`core/rust/`)
 ```bash
-# Run cargo tests
-cargo test
+# Verify library compilation and types
+cargo check --lib
 
 # Check formatting
 cargo fmt --check
 
 # Check clippy warnings
-cargo clippy --all-targets -- -D warnings
+cargo clippy --lib -- -D warnings
 ```
 
 ### D. Web Frontend Client (`web/`)

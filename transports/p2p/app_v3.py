@@ -17,19 +17,21 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
+    REGISTRY,
     Counter,
     Histogram,
     generate_latest,
 )
 from starlette.middleware.sessions import SessionMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.db.engine import engine
+from core.db.engine import engine, get_session
 from core.logging_v3 import configure_logging, get_logger
 from transports.p2p.routers import (
     auth,
@@ -46,17 +48,26 @@ logger = get_logger(__name__)
 
 # ── Prometheus Metrics ─────────────────────────────────────────────────────────
 
-REQUEST_COUNT = Counter(
-    "anonymus_http_requests_total",
-    "Total HTTP requests",
-    ["method", "path", "status_code"],
-)
-REQUEST_LATENCY = Histogram(
-    "anonymus_http_request_duration_seconds",
-    "HTTP request latency",
-    ["method", "path"],
-    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
-)
+try:
+    REQUEST_COUNT = Counter(
+        "anonymus_http_requests_total",
+        "Total HTTP requests",
+        ["method", "path", "status_code"],
+    )
+except ValueError:
+    REQUEST_COUNT = REGISTRY._names_to_collectors["anonymus_http_requests_total"]
+
+try:
+    REQUEST_LATENCY = Histogram(
+        "anonymus_http_request_duration_seconds",
+        "HTTP request latency",
+        ["method", "path"],
+        buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+    )
+except ValueError:
+    REQUEST_LATENCY = REGISTRY._names_to_collectors[
+        "anonymus_http_request_duration_seconds"
+    ]
 
 
 # ── Rate Limiting Middleware ──────────────────────────────────────────────────
@@ -314,12 +325,13 @@ def create_app() -> FastAPI:
         summary="Readiness probe — checks DB",
         response_model=None,
     )
-    async def readyz() -> Response | dict[str, Any]:
+    async def readyz(
+        session: AsyncSession = Depends(get_session),
+    ) -> Response | dict[str, Any]:
         try:
-            async with engine.connect() as conn:
-                await conn.execute(
-                    __import__("sqlalchemy", fromlist=["text"]).text("SELECT 1")
-                )
+            from sqlalchemy import text
+
+            await session.execute(text("SELECT 1"))
             return {"status": "ready", "database": "ok"}
         except Exception as exc:
             logger.exception("Readiness DB check failed", exc_info=exc)

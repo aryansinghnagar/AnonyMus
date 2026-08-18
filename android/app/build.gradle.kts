@@ -131,7 +131,3 @@ dependencies {
   implementation(libs.ktor.client.core)
   implementation(libs.ktor.client.okhttp)
 }
-
-tasks.withType<org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask>().configureEach {
-    kaptProcessJvmArgs.add("-Dorg.sqlite.tmpdir=C:/Users/Aryan/AppData/Local/Temp")
-}

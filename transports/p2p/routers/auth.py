@@ -97,7 +97,11 @@ async def register(
             detail="Username already taken",
         )
 
-    hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+    import asyncio
+
+    hashed = await asyncio.to_thread(
+        lambda: bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+    )
     user = User(username=body.username, password_hash=hashed)
     session.add(user)
     await session.flush()  # populate id before commit
@@ -119,9 +123,18 @@ async def login(
     user = await session.scalar(
         select(User).where(User.username == body.username.lower())
     )
-    if not user or not bcrypt.checkpw(
-        body.password.encode(), user.password_hash.encode()
-    ):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    import asyncio
+
+    is_valid = await asyncio.to_thread(
+        bcrypt.checkpw, body.password.encode(), user.password_hash.encode()
+    )
+    if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",

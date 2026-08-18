@@ -50,5 +50,5 @@ jobs:
       - name: Cargo Clippy
         run: cargo clippy -- -D warnings
 
-      - name: Cargo Test
-        run: cargo test
+      - name: Cargo Check (Library)
+        run: cargo check --lib

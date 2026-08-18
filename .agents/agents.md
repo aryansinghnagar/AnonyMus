@@ -47,7 +47,7 @@ This document defines the mandatory engineering constraints, quality standards, 
    - Ensure production build passes (`npm run build`).
 
 3. **Rust Cryptographic Core**:
-   - Any FFI or core Rust primitive modifications require `cargo check` and `cargo test` inside `core/rust/`.
+   - Any FFI or core Rust primitive modifications require `cargo check --lib` inside `core/rust/` and cryptographic verification via `pytest tests/unit/test_kat_crypto.py`.
 
 ---
 

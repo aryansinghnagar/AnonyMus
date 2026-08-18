@@ -5,7 +5,6 @@ Sync router — handles local device synchronization and pairing broker servers.
 from __future__ import annotations
 
 import os
-import asyncio
 import socket
 import base64
 import json
@@ -14,7 +13,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
-import requests
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -35,6 +34,7 @@ router = APIRouter(prefix="/v3/sync", tags=["sync"])
 
 active_pairing_broker: HTTPServer | None = None
 pairing_private_key: x25519.X25519PrivateKey | None = None
+active_pairing_pin: str | None = None
 pairing_lock = threading.Lock()
 
 
@@ -80,6 +80,7 @@ class PushSyncRequest(BaseModel):
     ip: str = Field(min_length=1)
     port: int = Field(ge=1, le=65535)
     k: str = Field(min_length=1)
+    pin: str = Field(default="")
 
 
 class PairingHandler(BaseHTTPRequestHandler):
@@ -88,15 +89,28 @@ class PairingHandler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self) -> None:
-        global pairing_private_key
+        global pairing_private_key, active_pairing_pin
         if self.path == "/api/sync/pairing":
-            content_length = int(self.headers["Content-Length"])
+            content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
             try:
                 if pairing_private_key is None:
                     raise ValueError("Pairing server keys not initialized")
 
                 payload = json.loads(post_data.decode("utf-8"))
+                provided_pin = payload.get("pin", "").strip()
+
+                # SEC-01 Mutual Authentication: Verify Pairing PIN
+                if not active_pairing_pin or provided_pin != active_pairing_pin:
+                    self.send_response(401)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(
+                        b'{"error": "Unauthorized: Invalid or missing pairing PIN"}'
+                    )
+                    logger.warning("sync_pairing_rejected_invalid_pin")
+                    return
+
                 client_pub_b64 = payload.get("client_public_key")
                 ciphertext_b64 = payload.get("ciphertext")
                 iv_b64 = payload.get("iv")
@@ -109,7 +123,7 @@ class PairingHandler(BaseHTTPRequestHandler):
                 aes_key = HKDF(
                     algorithm=hashes.SHA256(),
                     length=32,
-                    salt=None,
+                    salt=provided_pin.encode("utf-8"),
                     info=b"AnonyMus-Device-Sync-Key",
                 ).derive(shared_key)
 
@@ -118,12 +132,31 @@ class PairingHandler(BaseHTTPRequestHandler):
                     base64.b64decode(iv_b64), base64.b64decode(ciphertext_b64), None
                 )
 
+                # Validate SQLite database magic bytes before saving
+                if len(decrypted) < 16 or not (
+                    decrypted.startswith(b"SQLite format 3\x00")
+                    or decrypted.startswith(b"\x00" * 16)
+                ):
+                    raise ValueError("Payload failed SQLite format integrity check")
+
                 db_path = get_db_path()
                 if os.path.exists(db_path):
                     shutil.copyfile(db_path, db_path + ".bak")
 
-                with open(db_path, "wb") as f:
+                staged_path = db_path + ".staged"
+                with open(staged_path, "wb") as f:
                     f.write(decrypted)
+
+                # Atomic replace on POSIX / safe replacement on Windows
+                if os.path.exists(staged_path):
+                    try:
+                        os.replace(staged_path, db_path)
+                    except Exception:
+                        shutil.copyfile(staged_path, db_path)
+                        try:
+                            os.remove(staged_path)
+                        except Exception:
+                            pass
 
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -150,18 +183,31 @@ async def sync_pair(
 ) -> dict:
     await _verify_auth(request, session)
 
-    global active_pairing_broker, pairing_private_key
+    global active_pairing_broker, pairing_private_key, active_pairing_pin
 
     with pairing_lock:
         ip = get_local_ip()
         port = 8999
 
-        if active_pairing_broker is not None and pairing_private_key is not None:
+        if (
+            active_pairing_broker is not None
+            and pairing_private_key is not None
+            and active_pairing_pin is not None
+        ):
             pub_bytes = pairing_private_key.public_key().public_bytes_raw()
             pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
-            return {"success": True, "ip": ip, "port": port, "k": pub_b64}
+            return {
+                "success": True,
+                "ip": ip,
+                "port": port,
+                "k": pub_b64,
+                "pin": active_pairing_pin,
+            }
+
+        import secrets
 
         pairing_private_key = x25519.X25519PrivateKey.generate()
+        active_pairing_pin = f"{secrets.randbelow(900000) + 100000}"
         pub_bytes = pairing_private_key.public_key().public_bytes_raw()
         pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
 
@@ -177,7 +223,13 @@ async def sync_pair(
         t.start()
 
         logger.info("pairing_broker_started", ip=ip, port=port)
-        return {"success": True, "ip": ip, "port": port, "k": pub_b64}
+        return {
+            "success": True,
+            "ip": ip,
+            "port": port,
+            "k": pub_b64,
+            "pin": active_pairing_pin,
+        }
 
 
 @router.post(
@@ -209,7 +261,7 @@ async def sync_push(
         aes_key = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=None,
+            salt=body.pin.encode("utf-8") if body.pin else None,
             info=b"AnonyMus-Device-Sync-Key",
         ).derive(shared_key)
 
@@ -223,19 +275,14 @@ async def sync_push(
             ),
             "iv": base64.b64encode(iv).decode("utf-8"),
             "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
+            "pin": body.pin,
         }
 
-        # Run POST request in a background thread to prevent blocking
-        def do_post() -> requests.Response:
-            return requests.post(
+        async with httpx.AsyncClient(timeout=20.0) as http_client:
+            res = await http_client.post(
                 f"http://{body.ip}:{body.port}/api/sync/pairing",
                 json=payload,
-                timeout=20,
             )
-
-        loop = Request.scope.get("fastapi_astack")
-        # Direct requests execution
-        res = await asyncio.to_thread(do_post)
 
         if res.status_code != 200:
             raise HTTPException(

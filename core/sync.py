@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import deque
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -36,6 +37,7 @@ class MultiDeviceSyncManager:
         self.device_id = device_id
         self._synced_devices: set[str] = set()
         self._processed_sequence_ids: set[int] = set()
+        self._sequence_fifo: deque[int] = deque()
         self._capability_profile = detect_capability_tier()
 
     def register_paired_device(self, paired_device_id: str) -> None:
@@ -78,13 +80,13 @@ class MultiDeviceSyncManager:
         if abs(time.time() - envelope.timestamp) > 300.0:
             raise ValueError("Sync envelope timestamp out of acceptable bounds")
 
-        # Cap processed sequence IDs pool according to hardware tier
-        if (
-            len(self._processed_sequence_ids)
-            >= self._capability_profile.max_in_memory_messages
-        ):
-            self._processed_sequence_ids.clear()
+        # Sliding window eviction according to hardware tier
+        max_items = self._capability_profile.max_in_memory_messages
+        while len(self._sequence_fifo) >= max_items:
+            oldest = self._sequence_fifo.popleft()
+            self._processed_sequence_ids.discard(oldest)
 
+        self._sequence_fifo.append(envelope.sequence_id)
         self._processed_sequence_ids.add(envelope.sequence_id)
         return {
             "status": "applied",

@@ -11,6 +11,9 @@ Ports the following Flask routes to FastAPI v3:
 from __future__ import annotations
 
 import re
+import tempfile
+import time
+from pathlib import Path
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
@@ -21,10 +24,78 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/v3/files", tags=["files"])
 
 _ONION_V3_RE = re.compile(r"^([a-z2-7]{56}\.onion)(?::([0-9]{1,5}))?$")
+_CHUNK_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
-# In-memory chunk store (XFTP temporary storage)
-# chunk_id -> bytes
-_chunks: dict[str, bytes] = {}
+# Bounded disk-backed chunk store for XFTP transfer
+XFTP_CHUNK_DIR = Path(tempfile.gettempdir()) / "anonymus_xftp_chunks"
+XFTP_CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+MAX_TOTAL_STORAGE_BYTES = 500 * 1024 * 1024  # 500 MB
+CHUNK_TTL_SECONDS = 900  # 15 minutes
+
+
+def _sanitize_chunk_id(chunk_id: str) -> str:
+    if not _CHUNK_ID_RE.match(chunk_id):
+        raise HTTPException(status_code=400, detail="Invalid chunk identifier format")
+    return chunk_id
+
+
+def _prune_expired_chunks():
+    """Removes expired chunks and maintains 500 MB storage cap."""
+    try:
+        now = time.time()
+        files = list(XFTP_CHUNK_DIR.glob("*.chunk"))
+        total_bytes = 0
+
+        # Remove TTL expired
+        for f in files:
+            try:
+                stat = f.stat()
+                if now - stat.st_mtime > CHUNK_TTL_SECONDS:
+                    f.unlink(missing_ok=True)
+                else:
+                    total_bytes += stat.st_size
+            except Exception:
+                pass
+
+        # If still over quota, remove oldest
+        if total_bytes > MAX_TOTAL_STORAGE_BYTES:
+            active_files = sorted(
+                XFTP_CHUNK_DIR.glob("*.chunk"), key=lambda p: p.stat().st_mtime
+            )
+            for f in active_files:
+                if total_bytes <= MAX_TOTAL_STORAGE_BYTES:
+                    break
+                try:
+                    size = f.stat().st_size
+                    f.unlink(missing_ok=True)
+                    total_bytes -= size
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning("xftp_pruning_error", error=str(e))
+
+
+def _save_chunk(chunk_id: str, data: bytes) -> None:
+    _sanitize_chunk_id(chunk_id)
+    _prune_expired_chunks()
+    target = XFTP_CHUNK_DIR / f"{chunk_id}.chunk"
+    with open(target, "wb") as f:
+        f.write(data)
+
+
+def _load_chunk(chunk_id: str) -> bytes | None:
+    _sanitize_chunk_id(chunk_id)
+    target = XFTP_CHUNK_DIR / f"{chunk_id}.chunk"
+    if not target.exists():
+        return None
+    try:
+        if time.time() - target.stat().st_mtime > CHUNK_TTL_SECONDS:
+            target.unlink(missing_ok=True)
+            return None
+        with open(target, "rb") as f:
+            return f.read()
+    except Exception:
+        return None
 
 
 @router.post(
@@ -42,7 +113,7 @@ async def local_upload(
     if len(body) > 10 * 1024 * 1024:  # 10 MB limit
         raise HTTPException(status_code=413, detail="Chunk size too large (max 10MB)")
 
-    _chunks[chunk_id] = body
+    _save_chunk(chunk_id, body)
     logger.info("chunk_uploaded_locally", chunk_id=chunk_id, size=len(body))
     return {"success": True}
 
@@ -119,8 +190,8 @@ async def local_download(
                 detail="Failed to download from peer over Tor",
             )
 
-    # Local download from memory
-    chunk = _chunks.get(chunk_id)
+    # Local download from bounded disk store
+    chunk = _load_chunk(chunk_id)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
 
@@ -144,7 +215,7 @@ async def p2p_upload(
     if len(body) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Chunk size too large")
 
-    _chunks[chunk_id] = body
+    _save_chunk(chunk_id, body)
     logger.info("chunk_uploaded_p2p", chunk_id=chunk_id, size=len(body))
     return {"success": True}
 
@@ -156,7 +227,7 @@ async def p2p_upload(
 async def p2p_download(
     chunk_id: str,
 ) -> Response:
-    chunk = _chunks.get(chunk_id)
+    chunk = _load_chunk(chunk_id)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
 

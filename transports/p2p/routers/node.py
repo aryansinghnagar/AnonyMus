@@ -105,13 +105,16 @@ async def get_node_info(
 ) -> NodeInfoResponse:
     onion = current_user.onion_address
     if not onion:
-        import transports.p2p.database as legacy_db
+        try:
+            import transports.p2p.database as legacy_db
 
-        onion = legacy_db.get_config("my_onion_address", None)
-        if onion:
-            current_user.onion_address = onion
-            session.add(current_user)
-            await session.commit()
+            onion = legacy_db.get_config("my_onion_address", None)
+            if onion:
+                current_user.onion_address = onion
+                session.add(current_user)
+                await session.commit()
+        except Exception:
+            pass
     return NodeInfoResponse(onion_address=onion, username=current_user.username)
 
 

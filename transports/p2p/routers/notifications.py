@@ -73,9 +73,11 @@ async def register(
         raise HTTPException(status_code=400, detail="Invalid onion address")
 
     # Fetch the contact
+    owner = current_user.onion_address or f"{current_user.username}.local.onion"
     contact = await session.scalar(
         select(Contact).where(
-            Contact.owner_onion == current_user.onion_address,
+            (Contact.owner_onion == owner)
+            | (Contact.owner_onion == current_user.username),
             Contact.onion_address == onion,
         )
     )

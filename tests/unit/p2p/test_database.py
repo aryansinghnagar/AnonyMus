@@ -20,15 +20,23 @@ class TestDatabaseAuth(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         database.DB_FILE = "test_users.db"
+        database.close_pool()
         if os.path.exists(database.DB_FILE):
-            os.remove(database.DB_FILE)
+            try:
+                os.remove(database.DB_FILE)
+            except Exception:
+                pass
         database.init_db()
 
     @classmethod
     def tearDownClass(cls):
         database.DB_FILE = "test_users.db"
+        database.close_pool()
         if os.path.exists(database.DB_FILE):
-            os.remove(database.DB_FILE)
+            try:
+                os.remove(database.DB_FILE)
+            except Exception:
+                pass
 
     def test_1_register_user(self):
         res = database.register_local_user("Alice", "password123")
