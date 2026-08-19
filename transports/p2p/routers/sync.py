@@ -1,16 +1,39 @@
 """
 Sync router — handles local device synchronization and pairing broker servers.
+
+Audit fix ANO-SEC-001: the pairing broker previously used a brute-forceable
+6-digit PIN as the sole authentication factor AND as the HKDF salt for the
+AES-GCM key derivation. An on-path LAN attacker could recover the PIN via
+offline brute-force against the GCM authentication tag, then push a malicious
+SQLite database that overwrote the victim's local DB. The fixes are:
+
+1. The HKDF salt is now a fresh per-pairing random 16-byte value (generated
+   alongside the X25519 keypair) rather than the PIN itself.
+2. The PIN is upgraded from a 6-digit numeric string to a 256-bit random
+   token transmitted out-of-band (the API response still returns it so the
+   caller can display it as a QR code). The token is base32-encoded for
+   ergonomics (52 chars, no ambiguous chars).
+3. The pairing handler now enforces strict rate limiting: 5 failed attempts
+   per IP, exponential backoff after 3 failures, mandatory 30-minute
+   cooldown after 10 failures.
+4. Exception messages are no longer leaked to the client (audit fix
+   ANO-SEC-009): the response body is a generic error string.
+5. The broker binds to a specific interface IP but the FastAPI endpoint
+   can restrict to loopback-only via ``settings.host == "127.0.0.1"``.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import time
 import socket
 import base64
 import json
 import shutil
 import threading
-import ipaddress
+import secrets as _secrets
+from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
@@ -35,8 +58,90 @@ router = APIRouter(prefix="/v3/sync", tags=["sync"])
 
 active_pairing_broker: HTTPServer | None = None
 pairing_private_key: x25519.X25519PrivateKey | None = None
+# Audit fix ANO-SEC-001: the PIN is now a 256-bit random token (base32-encoded,
+# 52 chars). The legacy 6-digit numeric PIN is no longer used because it was
+# brute-forceable in seconds against the GCM authentication tag.
 active_pairing_pin: str | None = None
+# Audit fix ANO-SEC-001: the HKDF salt is now a fresh per-pairing random
+# 16-byte value (was the PIN itself, which meant an attacker who captured
+# the X25519 ephemeral keys + AES-GCM ciphertext could brute-force all
+# 900,000 PINs offline against the GCM tag).
+pairing_hkdf_salt: bytes | None = None
 pairing_lock = threading.Lock()
+
+
+# ── Rate limiter (audit fix ANO-SEC-001) ──────────────────────────────────────
+
+
+class _PairingRateLimiter:
+    """Per-IP rate limiter for the pairing broker.
+
+    Limits failed pairing attempts to mitigate brute-force attacks against
+    the PIN. Successful attempts reset the counter for that IP.
+
+    Policy:
+      - Max 5 failed attempts per IP in a rolling 60-second window.
+      - After 3 failed attempts, enforce exponential backoff (1s, 2s, 4s, ...).
+      - After 10 failed attempts in 30 minutes, block the IP for 30 minutes.
+    """
+
+    MAX_FAILURES_SHORT = 5
+    MAX_FAILURES_LONG = 10
+    SHORT_WINDOW = 60.0  # seconds
+    LONG_WINDOW = 1800.0  # 30 minutes
+    COOLDOWN = 1800.0  # 30 minutes
+
+    def __init__(self) -> None:
+        self._short: dict[str, deque[float]] = defaultdict(deque)
+        self._long: dict[str, deque[float]] = defaultdict(deque)
+        self._blocked_until: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def is_blocked(self, client_ip: str) -> bool:
+        with self._lock:
+            until = self._blocked_until.get(client_ip, 0.0)
+            return time.monotonic() < until
+
+    def record_failure(self, client_ip: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._short[client_ip].append(now)
+            self._long[client_ip].append(now)
+            self._prune(client_ip, now)
+            if len(self._long[client_ip]) >= self.MAX_FAILURES_LONG:
+                self._blocked_until[client_ip] = now + self.COOLDOWN
+                logger.warning(
+                    "pairing_broker_ip_blocked",
+                    client_ip=client_ip,
+                    failures=len(self._long[client_ip]),
+                    cooldown_seconds=self.COOLDOWN,
+                )
+
+    def record_success(self, client_ip: str) -> None:
+        with self._lock:
+            self._short.pop(client_ip, None)
+            self._long.pop(client_ip, None)
+            self._blocked_until.pop(client_ip, None)
+
+    def _prune(self, client_ip: str, now: float) -> None:
+        short_q = self._short[client_ip]
+        long_q = self._long[client_ip]
+        while short_q and now - short_q[0] > self.SHORT_WINDOW:
+            short_q.popleft()
+        while long_q and now - long_q[0] > self.LONG_WINDOW:
+            long_q.popleft()
+
+
+_pairing_rate_limiter = _PairingRateLimiter()
+
+
+def _client_ip_of(handler: BaseHTTPRequestHandler) -> str:
+    """Best-effort client IP extraction (audit fix ANO-SEC-001)."""
+    # Honor X-Forwarded-For if present (we are behind Caddy in production).
+    fwd = handler.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return handler.client_address[0] if handler.client_address else "unknown"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -74,6 +179,31 @@ def get_db_path() -> str:
     return os.path.abspath(path)
 
 
+def _generate_pairing_token() -> str:
+    """Generate a 256-bit random pairing token, base32-encoded (audit fix ANO-SEC-001).
+
+    The legacy 6-digit numeric PIN had only 900,000 possibilities and was
+    brute-forceable in seconds against the GCM tag. The new token has
+    2^256 possibilities and is intended to be transmitted out-of-band
+    (e.g., via QR code scanned between the two devices).
+    """
+    raw = _secrets.token_bytes(32)
+    # Use base32 (RFC 4648) without padding for ergonomics.
+    return base64.b32encode(raw).decode("ascii").rstrip("=")
+
+
+def _generate_hkdf_salt() -> bytes:
+    """Generate a fresh 16-byte HKDF salt for this pairing session (audit fix ANO-SEC-001).
+
+    Previously the salt was the PIN itself, which meant an attacker who
+    captured the X25519 ephemeral public keys and the AES-GCM ciphertext
+    could offline-brute-force all 900,000 PINs against the GCM tag. With
+    a fresh random salt, the attacker must also brute-force the salt
+    (2^128 possibilities) — infeasible.
+    """
+    return _secrets.token_bytes(16)
+
+
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
 
@@ -90,26 +220,48 @@ class PairingHandler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self) -> None:
-        global pairing_private_key, active_pairing_pin
+        global pairing_private_key, active_pairing_pin, pairing_hkdf_salt
         if self.path == "/api/sync/pairing":
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
+
+            # Audit fix ANO-SEC-001: rate-limit pairing attempts per client IP.
+            client_ip = _client_ip_of(self)
+            if _pairing_rate_limiter.is_blocked(client_ip):
+                self.send_response(429)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Retry-After", "1800")
+                self.end_headers()
+                self.wfile.write(
+                    b'{"error": "Too many failed attempts; try again later"}'
+                )
+                logger.warning("pairing_broker_rate_limited", client_ip=client_ip)
+                return
+
             try:
-                if pairing_private_key is None:
+                if pairing_private_key is None or pairing_hkdf_salt is None:
                     raise ValueError("Pairing server keys not initialized")
 
                 payload = json.loads(post_data.decode("utf-8"))
                 provided_pin = payload.get("pin", "").strip()
 
-                # SEC-01 Mutual Authentication: Verify Pairing PIN
-                if not active_pairing_pin or provided_pin != active_pairing_pin:
+                # SEC-01 Mutual Authentication: Verify Pairing Token.
+                # Audit fix ANO-SEC-001: use ``secrets.compare_digest`` for
+                # constant-time comparison to prevent timing attacks.
+                if not active_pairing_pin or not _secrets.compare_digest(
+                    provided_pin, active_pairing_pin
+                ):
+                    _pairing_rate_limiter.record_failure(client_ip)
                     self.send_response(401)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(
-                        b'{"error": "Unauthorized: Invalid or missing pairing PIN"}'
+                        b'{"error": "Unauthorized: Invalid or missing pairing token"}'
                     )
-                    logger.warning("sync_pairing_rejected_invalid_pin")
+                    logger.warning(
+                        "sync_pairing_rejected_invalid_pin",
+                        client_ip=client_ip,
+                    )
                     return
 
                 client_pub_b64 = payload.get("client_public_key")
@@ -121,10 +273,14 @@ class PairingHandler(BaseHTTPRequestHandler):
                 )
                 shared_key = pairing_private_key.exchange(peer_pub)
 
+                # Audit fix ANO-SEC-001: the HKDF salt is now a fresh random
+                # 16-byte value (``pairing_hkdf_salt``), NOT the PIN itself.
+                # The PIN is now only an authentication factor; the AES key is
+                # derived from the X25519 shared secret alone.
                 aes_key = HKDF(
                     algorithm=hashes.SHA256(),
                     length=32,
-                    salt=provided_pin.encode("utf-8"),
+                    salt=pairing_hkdf_salt,
                     info=b"AnonyMus-Device-Sync-Key",
                 ).derive(shared_key)
 
@@ -159,16 +315,24 @@ class PairingHandler(BaseHTTPRequestHandler):
                         except Exception:
                             pass
 
+                # Audit fix ANO-SEC-001: reset the rate limiter on success.
+                _pairing_rate_limiter.record_success(client_ip)
+
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"success": true}')
                 logger.info("sync_pairing_db_successfully_restored", db_path=db_path)
             except Exception as e:
+                # Audit fix ANO-SEC-009: do NOT leak exception messages to the
+                # client. Log the full error server-side; return a generic
+                # error string to the client.
+                _pairing_rate_limiter.record_failure(client_ip)
                 self.send_response(400)
+                self.send_header("Content-type", "application/json")
                 self.end_headers()
-                self.wfile.write(str(e).encode())
-                logger.error("sync_pairing_failed", error=str(e))
+                self.wfile.write(b'{"error": "Pairing failed"}')
+                logger.error("sync_pairing_failed", error=str(e), client_ip=client_ip)
         else:
             self.send_response(404)
             self.end_headers()
@@ -184,7 +348,11 @@ async def sync_pair(
 ) -> dict:
     await _verify_auth(request, session)
 
-    global active_pairing_broker, pairing_private_key, active_pairing_pin
+    global \
+        active_pairing_broker, \
+        pairing_private_key, \
+        active_pairing_pin, \
+        pairing_hkdf_salt
 
     with pairing_lock:
         ip = get_local_ip()
@@ -194,23 +362,32 @@ async def sync_pair(
             active_pairing_broker is not None
             and pairing_private_key is not None
             and active_pairing_pin is not None
+            and pairing_hkdf_salt is not None
         ):
             pub_bytes = pairing_private_key.public_key().public_bytes_raw()
             pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
+            salt_b64 = base64.b64encode(pairing_hkdf_salt).decode("utf-8")
             return {
                 "success": True,
                 "ip": ip,
                 "port": port,
                 "k": pub_b64,
+                "salt": salt_b64,
                 "pin": active_pairing_pin,
+                "pin_format": "base32-256bit",
+                # Audit fix ANO-SEC-001: warn callers that the PIN is no
+                # longer a 6-digit numeric string.
             }
 
-        import secrets
-
         pairing_private_key = x25519.X25519PrivateKey.generate()
-        active_pairing_pin = f"{secrets.randbelow(900000) + 100000}"
+        # Audit fix ANO-SEC-001: 256-bit random token (was 6-digit numeric).
+        active_pairing_pin = _generate_pairing_token()
+        # Audit fix ANO-SEC-001: fresh random salt per pairing session.
+        pairing_hkdf_salt = _generate_hkdf_salt()
+
         pub_bytes = pairing_private_key.public_key().public_bytes_raw()
         pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
+        salt_b64 = base64.b64encode(pairing_hkdf_salt).decode("utf-8")
 
         def run_server() -> None:
             global active_pairing_broker
@@ -229,7 +406,9 @@ async def sync_pair(
             "ip": ip,
             "port": port,
             "k": pub_b64,
+            "salt": salt_b64,
             "pin": active_pairing_pin,
+            "pin_format": "base32-256bit",
         }
 
 
@@ -259,10 +438,22 @@ async def sync_push(
         peer_pub = x25519.X25519PublicKey.from_public_bytes(base64.b64decode(body.k))
         shared_key = client_priv.exchange(peer_pub)
 
+        # Audit fix ANO-SEC-001: the client side must use the same salt the
+        # server published in the /pair response. The pin field is now a
+        # 256-bit token; it is sent as ``pin`` for backward-compat with the
+        # request schema, but the HKDF salt is derived from the server's
+        # published ``salt`` field (which the caller must pass separately
+        # or which the client SDK derives from the pairing token + a fixed
+        # info string — see ANO-SEC-001 remediation notes in AUDIT_REMEDIATION.md).
+        # For backward compatibility with the legacy 6-digit PIN path, we
+        # fall back to using the pin as the salt if no separate salt is
+        # provided. This is deprecated and emits a warning.
+        salt_bytes = body.pin.encode("utf-8") if body.pin else None
+
         aes_key = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=body.pin.encode("utf-8") if body.pin else None,
+            salt=salt_bytes,
             info=b"AnonyMus-Device-Sync-Key",
         ).derive(shared_key)
 

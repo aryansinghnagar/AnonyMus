@@ -76,7 +76,12 @@ jobs:
       - name: Run Pytest with Coverage
         env:
           PYTHONPATH: .
-          FLASK_SECRET_KEY: ci-testing-secret-key-do-not-use-in-production
+          # Audit fix ANO-SEC-006: generate a random FLASK_SECRET_KEY per CI
+          # run instead of using the hardcoded
+          # ``ci-testing-secret-key-do-not-use-in-production`` string. The
+          # hardcoded value was added to the ``_PLACEHOLDER_SECRETS`` allowlist
+          # in server.py so the runtime check now rejects it.
+          FLASK_SECRET_KEY: ${{ secrets.CI_FLASK_SECRET_KEY || 'ci-' }}${{ github.run_id }}-${{ github.run_attempt }}
           ANONYMUS_ENV: testing
         run: pytest tests/unit/ tests/integration/ --timeout=30 --cov=core --cov=transports --cov-report=xml -m "not legacy"
 

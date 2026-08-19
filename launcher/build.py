@@ -36,7 +36,8 @@ def run_pyinstaller():
     cmd = [
         pyinstaller_exe,
         "--name",
-        "NetworkDiagnostics",
+        # Audit fix ANO-SEC-011: honest binary name (was "NetworkDiagnostics").
+        "AnonyMus",
         "--noconfirm",
         "--onedir",
         "--windowed",
@@ -78,13 +79,19 @@ def write_iss_script():
     print("Step 2: Generating Inno Setup script (setup.iss)...")
     print("--------------------------------------------------")
 
-    iss_content = """; Inno Setup Script for Windows Network Diagnostics Utility
+    iss_content = """; Inno Setup Script for AnonyMus Secure Messenger Launcher
+; Audit fix ANO-SEC-011: previously this script masqueraded the AnonyMus
+; launcher as "Windows Network Diagnostics Utility" with the binary name
+; ``NetworkDiagnostics.exe``. This was a disguise-mode feature intended to
+; mislead casual observers, but it impersonates a Windows system component
+; (which is misleading and could be flagged by antivirus heuristics). The
+; installer now uses honest naming.
 [Setup]
-AppName=Windows Network Diagnostics Utility
+AppName=AnonyMus Secure Messenger
 AppVersion=1.0
-DefaultDirName={localappdata}\\NetDiagnostics
-DefaultGroupName=Network Diagnostics Utility
-OutputBaseFilename=NetworkDiagnosticsInstaller
+DefaultDirName={localappdata}\\AnonyMus
+DefaultGroupName=AnonyMus Secure Messenger
+OutputBaseFilename=AnonyMusInstaller
 OutputDir=output
 Compression=lzma
 SolidCompression=yes
@@ -93,14 +100,14 @@ DisableDirPage=no
 DisableProgramGroupPage=yes
 
 [Files]
-Source: "dist\\NetworkDiagnostics\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+Source: "dist\\AnonyMus\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\\Network Diagnostics Utility"; Filename: "{app}\\NetworkDiagnostics.exe"
-Name: "{userdesktop}\\Network Diagnostics Utility"; Filename: "{app}\\NetworkDiagnostics.exe"
+Name: "{group}\\AnonyMus Secure Messenger"; Filename: "{app}\\AnonyMus.exe"
+Name: "{userdesktop}\\AnonyMus Secure Messenger"; Filename: "{app}\\AnonyMus.exe"
 
 [Run]
-Filename: "{app}\\NetworkDiagnostics.exe"; Description: "Launch Network Diagnostics Utility"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\\AnonyMus.exe"; Description: "Launch AnonyMus Secure Messenger"; Flags: nowait postinstall skipifsilent
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -160,19 +167,17 @@ def sign_executables():
     print("Step 4: Creating Self-Signed Certificate & Signing...")
     print("--------------------------------------------------")
 
-    launcher_exe = os.path.join(
-        DIST_DIR, "NetworkDiagnostics", "NetworkDiagnostics.exe"
-    )
-    installer_exe = os.path.join(OUTPUT_DIR, "NetworkDiagnosticsInstaller.exe")
+    launcher_exe = os.path.join(DIST_DIR, "AnonyMus", "AnonyMus.exe")
+    installer_exe = os.path.join(OUTPUT_DIR, "AnonyMusInstaller.exe")
 
     # PowerShell commands to provision certificate and execute Set-AuthenticodeSignature
     ps_script = f"""
-    $Subject = "CN=NetDiagnostics Project Code Sign"
+    $Subject = "CN=AnonyMus Project Code Sign"
     $Cert = Get-ChildItem Cert:\\CurrentUser\\My | Where-Object {{ $_.Subject -eq $Subject }} | Select-Object -First 1
 
     if (-not $Cert) {{
         Write-Host "Creating new self-signed code signing certificate..."
-        $Cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $Subject -CertStoreLocation Cert:\\CurrentUser\\My -FriendlyName "NetDiagnostics Code Signing"
+        $Cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $Subject -CertStoreLocation Cert:\\CurrentUser\\My -FriendlyName "AnonyMus Code Signing"
     }} else {{
         Write-Host "Reusing existing code signing certificate..."
     }}
@@ -207,9 +212,7 @@ def main():
 
         print("==================================================")
         print("BUILD SUCCESSFUL!")
-        print(
-            f"Installer: {os.path.join(OUTPUT_DIR, 'NetworkDiagnosticsInstaller.exe')}"
-        )
+        print(f"Installer: {os.path.join(OUTPUT_DIR, 'AnonyMusInstaller.exe')}")
         print("==================================================")
     except Exception as e:
         print(f"\nBUILD FAILED: {e}")

@@ -17,11 +17,12 @@ def test_kat_derive_db_key():
     salt = b"salt_for_db_key_anonymus"
     iterations = 10000
 
-    derived_key = derive_db_key(password, salt=salt, iterations=iterations)
+    derived_key, ret_salt = derive_db_key(password, salt=salt, iterations=iterations)
     assert len(derived_key) == 32
+    assert ret_salt == salt
 
     # Deterministic output verification
-    second_derivation = derive_db_key(password, salt=salt, iterations=iterations)
+    second_derivation, _ = derive_db_key(password, salt=salt, iterations=iterations)
     assert derived_key == second_derivation
     assert derived_key.hex() != ""
 

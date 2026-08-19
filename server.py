@@ -23,6 +23,17 @@ _PLACEHOLDER_SECRETS = {
     "diagnostics_ephemeral_control_key_2026",
     "changeme",
     "",
+    # Audit fix ANO-SEC-006: the CI workflows previously hardcoded
+    # ``ci-testing-secret-key-do-not-use-in-production`` as the
+    # ``FLASK_SECRET_KEY`` for test runs. The string was not in this
+    # allowlist, so the runtime check did not reject it. If a developer
+    # copied the CI env block into a production ``.env``, the application
+    # would boot with a publicly-known session-signing key.
+    "ci-testing-secret-key-do-not-use-in-production",
+    # Audit fix ANO-SEC-018: also reject the example value from .env.example
+    # so it cannot accidentally be deployed as-is.
+    "CHANGE_ME_TO_A_RANDOM_32_BYTE_HEX_VALUE",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 }
 if not os.environ.get("FLASK_SECRET_KEY"):
     os.environ["FLASK_SECRET_KEY"] = os.environ.get("SECRET_KEY", "")
@@ -43,9 +54,14 @@ def is_authorized_admin():
     remote_ip = request.remote_addr
     if remote_ip in ("127.0.0.1", "::1", "localhost"):
         return True
-    # 2. Allow if matching admin secret
+    # 2. Allow if matching admin secret (constant-time comparison).
+    # Audit fix ANO-SEC-024: previously used ``==`` which is vulnerable to
+    # timing attacks. ``secrets.compare_digest`` is constant-time.
+    import secrets as _secrets
+
     admin_secret = os.environ.get("ANONYMUS_ADMIN_SECRET")
-    if admin_secret and request.headers.get("X-Admin-Secret") == admin_secret:
+    provided = request.headers.get("X-Admin-Secret", "")
+    if admin_secret and provided and _secrets.compare_digest(provided, admin_secret):
         return True
     return False
 

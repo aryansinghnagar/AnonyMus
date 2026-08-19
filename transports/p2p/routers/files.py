@@ -13,9 +13,13 @@ from __future__ import annotations
 import re
 import tempfile
 import time
+from collections import defaultdict, deque
 from pathlib import Path
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.exceptions import InvalidSignature
 
 from core.logging_v3 import get_logger
 from transports.p2p.routers.auth import get_current_user, UserOut
@@ -33,6 +37,61 @@ MAX_TOTAL_STORAGE_BYTES = 500 * 1024 * 1024  # 500 MB
 CHUNK_TTL_SECONDS = 900  # 15 minutes
 
 
+# Audit fix ANO-SEC-004: per-uploader subdirectory under the chunk store,
+# keyed by sender onion address. Prevents cross-uploader overwrites.
+def _uploader_dir(sender_onion: str) -> Path:
+    """Return (creating if necessary) the per-uploader chunk subdirectory."""
+    # Validate the onion address to prevent path traversal via the sender field.
+    if not _ONION_V3_RE.match(sender_onion):
+        raise HTTPException(
+            status_code=400, detail="Invalid sender onion address format"
+        )
+    # Use a hash of the onion so the directory name is filesystem-safe.
+    import hashlib
+
+    safe = hashlib.sha256(sender_onion.encode("utf-8")).hexdigest()[:32]
+    d = XFTP_CHUNK_DIR / safe
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+# ── Per-uploader rate limiter (audit fix ANO-SEC-004) ─────────────────────────
+
+
+class _P2PUploadRateLimiter:
+    """Per-uploader rate limiter to prevent quota-exhaustion DoS.
+
+    Limits each uploader to 50 chunks per 5-minute window. Combined with
+    the 500 MB total quota and 15-minute TTL, this bounds a single
+    uploader to ~500 MB / 5 minutes (10 MB × 50 chunks) — enough for
+    legitimate file transfers but prevents a single peer from evicting
+    all in-flight transfers from other peers.
+    """
+
+    WINDOW_SECONDS = 300.0  # 5 minutes
+    MAX_UPLOADS_PER_WINDOW = 50
+
+    def __init__(self) -> None:
+        self._uploads: dict[str, deque[float]] = defaultdict(deque)
+        import threading
+
+        self._lock = threading.Lock()
+
+    def check_and_record(self, uploader: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            q = self._uploads[uploader]
+            while q and now - q[0] > self.WINDOW_SECONDS:
+                q.popleft()
+            if len(q) >= self.MAX_UPLOADS_PER_WINDOW:
+                return False
+            q.append(now)
+            return True
+
+
+_p2p_rate_limiter = _P2PUploadRateLimiter()
+
+
 def _sanitize_chunk_id(chunk_id: str) -> str:
     if not _CHUNK_ID_RE.match(chunk_id):
         raise HTTPException(status_code=400, detail="Invalid chunk identifier format")
@@ -43,7 +102,9 @@ def _prune_expired_chunks():
     """Removes expired chunks and maintains 500 MB storage cap."""
     try:
         now = time.time()
-        files = list(XFTP_CHUNK_DIR.glob("*.chunk"))
+        files = list(XFTP_CHUNK_DIR.glob("*/*.chunk")) + list(
+            XFTP_CHUNK_DIR.glob("*.chunk")
+        )
         total_bytes = 0
 
         # Remove TTL expired
@@ -59,9 +120,7 @@ def _prune_expired_chunks():
 
         # If still over quota, remove oldest
         if total_bytes > MAX_TOTAL_STORAGE_BYTES:
-            active_files = sorted(
-                XFTP_CHUNK_DIR.glob("*.chunk"), key=lambda p: p.stat().st_mtime
-            )
+            active_files = sorted(files, key=lambda p: p.stat().st_mtime)
             for f in active_files:
                 if total_bytes <= MAX_TOTAL_STORAGE_BYTES:
                     break
@@ -75,17 +134,31 @@ def _prune_expired_chunks():
         logger.warning("xftp_pruning_error", error=str(e))
 
 
-def _save_chunk(chunk_id: str, data: bytes) -> None:
+def _save_chunk(chunk_id: str, data: bytes, sender_onion: str | None = None) -> None:
+    """Save a chunk to disk.
+
+    Audit fix ANO-SEC-004: when ``sender_onion`` is provided, the chunk is
+    written to the per-uploader subdirectory so two peers writing the same
+    ``chunk_id`` will not overwrite each other's data.
+    """
     _sanitize_chunk_id(chunk_id)
     _prune_expired_chunks()
-    target = XFTP_CHUNK_DIR / f"{chunk_id}.chunk"
+    if sender_onion:
+        target_dir = _uploader_dir(sender_onion)
+    else:
+        target_dir = XFTP_CHUNK_DIR
+    target = target_dir / f"{chunk_id}.chunk"
     with open(target, "wb") as f:
         f.write(data)
 
 
-def _load_chunk(chunk_id: str) -> bytes | None:
+def _load_chunk(chunk_id: str, sender_onion: str | None = None) -> bytes | None:
     _sanitize_chunk_id(chunk_id)
-    target = XFTP_CHUNK_DIR / f"{chunk_id}.chunk"
+    if sender_onion:
+        target_dir = _uploader_dir(sender_onion)
+    else:
+        target_dir = XFTP_CHUNK_DIR
+    target = target_dir / f"{chunk_id}.chunk"
     if not target.exists():
         return None
     try:
@@ -96,6 +169,85 @@ def _load_chunk(chunk_id: str) -> bytes | None:
             return f.read()
     except Exception:
         return None
+
+
+# ── Signature verification (audit fix ANO-SEC-004) ────────────────────────────
+
+
+def _verify_p2p_upload_signature(
+    chunk_id: str,
+    timestamp: str,
+    signature_b64: str,
+    sender_onion: str,
+    max_skew_seconds: int = 300,
+) -> None:
+    """Verify an Ed25519 signature over (chunk_id || timestamp) from the sender.
+
+    Audit fix ANO-SEC-004: the P2P upload endpoint now requires the uploader
+    to sign ``f"{chunk_id}|{timestamp}"`` with the Ed25519 identity key
+    whose public-key bytes are encoded in the v3 onion address.
+
+    Tor v3 onion addresses encode a 32-byte Ed25519 public key in base32
+    (the first 56 characters before ``.onion``). We extract the public key
+    from the sender's onion address, then verify the signature.
+
+    Raises HTTPException 401 if the signature is invalid or the timestamp
+    is outside the allowed skew window.
+    """
+    import base64 as _b64
+    import datetime as _dt
+
+    # Validate the sender onion address format (v3 only: 56 base32 chars + .onion).
+    m = _ONION_V3_RE.match(sender_onion)
+    if not m:
+        raise HTTPException(
+            status_code=400,
+            detail="Sender must be a v3 onion address (56 base32 chars + .onion)",
+        )
+    onion_host = m.group(1)
+    pubkey_b32 = onion_host[:56]
+
+    # Decode the base32 public key.
+    pad_len = (-len(pubkey_b32)) % 8
+    try:
+        pubkey_bytes = _b64.b32decode(pubkey_b32 + "=" * pad_len)
+    except Exception:
+        raise HTTPException(
+            status_code=400, detail="Could not decode onion address public key"
+        )
+    if len(pubkey_bytes) != 32:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Onion address public key must be 32 bytes (got {len(pubkey_bytes)})",
+        )
+
+    # Validate timestamp skew (defense against replay attacks).
+    try:
+        ts = _dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except Exception:
+        raise HTTPException(
+            status_code=400, detail="Invalid timestamp format (expected ISO-8601)"
+        )
+    now = _dt.datetime.now(_dt.timezone.utc)
+    skew = abs((now - ts).total_seconds())
+    if skew > max_skew_seconds:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Timestamp skew {skew:.0f}s exceeds allowed {max_skew_seconds}s",
+        )
+
+    # Verify the signature.
+    try:
+        signature = _b64.b64decode(signature_b64)
+        public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+        message = f"{chunk_id}|{timestamp}".encode("utf-8")
+        public_key.verify(signature, message)
+    except InvalidSignature:
+        raise HTTPException(status_code=401, detail="Invalid Ed25519 signature")
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Signature verification failed: {e}"
+        )
 
 
 @router.post(
@@ -209,14 +361,49 @@ async def p2p_upload(
     chunk_id: str,
     request: Request,
 ) -> dict:
+    # Audit fix ANO-SEC-004: require an Ed25519 signature from the uploader
+    # so anonymous peers cannot pollute the chunk store or evict in-flight
+    # transfers from other peers. The signature is over
+    # ``f"{chunk_id}|{timestamp}"`` where timestamp is an ISO-8601 string
+    # included in the ``X-Timestamp`` header. The uploader's identity is
+    # derived from the onion address in the ``X-Sender-Onion`` header,
+    # which must match the public key recovered from the signature.
+    sender_onion = request.headers.get("X-Sender-Onion", "")
+    timestamp = request.headers.get("X-Timestamp", "")
+    signature_b64 = request.headers.get("X-Signature", "")
+
+    if not sender_onion or not timestamp or not signature_b64:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "P2P upload requires X-Sender-Onion, X-Timestamp, and "
+                "X-Signature headers (audit fix ANO-SEC-004)"
+            ),
+        )
+
+    # Verify signature before reading the (potentially large) body.
+    _verify_p2p_upload_signature(chunk_id, timestamp, signature_b64, sender_onion)
+
+    # Per-uploader rate limiting.
+    if not _p2p_rate_limiter.check_and_record(sender_onion):
+        raise HTTPException(
+            status_code=429,
+            detail="Per-uploader rate limit exceeded; try again later",
+        )
+
     body = await request.body()
     if not body:
         raise HTTPException(status_code=400, detail="Empty request body")
     if len(body) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Chunk size too large")
 
-    _save_chunk(chunk_id, body)
-    logger.info("chunk_uploaded_p2p", chunk_id=chunk_id, size=len(body))
+    _save_chunk(chunk_id, body, sender_onion=sender_onion)
+    logger.info(
+        "chunk_uploaded_p2p",
+        chunk_id=chunk_id,
+        size=len(body),
+        sender=sender_onion[:16],
+    )
     return {"success": True}
 
 
@@ -226,10 +413,19 @@ async def p2p_upload(
 )
 async def p2p_download(
     chunk_id: str,
+    request: Request,
 ) -> Response:
-    chunk = _load_chunk(chunk_id)
+    # Audit fix ANO-SEC-004: require the requester to specify which uploader's
+    # chunk they want (per-uploader subdirectory isolation).
+    sender_onion = request.headers.get("X-Sender-Onion", "")
+    chunk = _load_chunk(chunk_id, sender_onion=sender_onion or None)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
 
-    logger.info("chunk_downloaded_p2p", chunk_id=chunk_id, size=len(chunk))
+    logger.info(
+        "chunk_downloaded_p2p",
+        chunk_id=chunk_id,
+        size=len(chunk),
+        sender=sender_onion[:16] if sender_onion else "unknown",
+    )
     return Response(content=chunk, media_type="application/octet-stream")

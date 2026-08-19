@@ -125,6 +125,11 @@ services:
       - onion
 
   # ── Coturn (TURN/STUN server) ────────────────────────────────────────────────
+  # Audit fix ANO-SEC-003: TURN credentials are now read from the environment
+  # via the standard ``COTURN_USER`` and ``COTURN_PASSWORD`` variables, which
+  # MUST be set in the ``.env`` file (which is gitignored). Previously the
+  # credentials were hardcoded as ``anonymus:turnpassword`` — visible to
+  # anyone with read access to the repository.
   coturn:
     image: coturn/coturn:latest
     container_name: anonymus-coturn
@@ -138,8 +143,8 @@ services:
       - -n
       - --log-file=stdout
       - --lt-cred-mech
-      - --user=anonymus:turnpassword
-      - --realm=anonymus.chat
+      - --user=${COTURN_USER:?COTURN_USER must be set in .env}:${COTURN_PASSWORD:?COTURN_PASSWORD must be set in .env}
+      - --realm=${COTURN_REALM:-anonymus.chat}
     networks:
       - internal
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
@@ -104,7 +104,31 @@ def create_relay_app() -> FastAPI:
         return {"status": "ok", "role": "relay"}
 
     @application.get("/metrics", tags=["observability"])
-    async def metrics() -> Response:
+    async def metrics(request: Request) -> Response:
+        # Audit fix ANO-SEC-007: same authentication gate as the p2p /metrics
+        # endpoint. Loopback access is allowed; non-loopback requests require
+        # a bearer token matching ANONYMUS_METRICS_TOKEN.
+        import os
+        import secrets as _secrets
+
+        client_ip = request.client.host if request.client else ""
+        if client_ip in ("127.0.0.1", "::1", "localhost"):
+            return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+        auth_header = request.headers.get("Authorization", "")
+        token = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        expected = os.environ.get("ANONYMUS_METRICS_TOKEN", "")
+        if not expected or not token or not _secrets.compare_digest(token, expected):
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "Metrics endpoint requires either loopback access or "
+                    "Authorization: Bearer <ANONYMUS_METRICS_TOKEN> "
+                    "(audit fix ANO-SEC-007)"
+                ),
+            )
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     return application

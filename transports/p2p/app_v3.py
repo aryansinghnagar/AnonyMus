@@ -17,7 +17,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request, Response, Depends
+from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import (
@@ -341,7 +341,47 @@ def create_app() -> FastAPI:
             )
 
     @application.get("/metrics", tags=["observability"], summary="Prometheus metrics")
-    async def metrics() -> Response:
+    async def metrics(request: Request) -> Response:
+        # Audit fix ANO-SEC-007: the ``/metrics`` endpoint exposes Prometheus
+        # data (counter values, histogram buckets, label sets that reveal
+        # which onion addresses have been active, message counts, etc.) to
+        # anyone who can reach the server. Previously the endpoint was
+        # unauthenticated. We now require either:
+        #
+        #   (a) a request from loopback (127.0.0.1 / ::1), OR
+        #   (b) a valid bearer token in the ``Authorization`` header that
+        #       matches the ``ANONYMUS_METRICS_TOKEN`` env var.
+        #
+        # If neither is present, the endpoint returns 401. The token is
+        # compared with ``secrets.compare_digest`` (constant-time) to
+        # prevent timing attacks.
+        import os
+        import secrets as _secrets
+
+        client_ip = request.client.host if request.client else ""
+        if client_ip in ("127.0.0.1", "::1", "localhost"):
+            # Loopback requests are allowed without a token (Prometheus
+            # scrapers typically run on the same host).
+            return Response(
+                content=generate_latest(),
+                media_type=CONTENT_TYPE_LATEST,
+            )
+
+        # Non-loopback: require a bearer token.
+        auth_header = request.headers.get("Authorization", "")
+        token = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        expected = os.environ.get("ANONYMUS_METRICS_TOKEN", "")
+        if not expected or not token or not _secrets.compare_digest(token, expected):
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "Metrics endpoint requires either loopback access or "
+                    "Authorization: Bearer <ANONYMUS_METRICS_TOKEN> "
+                    "(audit fix ANO-SEC-007)"
+                ),
+            )
         return Response(
             content=generate_latest(),
             media_type=CONTENT_TYPE_LATEST,

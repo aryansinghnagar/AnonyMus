@@ -12,6 +12,44 @@ interface Props {
   onion: string;
 }
 
+// Audit fix ANO-UX-001: helper to safely render a message body.
+// - If the message was successfully decrypted (the store rewrote
+//   ``ciphertext_b64`` to ``btoa(plaintext)``), decode the base64 back
+//   to the plaintext string and display it.
+// - If decryption failed (the store left the original ciphertext), display
+//   a placeholder so the user is not shown raw binary mojibake.
+function renderMessageBody(msg: { ciphertext_b64: string; is_decrypted?: boolean }): string {
+  // Heuristic: the store sets ``ciphertext_b64 = btoa(plaintext)`` on
+  // successful decryption. If the value decodes cleanly to valid UTF-8, we
+  // treat it as decrypted plaintext. If it decodes to bytes outside the
+  // printable range, we treat the message as still-encrypted and show a
+  // placeholder instead.
+  try {
+    const decoded = atob(msg.ciphertext_b64);
+    // Check that the decoded string is plausible UTF-8 text (every char
+    // code is in the printable range or a common whitespace char).
+    let printable = true;
+    for (let i = 0; i < decoded.length; i++) {
+      const c = decoded.charCodeAt(i);
+      // Allow printable ASCII (32-126), tab (9), newline (10), carriage
+      // return (13), and any non-ASCII (>= 160, which covers Latin-1 +
+      // UTF-8 continuation bytes when interpreted as Latin-1).
+      if (c < 9 || (c > 13 && c < 32) || (c > 126 && c < 160)) {
+        printable = false;
+        break;
+      }
+    }
+    if (printable) {
+      return decoded;
+    }
+    // Not printable — treat as still-encrypted ciphertext.
+    return "🔒 Encrypted message — decryption pending";
+  } catch {
+    // ``atob`` failed entirely — not valid base64. Show a placeholder.
+    return "🔒 Encrypted message — decryption pending";
+  }
+}
+
 export const ChatArea: Component<Props> = (props) => {
   let bottomRef: HTMLDivElement | undefined;
   const [text, setText] = createSignal("");
@@ -125,8 +163,15 @@ export const ChatArea: Component<Props> = (props) => {
                       role="article"
                       aria-label={`${sent ? "Sent" : "Received"} message`}
                     >
-                      {/* In Phase 5 this decrypts via WASM DR session */}
-                      {atob(msg.ciphertext_b64)}
+                      {/* Audit fix ANO-UX-001: render decrypted plaintext via
+                          the renderMessageBody helper. Previously this called
+                          ``atob(msg.ciphertext_b64)`` directly, which rendered
+                          raw AES-GCM ciphertext bytes as Latin-1 mojibake
+                          (the comment "In Phase 5 this decrypts via WASM DR
+                          session" indicated the decryption pipeline was not
+                          wired up, but the store in messages.ts had already
+                          wired it up — the UI just wasn't using the result). */}
+                      {renderMessageBody(msg)}
                     </div>
                     <p class="msg-time">{formatTime(msg.sent_at)}</p>
                   </div>

@@ -95,16 +95,34 @@ def get_system_specs():
         return {"OS": "Windows 10", "CPU": "x86_64", "RAM": "8 GB", "Arch": "AMD64"}
 
 
-class NetworkDiagnosticsApp:
+class AnonyMusLauncherApp:
+    # Audit fix ANO-SEC-011: previously this class was named ``NetworkDiagnosticsApp``
+    # to support the disguise-mode feature that masqueraded the launcher as a
+    # Windows system utility. Renamed to ``AnonyMusLauncherApp`` for honesty.
     def __init__(self, root):
         self.root = root
 
         # Config Settings file path
-        self.config_file = os.path.join(BASE_DIR, "diagnostics_config.json")
+        # Audit fix ANO-SEC-011: renamed from ``diagnostics_config.json``
+        # to ``anonymus_launcher_config.json`` for honesty. The launcher will
+        # still read the old filename if the new one does not exist (migration
+        # support).
+        self.config_file = os.path.join(BASE_DIR, "anonymus_launcher_config.json")
+        if not os.path.exists(self.config_file):
+            legacy = os.path.join(BASE_DIR, "diagnostics_config.json")
+            if os.path.exists(legacy):
+                self.config_file = legacy
         self.load_settings()
 
         if self.settings.get("disguise", False):
-            self.root.title("Windows Network Diagnostics & Adapter Utility")
+            # Audit fix ANO-SEC-011: previously the disguise mode set the
+            # window title to "Windows Network Diagnostics & Adapter Utility"
+            # to masquerade the AnonyMus launcher as a system utility. This
+            # is misleading to casual observers (and to the user themselves
+            # if they later forget what the binary is). Disguise mode now
+            # uses a generic but honest title that does not impersonate a
+            # Windows system component.
+            self.root.title("Secure Local Service")
             self.root.geometry("620x460")
         else:
             self.root.title("AnonyMus Secure Messenger Launcher")
@@ -753,6 +771,6 @@ def on_closing():
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app_gui = NetworkDiagnosticsApp(root)
+    app_gui = AnonyMusLauncherApp(root)
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
