@@ -41,11 +41,13 @@ python3 anonymus-launcher.py
 ## Key Features
 
 - **Zero-Knowledge Identity**: No email, phone number, or central directory registration required. Your cryptographic onion address is your public identity.
-- **End-to-End Encryption**: Signal-grade Double Ratchet + ML-KEM-768 hybrid key exchange.
+- **End-to-End Encryption**: Signal-grade Double Ratchet + ML-KEM-768 hybrid key exchange with uniform message padding.
+- **Rejection-Sampling Safety Numbers**: Provably unbiased 12-group 5-digit verification codes (`ANO-CODE-009`).
 - **Disappearing & Ephemeral Messages**: Configurable TTL auto-burn timers with secure SQLite page zeroing.
-- **Multi-Device Synchronization**: Mutual 6-digit SAS PIN-verified LAN device pairing.
-- **Encrypted File Transfer (XFTP)**: Chunked, bounded disk-backed encrypted media transfer with automatic TTL pruning.
-- **Decoy Profiles & Plausible Deniability**: Multiple sandboxed contact profiles behind independent unlock codes.
+- **Multi-Device Synchronization**: Cryptographically authenticated LAN pairing using 256-bit base32 tokens, fresh HKDF salts, and replay-protected sync queues (`ANO-SEC-001`).
+- **Encrypted File Transfer (XFTP)**: Ed25519-signed chunked, bounded disk-backed encrypted media transfer with automatic TTL pruning (`ANO-SEC-004`).
+- **Decoy Profiles & Plausible Deniability**: Multiple sandboxed contact profiles behind independent unlock codes with instant duress panic wipe.
+- **SQLCipher At-Rest Encryption**: Argon2id (`t=3, m=65536, p=4`) and 600k PBKDF2 derivation with unique 16-byte random salts (`ANO-SEC-002`, `ANO-SEC-008`).
 
 ---
 
@@ -65,9 +67,9 @@ python3 anonymus-launcher.py
                │                           │
  ┌─────────────▼───────────────┐ ┌─────────▼──────────────┐
  │     Cryptographic Core      │ │    Transport Layer     │
- │  - Rust `anonymus_core`     │ │  - Tor v3 SOCKS5 Pool  │
+ │  - Rust `anonymus_core`     │ │  - Stem TorManager     │
  │  - Double Ratchet + ML-KEM  │ │  - Authenticated Sync  │
- │  - Argon2id / AES-256-GCM   │ │  - Local mDNS Beacon   │
+ │  - Argon2id / AES-256-GCM   │ │  - Prekey Pool Worker  │
  └─────────────────────────────┘ └────────────────────────┘
 ```
 
@@ -75,16 +77,18 @@ python3 anonymus-launcher.py
 
 ## Documentation Suite
 
-- [User Quickstart Guide](QUICKSTART.md) — Comprehensive guide on creating identities, adding contacts, and pairing devices.
-- [System Architecture](ARCHITECTURE.md) — In-depth architectural blueprint, protocol specifications, and database schema.
+- [User Quickstart Guide](QUICKSTART.md) — Step-by-step identity setup, contact addition, and device synchronization.
+- [System Architecture](ARCHITECTURE.md) — Architectural blueprint, protocol specifications, and database schema.
 - [Security Policy & Threat Model](SECURITY.md) — Cryptographic parameters, vulnerability disclosure, and threat analysis.
-- [Testing & Verification Guide](TESTING.md) — Master test suite and CI verification instructions.
+- [Audit Remediation Log](AUDIT_REMEDIATION.md) — Forensic security audit remediation record (ANO-SEC-001 through ANO-SEC-024).
+- [Testing & Verification Guide](TESTING.md) — Test suite layout, KAT verification, and failure mode matrix.
+- [Changelog](CHANGELOG.md) — Version history and security release notes.
 
 ---
 
 ## Verification & Testing
 
-Run the full automated test suite locally:
+Run the automated backend test suites:
 
 ```powershell
 # Python Unit & Cryptographic KAT Suite
@@ -93,7 +97,11 @@ python -m pytest tests/unit -v
 # FastAPI Integration & Contract Suite
 python -m pytest tests/integration/test_fastapi_v3.py tests/integration/test_contract_v3.py -v
 
-# Rust Core Verification
+# Python Linter & Formatting Checks
+ruff check .
+ruff format --check .
+
+# Rust Core Compilation & Types Verification
 cargo check --lib --manifest-path core/rust/Cargo.toml
 ```
 

@@ -1,71 +1,84 @@
-# System Features & Cryptographic Specification
+# Cryptographic Specification & Security Architecture (v3.0)
 
-This document details the functional features and cryptographic specifications implemented in the unified AnonyMus application. It covers both the **Centralized Relay** architecture and the **Decentralized P2P** (Tor onion) architecture.
-
----
-
-## 1. Shared Cryptographic Security Model
-
-Both modes of operation share the same core cryptographic DNA to ensure end-to-end encryption (E2EE) and metadata resistance.
-
-### A. Key Exchange & Session Setup
-- **Key Generation**: Clients generate ephemeral Elliptic Curve Diffie-Hellman (ECDH) keypairs using the **NIST P-256 (secp256r1)** curve.
-- **Handshake Protocol**: Session initiation is conducted out-of-band (via QR code or secure onion exchange URL). The clients exchange public identity keys.
-- **Shared Secret Derivation**: A master shared secret is generated via P-256 ECDH and immediately run through **HKDF-SHA256** to derive initial encryption, decryption, and authentication keys.
-
-### B. Message Forward Secrecy (HKDF Ratchet)
-To protect past messages in the event of a key compromise, a symmetric key ratchet is executed:
-- **Chain Key Ratchet**: For every message sent or received, the active chain key is advanced through an **HKDF-SHA256** step to derive a new message key and the next chain key.
-- **Ephemeral Message Keys**: Every message is encrypted with a unique, single-use symmetric key. Once used, the key is overwritten with zeros (zero-filled) in local RAM.
-
-### C. Authenticated Encryption
-- **Symmetric Cipher**: Payload encryption utilizes **AES-256-GCM** with a random 12-byte initialization vector (IV) generated via cryptographically secure random number generators (CSPRNG).
-- **Associated Data Binding (AAD)**: Ciphertext integrity is bound to the conversation context by injecting the sorted cryptographic fingerprints of the participants (Safety Number) and the protocol version as Associated Data during the encryption and decryption steps.
+This specification defines the cryptographic primitives, key derivation functions, ratchet state transitions, envelope formats, and at-rest storage mechanisms implemented in AnonyMus v3.0.
 
 ---
 
-## 2. Centralized Relay Mode Features
+## 1. Cryptographic Primitives & Parameters
 
-When operating in centralized relay mode, the system uses a server-client layout optimized for metadata resistance and speed.
-
-- **Stateless Message Queues**: Messages are routed to ephemeral memory queues identified by UUIDs. The server retains messages in-memory only until they are successfully fetched by the recipient, minimizing the storage footprint.
-- **Queue Access Authorization**: WebSocket clients must authenticate using session tokens. The server enforces queue-level authorization checks to ensure a user can only pull messages from their designated queue.
-- **Write-Ahead Logging (WAL)**: The SQLite authentication database utilizes WAL mode and an active busy timeout (5000ms) to ensure thread-safety and prevent database locks under high load.
-- **Local Area mDNS Discovery**: The server advertises its socket port over multicast DNS using the service type `_anonymus._tcp.local.`. Scanning Android clients parse mDNS pointers to locate active server relays without requiring manual IP entry.
-
----
-
-## 3. Decentralized P2P Mode Features
-
-When operating in peer-to-peer mode, the application runs as a local server node integrated with Tor, bypassing the need for a centralized relay server.
-
-- **Embedded Tor Expert Bundle**: Auto-downloads, integrity-verifies, and orchestrates a local Tor daemon. Outbound traffic is routed through local SOCKS5 proxy (`127.0.0.1:9050`), ensuring peers never see another peer's actual IP address.
-- **Tor Onion Hidden Services**: Exposes the local node Flask endpoint over Tor (`.onion` address), enabling connection traversal across firewalls and NATs.
-- **Localhost-Bound Security Boundary**: Restricts Flask API access. Only endpoints starting with `/p2p/` are accessible via the external Tor network. The general chat interface and administrative control paths are strictly bound to `localhost`/`127.0.0.1` to prevent unauthorized remote control.
-- **AES-256-GCM Local Database Encryption**: Peer keys, contact lists, and message history are stored in a local SQLite database (`local_node.db`) encrypted at rest using AES-256-GCM. The key is derived from the master password using PBKDF2-HMAC-SHA256 (10,000 iterations).
-- **Contact Directory Model**: Stores peer nicknames, onion addresses, public keys, and negotiated shared secrets in the encrypted local database.
-- **Camouflage Launcher GUI**: Tkinter GUI is disguised as "Windows Network Diagnostics & Adapter Utility" with dynamic port binding to evade static-port detection.
-- **Secure-Wiping Uninstaller**: Built with Inno Setup, the uninstaller secure-wipes and erases local databases, logs, Tor configurations, and downloaded Tor binaries upon removal.
+| Primitive Role | Algorithm / Standard | Parameters / Key Sizes |
+|---|---|---|
+| **Classical Key Exchange** | X25519 (RFC 7748) | Curve25519 ECDH, 32-byte public/private keys |
+| **Post-Quantum Key Exchange** | ML-KEM-768 (NIST FIPS 203) | Kyber768, 1184-byte public key, 1088-byte ciphertext |
+| **Digital Signatures** | Ed25519 (RFC 8032) | 32-byte public key, 64-byte signature |
+| **Symmetric Encryption (AEAD)** | AES-256-GCM (NIST SP 800-38D) | 256-bit key, 12-byte IV, 16-byte authentication tag |
+| **Alternative Cipher** | ChaCha20-Poly1305 (RFC 8439) | 256-bit key, 12-byte nonce, 16-byte tag |
+| **Key Derivation Function** | HKDF-SHA256 (RFC 5869) | SHA-256 extract & expand with contextual info strings |
+| **At-Rest Key Derivation** | Argon2id & PBKDF2-HMAC-SHA256 | Argon2id ($t=3, m=65536, p=4$) / PBKDF2 (600,000 iter, 16B salt) |
+| **Password Storage** | bcrypt | Work factor 12 |
 
 ---
 
-## 4. Unified WSGI Dispatcher & Mode Selector
+## 2. Post-Quantum Hybrid Key Encapsulation (PQXDH)
 
-The application integrates both architectures into a single process:
-- **Unified Dispatcher**: Runs a WSGI middleware wrapping both the Relay Flask server and the P2P Flask server.
-- **Runtime Mode Swapping**: Supports hot-swapping modes without restarting the web interface. Changing modes triggers a handoff procedure, copying session parameters, stopping the active transport, and starting the target transport.
-- **Log Sanitation**: A unified logging filter automatically redacts Base64 key material, authorization headers, and UUIDs to prevent leaks in logs across both modes.
+AnonyMus protects against harvest-now-decrypt-later attacks by combining classical Diffie-Hellman with quantum-resistant lattice encapsulation:
+
+### A. Prekey Bundles & Pool Replenishment
+Each node generates and publishes prekey bundles comprising:
+- **Identity Key**: Long-term Ed25519/X25519 keypair ($IK$).
+- **Signed Prekey**: Medium-term X25519 keypair ($SPK$) signed with $IK$.
+- **One-Time Prekeys**: Ephemeral X25519 keypairs ($OPK$).
+- **Post-Quantum Prekey**: NIST FIPS 203 ML-KEM-768 keypair ($PQ\_PK$).
+
+The background worker (`core/prekey_pool.py`) continuously tracks active prekey pools and automatically generates new bundles whenever available one-time keys fall below configured thresholds.
+
+### B. Shared Secret Derivation
+The sender initiates a session by generating ephemeral keypair $EK$ and encapsulating against the recipient's $PQ\_PK$:
+$$(\text{kem\_ct}, \text{kem\_ss}) = \text{ML-KEM-768.Encaps}(PQ\_PK)$$
+$$\text{DH}_1 = \text{X25519}(IK_A, SPK_B), \quad \text{DH}_2 = \text{X25519}(EK_A, IK_B)$$
+$$\text{DH}_3 = \text{X25519}(EK_A, SPK_B), \quad \text{DH}_4 = \text{X25519}(EK_A, OPK_B)$$
+$$\text{Classical\_Secret} = \text{DH}_1 \parallel \text{DH}_2 \parallel \text{DH}_3 \parallel \text{DH}_4$$
+$$\text{Master\_Secret} = \text{HKDF-SHA256}(\text{Classical\_Secret} \parallel \text{kem\_ss}, \text{salt}=\text{"AnonyMus-PQXDH-v3"}, \text{info}=\text{"SessionMasterKey"})$$
 
 ---
 
-## 5. Client Protections & Hardening
+## 3. Double Ratchet & Authenticated Decryption
 
-### Web Client
-- **Chunked Base64 Conversion**: Encodes and transfers large message payloads using chunked `toBase64` conversion to avoid browser call-stack overflows.
-- **Disappearing Messages**: Message lifetime is negotiated client-to-client via encrypted control frames. Client-side timers delete the message from the DOM and overwrite memory upon expiration.
+### A. Ratchet Mechanics
+Each session maintains symmetric sending and receiving chain keys alongside an asynchronous Diffie-Hellman ratchet:
+1. **Symmetric Step**: Advancing the sending/receiving chain produces a unique 32-byte message key ($MK$) and the next chain key.
+2. **DH Ratchet Step**: Whenever a message with a new ephemeral DH public key is received, a new DH secret is computed and mixed into the root key via HKDF-SHA256.
 
-### Android Client
-- **Google Tink Engine**: Cryptographic primitives are managed via Google's Tink library, isolating key material from standard application space.
-- **Biometric Authentication**: Access to the app dashboard is locked behind biometric fingerprint scanning (with device PIN fallback) utilizing Android `BiometricPrompt`.
-- **Anti-Screenshot Flag**: Enforces `WindowManager.LayoutParams.FLAG_SECURE` to block screenshots, screen sharing, and remote recording.
-- **Cert Pinning (TOFU)**: Implements Trust-on-First-Use cert pinning. The client pins the server's TLS certificate fingerprint on first connection and flags any modifications.
+### B. Strict v2 Associated Authenticated Data (`ANO-SEC-017`)
+To prevent session splicing and downgrade attacks, encryption strictly binds the v2 AAD header:
+$$\text{AAD} = \text{SHA256}(\text{session\_id})[:16] \parallel \text{role\_byte} \parallel \text{uint32\_be}(\text{seq\_num}) \parallel \text{0x02}$$
+*Legacy v1 AAD fallback has been eliminated to protect against downgrade forgery.*
+
+### C. Uniform Message Padding
+Before encryption, plaintexts are padded to uniform 2 KB block boundaries with pseudo-random byte jitter (`core/rust/src/protocol/padding.rs`), mitigating traffic-analysis side-channel leakage.
+
+---
+
+## 4. Rejection-Sampling Safety Numbers (`ANO-CODE-009`)
+
+Safety numbers allow out-of-band verification of participant identity keys:
+1. Participant public keys are sorted lexicographically: $\text{data} = \text{sort}(PK_A, PK_B)$.
+2. SHA-256 hash chains generate 32-bit candidate integers.
+3. Candidate values are filtered with strict rejection sampling ($\text{val} < 4,294,900,000$).
+4. Accepted values are reduced modulo $100,000$ to produce 12 groups of 5-digit decimal strings with **zero modulo bias**.
+
+---
+
+## 5. Metadata Protection & Envelope Privacy
+
+- **Sealed-Sender Routing (`ANO-SEC-013`)**: Inner payloads encrypt sender identity. In strict mode (`ANONYMUS_SEALED_SENDER_STRICT=1`), messages from unverified contacts are dropped before reaching internal state stores.
+- **Signed XFTP Chunk Transfer (`ANO-SEC-004`)**: File uploads are partitioned into 10 MB chunks and signed with the uploader's Ed25519 key, preventing cross-uploader cache poisoning and quota exhaustion.
+- **Relay Node Verification (`ANO-SEC-005`)**: Node registration on blind relays requires Ed25519 signature proof over timestamped onion challenges.
+
+---
+
+## 6. Storage Encryption & Anti-Forensics
+
+- **SQLCipher Integration (`ANO-SEC-008`)**: Databases use AES-256-GCM page encryption. In production, missing database keys trigger immediate startup termination.
+- **Argon2id Key Derivation (`ANO-SEC-002`)**: Passphrases derive encryption keys via Argon2id ($t=3, m=65536, p=4$) with a per-database cryptographically random 16-byte salt (`generate_db_salt()`).
+- **Emergency Zeroization (`obliviate`)**: Duress codes trigger multi-pass cryptographic zeroing (`os.urandom`) over local database files and key stores.

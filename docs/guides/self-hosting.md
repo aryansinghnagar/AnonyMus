@@ -1,4 +1,4 @@
-﻿# Self-Hosting an AnonyMus Relay
+# Self-Hosting an AnonyMus Relay
 
 AnonyMus relays are **blind** — they store no message content, no usernames, and no passwords. All message content is E2E-encrypted before it ever reaches the relay. If your server is seized, there is nothing to disclose.
 
@@ -9,7 +9,7 @@ AnonyMus relays are **blind** — they store no message content, no usernames, a
 ### Option A — Clearnet with automatic TLS (Caddy)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/AnonyMus/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/aryansinghnagar/AnonyMus/main/install.sh \
   | sudo bash -s -- --domain relay.example.com
 ```
 
@@ -18,7 +18,7 @@ Point your DNS `A` record at the server IP **before** running this command so Ca
 ### Option B — Tor-only (.onion, no IP address)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/AnonyMus/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/aryansinghnagar/AnonyMus/main/install.sh \
   | sudo bash -s -- --onion-only
 ```
 
@@ -27,12 +27,12 @@ After installation the `.onion` address is printed and stored in `/opt/anonymus-
 ### Option C — Docker Compose
 
 ```bash
-git clone https://github.com/your-org/AnonyMus
+git clone https://github.com/aryansinghnagar/AnonyMus
 cd AnonyMus
 
 # Copy and configure environment
 cp .env.example .env
-# Edit .env: set FLASK_SECRET_KEY, RELAY_DOMAIN
+# Edit .env: set SECRET_KEY, RELAY_DOMAIN, COTURN_USER, COTURN_PASSWORD
 
 # Clearnet + TLS mode
 docker compose --profile clearnet up -d
@@ -47,10 +47,14 @@ docker compose --profile onion up -d
 
 | Variable | Default | Description |
 |---|---|---|
-| `FLASK_SECRET_KEY` | **required** | 64-char hex secret for session signing |
+| `SECRET_KEY` | **required** | 64-char hex secret for session signing and challenge auth |
+| `DB_KEY` | _(empty in dev)_ | 64-char hex secret for SQLCipher database encryption |
 | `RELAY_PORT` | `5001` | Internal port the relay listens on |
 | `RELAY_DOMAIN` | _(empty)_ | Your public domain (needed for Caddy TLS) |
 | `RELAY_AS_ONION` | `false` | Set `true` for Tor-only deployment |
+| `COTURN_USER` | **required** | Coturn TURN authentication username (`ANO-SEC-003`) |
+| `COTURN_PASSWORD` | **required** | Coturn TURN authentication password (`ANO-SEC-003`) |
+| `ANONYMUS_METRICS_TOKEN` | _(empty)_ | Bearer token for authenticating `/metrics` endpoint (`ANO-SEC-007`) |
 | `REDIS_URL` | _(empty)_ | Optional Redis URL for offline message buffering |
 
 ---
@@ -61,7 +65,7 @@ docker compose --profile onion up -d
 |---|---|---|
 | Queue IDs (UUID) | ✅ In memory | Ephemeral, lost on restart |
 | Message content | ❌ Never | E2E encrypted, relay is blind |
-| Sender identity | ❌ Never | Tor circuit masks IP |
+| Sender identity | ❌ Never | Tor circuit masks IP / Sealed sender |
 | Recipient identity | ❌ Never | Only queue UUID is known |
 | Offline message payloads | ✅ Temporarily | Deleted immediately on delivery; max 500 per queue, 24 hr TTL |
 
@@ -84,7 +88,7 @@ docker compose pull && docker compose up -d
 
 ## Transparency template
 
-As an operator, you are encouraged to publish a transparency report. See [TRANSPARENCY.md](TRANSPARENCY.md) for a template.
+As an operator, you are encouraged to publish a transparency report. See [transparency.md](../security/transparency.md) for guidelines.
 
 ---
 

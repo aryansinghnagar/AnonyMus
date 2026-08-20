@@ -1,62 +1,75 @@
-# AnonyMus Mobile-to-Desktop Syncing Specification
+# AnonyMus Multi-Device LAN Synchronization Protocol (v3.0)
 
-This document details the transport-level protocol, cryptographic handshake, and data validation rules for linking a new desktop client to a primary mobile instance.
+This document specifies the transport-level protocol, cryptographic handshake, rate limiting, and replay prevention rules for synchronizing state between client devices over a Local Area Network (LAN).
 
 ---
 
-## 1. Ephemeral Handshake Sequence
+## 1. Cryptographic Handshake & Pairing Sequence (`ANO-SEC-001`)
 
-The pairing protocol is executed over the local network (Wi-Fi) to ensure high-speed backup data transfer without passing through internet relays.
+The pairing protocol is executed over the local Wi-Fi network (default port `8999`) to ensure high-speed, direct synchronization without traversing external relays.
 
 ```
-+----------------+                   +--------------------+
-|  Mobile App    |                   | Desktop Client     |
-|  (Scan Camera) |                   | (Generates QR)     |
-+-------+--------+                   +---------+----------+
-        |                                      |
-        |  1. Scan QR (IP, Port, K_desk)       |
-        |------------------------------------->|
-        |                                      |
-        |  2. POST /sync/pairing (K_mob, Enc)  |
-        |------------------------------------->|
-        |                                      |
-        |  3. 200 OK Response (Success)        |
-        |<-------------------------------------|
++-------------------+                    +--------------------+
+| Secondary Client  |                    |  Primary Device    |
+| (Initiator)       |                    |  (Pairing Host)    |
++---------+---------+                    +---------+----------+
+          |                                        |
+          |  1. Enter IP, Port & Pairing Token     |
+          |  (Out-of-band Token: 256-bit Base32)   |
+          |--------------------------------------->|
+          |                                        |
+          |  2. POST /v3/sync/pairing              |
+          |     (pk_sec, iv, ciphertext, salt)     |
+          |--------------------------------------->|
+          |                                        |
+          |  3. Validate Token & Decrypt DB        |
+          |                                        |
+          |  4. 200 OK (Sync Successful)           |
+          |<---------------------------------------|
 ```
 
 ### Protocol Steps:
-1. **Desktop Initialization:**
-   * Desktop client generates an ephemeral X25519 pairing keypair: `(sk_desk, pk_desk)`.
-   * Desktop starts a temporary HTTP server on a local port (e.g. `8999`).
-   * Desktop renders a QR code representing the payload:
-     $$\text{QR} = \{ \text{"ip"}: \text{"192.168.1.50"}, \text{"port"}: 8999, \text{"k"}: \text{base64}(pk\_desk) \}$$
-2. **Mobile Scan & Connection:**
-   * Mobile app scans the QR code to extract the desktop's IP, port, and public key.
-   * Mobile generates its own ephemeral X25519 keypair: `(sk_mob, pk_mob)`.
-   * Mobile performs ECDH key agreement:
-     $$\text{SharedSecret} = \text{ECDH}(sk\_mob, pk\_desk)$$
-   * Mobile derives a symmetric encryption key utilizing HKDF-SHA256:
-     $$\text{AES\_Key} = \text{HKDF}(\text{SharedSecret}, \text{salt}=\text{None}, \text{info}=\text{"AnonyMus-Device-Sync-Key"})$$
-3. **Database Encapsulation:**
-   * Mobile client creates a backup payload of its active SQLite database (`local_node.db`).
-   * Mobile encrypts the database using AES-256-GCM with a secure random IV and `AES_Key`.
-   * Mobile submits a HTTP POST request to `http://<desktop_ip>:<port>/api/sync/pairing` containing:
+1. **Primary Device Host Initialization:**
+   * Primary device generates an ephemeral X25519 pairing keypair: `(sk_pri, pk_pri)`.
+   * Generates a cryptographically strong 256-bit random pairing token (`base32`-encoded, 52 characters).
+   * Generates a fresh, per-pairing 16-byte random HKDF salt.
+   * Binds a local HTTP pairing broker on port `8999`.
+2. **Secondary Device Connection:**
+   * User enters or scans the host IP, port, and the 256-bit pairing token.
+   * Secondary generates an ephemeral X25519 keypair: `(sk_sec, pk_sec)`.
+   * Computes ECDH shared secret:
+     $$\text{SharedSecret} = \text{X25519}(sk\_sec, pk\_pri)$$
+   * Derives symmetric encryption key using HKDF-SHA256 with the pairing token and the fresh random 16-byte salt:
+     $$\text{Sync\_Key} = \text{HKDF-SHA256}(\text{SharedSecret} \parallel \text{PairingToken}, \text{salt}=\text{salt}_{16\text{B}}, \text{info}=\text{"AnonyMus-LAN-Sync-v3"})$$
+3. **Encrypted Payload Submission:**
+   * Secondary submits an HTTP POST request to `/v3/sync/pairing`:
      ```json
      {
-       "client_public_key": "base64(pk_mob)",
-       "iv": "base64(iv)",
-       "ciphertext": "base64(encrypted_db)"
+       "client_public_key": "<base64_encoded_pk_sec>",
+       "salt": "<base64_encoded_16B_salt>",
+       "iv": "<base64_encoded_12B_iv>",
+       "ciphertext": "<base64_encoded_encrypted_payload>",
+       "timestamp": 1755678900
      }
      ```
-4. **Desktop Decryption & Import:**
-   * Desktop server receives the payload, extracts `pk_mob`, performs the identical ECDH exchange, derives `AES_Key`, decrypts the database, and loads the active session state.
+4. **Primary Validation & Decryption:**
+   * Primary checks that the request timestamp skew is $\le 300\text{s}$.
+   * Validates pairing token and derives $\text{Sync\_Key}$.
+   * Authenticates and decrypts ciphertext using AES-256-GCM.
+   * Atomically merges contact rosters and message stores.
 
 ---
 
-## 2. Security Considerations
+## 2. Security Controls & Defenses
 
-### Man-in-the-Middle (MITM) Protection
-Because the pairing public key `pk_desk` is shared physically via a **QR code**, the transmission channel is tamper-resistant. An attacker on the local network cannot substitute `pk_desk` with their own public key without changing the visual QR code scanned by the user.
+### A. Brute-Force Rate Limiting (`ANO-SEC-001`)
+- The sync broker enforces strict per-IP rate limiting: maximum 5 failed attempts per 60-second window.
+- Exceeding 10 cumulative failures triggers an automatic 30-minute IP cooldown.
+- Failure responses return generic error status codes without detailed exception traces (`ANO-SEC-009`).
 
-### Passphrase Protection
-To prevent a compromised backup from exposing hidden folders, **hidden profile passphrases and bcrypt hashes are never saved in cleartext inside the SQLite payload**. The desktop client requires the user to input the correct profile passphrase locally to unlock and decrypt hidden profile indexes.
+### B. Replay Attack Prevention
+- Incoming synchronization envelopes are checked against a monotonic sliding-window FIFO deque (`core/sync.py`) tracking recently processed transaction identifiers.
+- Replayed sequence nonces or expired envelopes are rejected immediately.
+
+### C. Passphrase & Secret Segregation
+- Database encryption keys (`DB_KEY`), duress PINs, and raw credentials are never transmitted during synchronization. The recipient device derives its own independent storage keys upon import.

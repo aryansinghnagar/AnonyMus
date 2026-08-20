@@ -52,63 +52,67 @@ cp .env.example .env
 ```
 
 Configure the environment variables in `.env`:
-- `ANONYMUS_MODE`: Boot mode of the application. Set to `relay` (for centralized relay mode) or `p2p` (for peer-to-peer Tor mode). Defaults to `relay`.
-- `FLASK_SECRET_KEY`: High-entropy key used to secure Flask sessions and sign cookies.
-- `DISABLE_SSL`: Set to `True` only when running behind a local reverse proxy or when hosting as a Tor Hidden Service in P2P mode. Set to `False` in production relay environments.
-- `DATABASE_URL`: Set to a PostgreSQL connection URI (e.g., `postgresql://user:pass@host:5432/db`) to switch from SQLite to PostgreSQL in Centralized Relay mode. Leave empty to use standard SQLite (`users.db`).
-- `REDIS_URL`: Connection string for Redis session/limiter caching (e.g., `redis://localhost:6379`). Leave empty to use in-memory caching.
+- `ANONYMUS_MODE`: Boot mode of the application. Set to `p2p` (peer-to-peer Tor mode) or `relay` (centralized relay mode). Defaults to `p2p`.
+- `SECRET_KEY`: High-entropy 64-character hex secret used for session tokens and challenge validation.
+- `DB_KEY`: 64-character hex encryption key for the SQLCipher at-rest database (mandatory in production environments).
+- `ANONYMUS_METRICS_TOKEN`: Optional bearer token for authenticating access to the `/metrics` endpoint (`ANO-SEC-007`).
+- `DISABLE_SSL`: Set to `True` when running behind a local reverse proxy or Tor Hidden Service.
+- `DATABASE_URL`: Optional PostgreSQL connection URI (e.g., `postgresql+asyncpg://user:pass@host:5432/db`) for relay mode.
+- `REDIS_URL`: Connection string for Redis session/limiter caching (e.g., `redis://localhost:6379`).
 
 ---
 
 ## 3. Running the Application
 
-The unified system can be started via the Command Line Interface (CLI) or the Graphical User Interface (GUI) launcher.
+### A. Turnkey Launcher (Recommended)
+Boot the application, initialize local keys, verify Tor proxy connectivity, and open the web interface in one step:
+```bash
+python anonymus-launcher.py
+```
+By default, the client node serves the web interface on `http://127.0.0.1:5001/index.html`.
 
-### A. CLI Mode Startup
-To start the application server using the configuration specified in `.env`:
+### B. Direct ASGI Server Startup
+To start the FastAPI v3 ASGI server directly:
 ```bash
 python server.py
 ```
-By default, the unified server runs on `http://127.0.0.1:5000`.
-- If `ANONYMUS_MODE=relay`, it boots the centralized relay Flask app.
-- If `ANONYMUS_MODE=p2p`, it starts the local peer node and establishes a Tor Hidden Service.
+- If `ANONYMUS_MODE=p2p`, it starts the local node, loads the encrypted database, and connects to the Tor Control Port (`9051`) to publish an ephemeral v3 onion service.
+- If `ANONYMUS_MODE=relay`, it boots the blind relay server on the configured port.
 
-### B. Graphical Desktop Launcher (Windows)
-The repository includes a disguised Tkinter utility that manages the server lifecycle, performs diagnostic checks (DNS, Tor status), and provides runtime mode switching.
-To run the launcher:
+### C. Desktop Service Launcher (GUI)
+The repository includes a desktop launcher utility to manage node lifecycles and monitor connection status:
 ```bash
 python launcher/launcher.py
 ```
-- By default, it operates as the "Windows Network Diagnostics & Adapter Utility".
-- Users can switch between Centralized Relay and Peer-to-Peer Tor modes directly inside the graphical interface.
 
 ---
 
 ## 4. Containerized Deployment (Docker)
 
-To spin up the production relay stack (Python FastAPI relay, SolidJS web frontend, Redis cache, and Caddy reverse proxy) using Docker Compose:
+To deploy the production blind relay stack with Caddy auto-TLS, Redis, and Coturn TURN:
 
-1. Configure your environment variables in `.env` (ensure `SECRET_KEY` and `RELAY_DOMAIN` are set).
+1. Configure `.env` with `SECRET_KEY`, `RELAY_DOMAIN`, `COTURN_USER`, and `COTURN_PASSWORD`.
 2. Start the services from the repository root:
    ```bash
    docker compose up -d
    ```
-This command builds the immutable relay backend via `Dockerfile.relay` and compiles the SolidJS frontend assets via a Node build service into a shared volume. Caddy automatically serves the static assets and reverse-proxies `/v3/*` API requests to the relay container, exposing port `80` and `443` on the host machine.
 
 ---
 
 ## 5. Running Automated Tests
 
-The test suite covers shared core primitives, centralized relay logic, and P2P node components. To run all backend unit and integration tests:
+Run backend unit and integration test suites:
 
-Using virtual environment Python:
 ```bash
-.\venv\Scripts\python.exe tests/run_tests.py
-```
+# Python Unit & Cryptographic KAT Suite
+python -m pytest tests/unit -v
 
-Or using system Python:
-```bash
-python tests/run_tests.py
+# FastAPI Integration & Contract Suite
+python -m pytest tests/integration/test_fastapi_v3.py tests/integration/test_contract_v3.py -v
+
+# Code Quality & Linting
+ruff check .
+ruff format --check .
 ```
 
 ---

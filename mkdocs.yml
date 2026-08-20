@@ -44,10 +44,15 @@ nav:
   - Protocols:
       - Crypto Spec: protocols/crypto-spec.md
       - Multi-Device Sync: protocols/multi-device-sync.md
+  - Security:
+      - Transparency & Canary: security/transparency.md
+  - Testing:
+      - Testing Guide: testing/testing-guide.md
   - RFCs: rfcs/index.md
   - ADRs: adr/index.md
-  - API:
-      - Socket.IO Events: api/socket-io-events.md
+  - Audits:
+      - Audit Readiness: audits/audit_readiness.md
   - Releases:
+      - v3.0.0-alpha.1: releases/v3.0.0-alpha.1.md
       - v1.0: releases/RELEASE_1.0.md
   - Historical: historical/index.md

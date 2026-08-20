@@ -16,3 +16,8 @@ This section contains formal specifications and proposals for core protocol and 
 * **[RFC 0009: database-migrations-framework](0009-database-migrations-framework.md)**: Safe database schema updates.
 * **[RFC 0010: mode-switch-authentication](0010-mode-switch-authentication.md)**: Authentication protocols for switching profile profiles.
 * **[RFC 0011: post-1.0-roadmap](0011-post-1.0-roadmap.md)**: Features scheduled for post-1.0 rollout.
+* **[RFC 0012: pqxdh-key-exchange](0012-pqxdh-key-exchange.md)**: Post-Quantum Extended Diffie-Hellman Key Exchange with ML-KEM-768.
+* **[RFC 0013: safety-numbers](0013-safety-numbers.md)**: Safety Number Derivation and Out-of-Band Verification.
+* **[RFC 0014: sealed-sender-anonymity](0014-sealed-sender-anonymity.md)**: Sealed-Sender Outer Envelope Encryption for Metadata Protection.
+* **[RFC 0015: message-padding](0015-message-padding.md)**: Constant-Rate and Uniform Block Message Padding Schemes.
+* **[RFC 0016: mls-group-key-agreement](0016-mls-group-key-agreement.md)**: IETF RFC 9420 TreeKEM MLS Group Key Agreement.

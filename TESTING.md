@@ -52,34 +52,34 @@ AnonyMus Test Suite
 ### A. Python Backend Test Suite (`pytest`)
 Run all unit, integration, and contract tests excluding legacy deprecated suites:
 ```bash
-venv\Scripts\python.exe -m pytest tests/unit tests/integration -m "not legacy"
+python -m pytest tests/unit tests/integration -m "not legacy"
 ```
 
 Run specific subsystem tests:
 ```bash
 # Cryptographic Known Answer Tests
-venv\Scripts\python.exe -m pytest tests/unit/test_kat_crypto.py
+python -m pytest tests/unit/test_kat_crypto.py
 
 # TreeKEM MLS Group Management
-venv\Scripts\python.exe -m pytest tests/unit/test_mls_groups.py
+python -m pytest tests/unit/test_mls_groups.py
 
 # Hardware Capability Tier Detection
-venv\Scripts\python.exe -m pytest tests/unit/test_capability_tiers.py
+python -m pytest tests/unit/test_capability_tiers.py
 
 # Schema Drift Verification (SQLAlchemy ORM vs Alembic)
-venv\Scripts\python.exe -m pytest tests/unit/test_schema_drift.py
+python -m pytest tests/unit/test_schema_drift.py
 
 # API Contract v3 Integration Tests
-venv\Scripts\python.exe -m pytest tests/integration/test_contract_v3.py
+python -m pytest tests/integration/test_contract_v3.py
 ```
 
 ### B. Python Linter & Code Formatting
 ```bash
 # Check code style and imports
-venv\Scripts\python.exe -m ruff check .
+ruff check .
 
 # Check formatting
-venv\Scripts\python.exe -m ruff format --check .
+ruff format --check .
 ```
 
 ### C. Rust Cryptographic Core (`core/rust/`)

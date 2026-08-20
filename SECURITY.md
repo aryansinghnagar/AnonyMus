@@ -22,6 +22,9 @@ AnonyMus treats user privacy and metadata resistance as fundamental human rights
 | **Relay Directory Pollution** | Attacker registers fake onion addresses, redirecting clients to attacker-controlled nodes | **Audit fix ANO-SEC-005**: the `/nodes/register` and `/nodes/heartbeat` endpoints now require an Ed25519 signature over `(onion_address || timestamp)` from the requester, verified against the 32-byte Ed25519 public key encoded in the v3 onion address. |
 | **Prometheus Metrics Exposure** | Information disclosure (which onion addresses are active, message counts, etc.) | **Audit fix ANO-SEC-007**: the `/metrics` endpoint now requires either loopback access or a bearer token matching `ANONYMUS_METRICS_TOKEN` (compared with `secrets.compare_digest`). |
 | **Hardcoded TURN Credentials** | Anyone with repo read access could use the TURN server | **Audit fix ANO-SEC-003**: Coturn credentials are now read from `COTURN_USER` / `COTURN_PASSWORD` environment variables; the compose file fails fast if either is unset. |
+| **AAD Downgrade Attack** | Adversary forces fallback to legacy unauthenticated AAD format | **Audit fix ANO-SEC-017**: strict v2 AAD validation is enforced; silent v1 downgrade fallback in `decrypt_message` has been eliminated. |
+| **Modulo Bias in Safety Numbers** | Skewed distribution leaving 34% of codespace unreachable | **Audit fix ANO-CODE-009**: safety number derivation utilizes SHA-256 hash chains with 32-bit window rejection sampling for provably uniform distribution. |
+| **Sealed-Sender Spam / Abuse** | Anonymous senders flooding mailboxes with unverified traffic | **Audit fix ANO-SEC-013**: opt-in `ANONYMUS_SEALED_SENDER_STRICT` mode validates sender onion against the recipient's verified contact store before ingestion. |
 
 ---
 

@@ -33,10 +33,14 @@ Your default web browser will automatically open to `http://127.0.0.1:5001/index
 
 ### Multi-Device LAN Sync (Pairing)
 To sync your chats and contacts between your laptop and desktop:
-1. On your **Primary Device**: Go to **Settings** > **Device Sync** > **Generate Pairing PIN**.
-2. Note the 6-digit PIN and IP displayed on screen.
-3. On your **Secondary Device**: Go to **Device Sync** > **Connect to Device**, enter the IP, port, and the 6-digit PIN, and click **Synchronize**.
-4. The database is securely encrypted and transferred over your local Wi-Fi.
+1. On your **Primary Device**: Go to **Settings** > **Device Sync** > **Generate Pairing Token**.
+2. Copy or scan the generated **256-bit pairing token** (base32-encoded) and note the local IP/port (`:8999`).
+3. On your **Secondary Device**: Go to **Device Sync** > **Connect to Device**, enter the host IP, port, and the pairing token, and click **Synchronize**.
+4. The database is securely encrypted using an ephemeral X25519 exchange with a fresh 16-byte HKDF salt and transferred directly over your local Wi-Fi.
+
+### Out-of-Band Safety Numbers
+- In any active chat, click **Safety Number** to inspect the 12-group 5-digit verification code.
+- Compare these numbers out-of-band with your contact (e.g. in person or via trusted audio call) to verify the authenticity of their cryptographic identity keys.
 
 ### Coercion Resistance & Duress Wipe
 - If you are ever forced to unlock your device under duress, enter your pre-configured **Duress PIN** instead of your regular password.

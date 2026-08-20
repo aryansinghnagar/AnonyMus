@@ -3,6 +3,7 @@
 This section aggregates historical recovery reports, planning logs, and legacy doctrines.
 
 * **[Agent Doctrine (2026-07)](agent-doctrine-2026-07.md)**: The foundational agent.md charter.
+* **[Commercial Release Master Plan (2026-07)](commercial-release-plan-2026-07.md)**: Master audit, reliability, and commercialization roadmap.
 * **[CI Failure Analysis (2026-07)](ci-failure-analysis-2026-07.md)**: Logs and diagnostic reports of legacy CI failures.
 * **[CI Recovery Plan (2026-07)](ci-recovery-plan-2026-07.md)**: Step-by-step roadmap to repair CI checks.
 * **[GitHub Run Log (2026-07)](github-log-2026-07.md)**: Historical execution outputs of CI checks.
