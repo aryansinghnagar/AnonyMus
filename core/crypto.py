@@ -118,32 +118,68 @@ def generate_db_salt() -> bytes:
     return secrets.token_bytes(16)
 
 
-def encrypt_secret(plaintext_b64: str, db_key_hex: str) -> str:
+def encrypt_secret(plaintext_b64: str, db_key_hex: str, iv: bytes | None = None) -> str:
     """
     Encrypts a shared secret using AES-GCM. Raises exceptions on failure.
+
+    Audit fix ANO-SEC-014 (B9): the IV is ALWAYS generated server-side via
+    ``os.urandom(12)``. A client-supplied IV is REJECTED -- the optional
+    ``iv`` parameter exists only as a defence-in-depth trap: if a caller
+    passes a non-None value, a ``ValueError`` is raised. This makes the
+    API contract unambiguous and prevents callers from inadvertently
+    introducing IV reuse vulnerabilities (e.g., by reusing a deterministic
+    IV derived from a low-entropy context).
     """
     if not plaintext_b64:
         return plaintext_b64
     if not db_key_hex:
         raise ValueError("Missing database key for encryption.")
+    # Audit fix ANO-SEC-014 (B9): reject any client-supplied IV. The IV
+    # MUST be fresh and unpredictable -- a 12-byte cryptorandom value
+    # generated immediately before the AES-GCM encrypt call.
+    if iv is not None:
+        raise ValueError(
+            "Client-supplied IVs are rejected (audit fix ANO-SEC-014). "
+            "The IV is always generated server-side via os.urandom(12)."
+        )
     key = bytes.fromhex(db_key_hex)
     aesgcm = AESGCM(key)
+    # Always generate a fresh server-side 96-bit IV (12 bytes).
     nonce = os.urandom(12)
     ct = aesgcm.encrypt(nonce, plaintext_b64.encode("utf-8"), None)
+    # Store the nonce as a prefix of the ciphertext so the decryptor can
+    # recover it. The nonce is NOT considered secret.
     return base64.b64encode(nonce + ct).decode("utf-8")
 
 
-def decrypt_secret(ciphertext_b64: str, db_key_hex: str) -> str:
+def decrypt_secret(
+    ciphertext_b64: str, db_key_hex: str, iv: bytes | None = None
+) -> str:
     """
     Decrypts a shared secret using AES-GCM. Raises exceptions on failure.
+
+    Audit fix ANO-SEC-014 (B9): the IV is NEVER accepted from the caller.
+    The decryptor reads the 12-byte nonce from the prefix of the ciphertext
+    blob (which was prepended by ``encrypt_secret``). The optional ``iv``
+    parameter exists only as a defence-in-depth trap: if a caller passes
+    a non-None value, a ``ValueError`` is raised. This prevents a malicious
+    peer from influencing the IV used during decryption (which is a no-op
+    for AES-GCM but reinforces the API contract: the IV is server-only).
     """
     if not ciphertext_b64:
         return ciphertext_b64
     if not db_key_hex:
         raise ValueError("Missing database key for decryption.")
+    # Audit fix ANO-SEC-014 (B9): reject any client-supplied IV.
+    if iv is not None:
+        raise ValueError(
+            "Client-supplied IVs are rejected (audit fix ANO-SEC-014). "
+            "The nonce is read from the ciphertext prefix."
+        )
     data = base64.b64decode(ciphertext_b64)
     if len(data) < 12:
         raise ValueError("Ciphertext too short.")
+    # Recover the 12-byte server-generated nonce from the ciphertext prefix.
     nonce = data[:12]
     ct = data[12:]
     key = bytes.fromhex(db_key_hex)

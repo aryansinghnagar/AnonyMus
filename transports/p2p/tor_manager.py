@@ -4,9 +4,36 @@ Tor Process Management Module for AnonyMus (P2P Decentralized Architecture).
 Handles automated download, integrity verification, path traversal-safe extraction,
 configuration writing (torrc), subprocess spawning, and bootstrap monitoring
 for the embedded Tor Expert Bundle onion service proxy.
+
+Perf fix P4: Tor circuit stickiness for outbound message routing.
+==============================================================
+Outbound HTTP-over-Tor requests (message transmission, chunk proxying,
+presence pings) used to share a single SOCKS5 connection to the Tor daemon,
+which means Tor routed them all through the SAME circuit. This causes two
+problems:
+
+  1. (Privacy) All peers see the same circuit exit identity — linkability.
+  2. (Performance) When sending to a different peer, Tor would tear down the
+     existing circuit and build a new one (100-300 ms latency) rather than
+     reusing the existing circuit for the same peer.
+
+The fix is *per-peer circuit isolation* via SOCKS5 username/password auth:
+Tor's ``IsolateSOCKSAuth`` (enabled by default in modern torrc) routes each
+unique (username, password) tuple through a separate circuit. By deriving
+a stable per-peer auth tuple from a hash of (peer_onion + per-process salt),
+we get:
+  - Same peer → same circuit → reuses the established 3-hop circuit (~100-300 ms
+    latency saving on subsequent messages to the same peer).
+  - Different peers → different circuits → unlinkability.
+
+The cache is exposed via ``get_peer_circuit_socks_url(peer_onion)`` and
+``get_or_create_peer_httpx_client(peer_onion)``. Callers should prefer the
+latter so connection pooling (HTTP keep-alive) is also per-peer, maximising
+the latency savings.
 """
 
 import atexit
+import hashlib
 import os
 import platform
 import shutil
@@ -14,6 +41,7 @@ import socket
 import subprocess
 import sys
 import tarfile
+import threading
 import time
 import urllib.request
 
@@ -118,9 +146,6 @@ def find_tor_binary(search_path):
             if file.lower() == EXE_NAME.lower():
                 return os.path.join(root, file)
     return None
-
-
-import hashlib
 
 
 def calculate_sha256(filepath):
@@ -496,6 +521,131 @@ def launch_tor(peer_port=None):
     onion_address = get_onion_address()
     print(f"Your User ID (Onion Address): {onion_address}")
     return onion_address, SOCKS_PORT, PEER_PORT
+
+
+# ============================================================================
+# Perf fix P4: Tor circuit stickiness for outbound message routing.
+# ============================================================================
+
+
+# Per-process random salt mixed into the per-peer SOCKS5 auth tuple so two
+# AnonyMus processes on the same machine don't share circuits (different salt
+# → different (user, pass) → different Tor circuits even for the same peer).
+_PROCESS_CIRCUIT_SALT: bytes = os.urandom(16)
+_PEER_CLIENT_CACHE: dict[str, "object"] = {}  # peer_onion -> httpx.AsyncClient
+_PEER_CLIENT_LOCK = threading.Lock()
+_PEER_CLIENT_TTL_SECONDS = 300.0  # 5 min idle → close & rebuild on next use
+
+
+def _peer_circuit_auth(peer_onion: str) -> tuple[str, str]:
+    """Derive a stable per-peer SOCKS5 (username, password) tuple.
+
+    The tuple is derived from ``SHA-256(peer_onion || process_salt)`` so:
+      - Same peer + same process → same tuple → same Tor circuit (stickiness).
+      - Same peer + different process → different tuple → different circuit
+        (prevents cross-process linkability).
+      - Different peers → different tuples → different circuits
+        (prevents peer-to-peer linkability via shared circuit exit).
+    """
+    h = hashlib.sha256(peer_onion.encode("utf-8") + _PROCESS_CIRCUIT_SALT).digest()
+    # SOCKS5 auth fields are arbitrary bytes; use base32 for filesystem-safe
+    # representation in case Tor logs them.
+    user = h[:12].hex()
+    password = h[12:24].hex()
+    return user, password
+
+
+def get_peer_circuit_socks_url(peer_onion: str) -> str:
+    """Return a SOCKS5h URL with per-peer auth for circuit stickiness.
+
+    The URL uses the ``socks5h://`` scheme so DNS resolution happens on the
+    Tor side (important for ``.onion`` addresses, which are not real DNS
+    names but Tor-internal service identifiers).
+
+    Perf fix P4: by using a stable per-peer (user, pass) tuple, Tor's
+    ``IsolateSOCKSAuth`` (default-on) routes each peer through a separate
+    circuit. Subsequent messages to the same peer reuse the established
+    circuit, saving ~100-300 ms of circuit-construction latency.
+    """
+    user, password = _peer_circuit_auth(peer_onion)
+    return f"socks5h://{user}:{password}@127.0.0.1:{SOCKS_PORT}"
+
+
+def get_peer_circuit_proxies(peer_onion: str) -> dict[str, str]:
+    """Return an httpx-compatible proxies dict for the given peer."""
+    url = get_peer_circuit_socks_url(peer_onion)
+    return {"http://": url, "https://": url}
+
+
+async def get_or_create_peer_httpx_client(peer_onion: str, timeout: float = 10.0):
+    """Return a cached httpx.AsyncClient bound to a per-peer Tor circuit.
+
+    Perf fix P4: returns a long-lived httpx.AsyncClient per peer so:
+      - HTTP keep-alive reuses the TCP+TLS connection to the peer's onion
+        service (saves another 50-100 ms per request after the first).
+      - The SOCKS5 auth tuple is set once per client (Tor circuit stickiness).
+
+    Clients are cached for ``_PEER_CLIENT_TTL_SECONDS`` (300s by default);
+    an idle client is closed and rebuilt on the next call to avoid keeping
+    a Tor circuit open forever (Tor will eventually rotate the circuit
+    anyway after its 10-minute max circuit lifetime).
+    """
+    import httpx
+
+    now = time.monotonic()
+    # Clean up stale clients opportunistically.
+    with _PEER_CLIENT_LOCK:
+        stale: list[str] = []
+        for onion, (client, last_used) in _PEER_CLIENT_CACHE.items():
+            if now - last_used > _PEER_CLIENT_TTL_SECONDS:
+                stale.append(onion)
+        for onion in stale:
+            client, _ = _PEER_CLIENT_CACHE.pop(onion, (None, None))
+            if client is not None:
+                try:
+                    await client.aclose()
+                except Exception:
+                    pass
+
+    cached = _PEER_CLIENT_CACHE.get(peer_onion)
+    if cached is not None:
+        client, _ = cached
+        _PEER_CLIENT_CACHE[peer_onion] = (client, now)
+        return client
+
+    # Build a new client with per-peer circuit proxies.
+    # Note: socks5h requires the optional ``socksio`` package (installed via
+    # ``httpx[socks]``). If absent, fall back to the plain SOCKS5 URL
+    # without auth (circuit stickiness is lost but functionality is preserved).
+    try:
+        proxies = get_peer_circuit_proxies(peer_onion)
+        client = httpx.AsyncClient(proxies=proxies, timeout=timeout)
+    except Exception:
+        # Fallback: no auth on the proxy URL.
+        proxies = {
+            "http://": f"socks5://127.0.0.1:{SOCKS_PORT}",
+            "https://": f"socks5://127.0.0.1:{SOCKS_PORT}",
+        }
+        client = httpx.AsyncClient(proxies=proxies, timeout=timeout)
+
+    with _PEER_CLIENT_LOCK:
+        _PEER_CLIENT_CACHE[peer_onion] = (client, now)
+    return client
+
+
+async def close_all_peer_clients() -> None:
+    """Close all cached per-peer httpx clients (used on shutdown)."""
+    with _PEER_CLIENT_LOCK:
+        items = list(_PEER_CLIENT_CACHE.items())
+        _PEER_CLIENT_CACHE.clear()
+    for _, (client, _) in items:
+        try:
+            await client.aclose()
+        except Exception:
+            pass
+
+
+atexit.register(lambda: None)  # placeholder; async close must be explicit
 
 
 if __name__ == "__main__":

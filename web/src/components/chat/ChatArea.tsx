@@ -13,39 +13,25 @@ interface Props {
 }
 
 // Audit fix ANO-UX-001: helper to safely render a message body.
-// - If the message was successfully decrypted (the store rewrote
-//   ``ciphertext_b64`` to ``btoa(plaintext)``), decode the base64 back
-//   to the plaintext string and display it.
-// - If decryption failed (the store left the original ciphertext), display
-//   a placeholder so the user is not shown raw binary mojibake.
+// Audit fix ANO-V2-REG-008: use TextEncoder/TextDecoder for UTF-8 safety
+// (atob/btoa only handle Latin-1 and throw on chars >U+00FF).
 function renderMessageBody(msg: { ciphertext_b64: string; is_decrypted?: boolean }): string {
-  // Heuristic: the store sets ``ciphertext_b64 = btoa(plaintext)`` on
-  // successful decryption. If the value decodes cleanly to valid UTF-8, we
-  // treat it as decrypted plaintext. If it decodes to bytes outside the
-  // printable range, we treat the message as still-encrypted and show a
-  // placeholder instead.
   try {
-    const decoded = atob(msg.ciphertext_b64);
-    // Check that the decoded string is plausible UTF-8 text (every char
-    // code is in the printable range or a common whitespace char).
-    let printable = true;
-    for (let i = 0; i < decoded.length; i++) {
-      const c = decoded.charCodeAt(i);
-      // Allow printable ASCII (32-126), tab (9), newline (10), carriage
-      // return (13), and any non-ASCII (>= 160, which covers Latin-1 +
-      // UTF-8 continuation bytes when interpreted as Latin-1).
-      if (c < 9 || (c > 13 && c < 32) || (c > 126 && c < 160)) {
-        printable = false;
-        break;
-      }
+    // Decode base64 to bytes
+    const binary = atob(msg.ciphertext_b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
     }
-    if (printable) {
-      return decoded;
+    // Decode as UTF-8 (handles emoji, CJK, accented Latin)
+    const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    // Heuristic: if the decoded string contains replacement chars (U+FFFD),
+    // it's likely still-encrypted ciphertext, not valid UTF-8 plaintext.
+    if (decoded.includes("\uFFFD")) {
+      return "🔒 Encrypted message — decryption pending";
     }
-    // Not printable — treat as still-encrypted ciphertext.
-    return "🔒 Encrypted message — decryption pending";
+    return decoded;
   } catch {
-    // ``atob`` failed entirely — not valid base64. Show a placeholder.
     return "🔒 Encrypted message — decryption pending";
   }
 }

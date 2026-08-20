@@ -128,11 +128,13 @@ def _verify_node_signature(
         raise HTTPException(
             status_code=400, detail="Could not decode onion address public key"
         )
-    if len(pubkey_bytes) != 32:
+    if len(pubkey_bytes) != 35:
         raise HTTPException(
             status_code=400,
-            detail=f"Onion address public key must be 32 bytes (got {len(pubkey_bytes)})",
+            detail=f"Decoded onion address must be 35 bytes (got {len(pubkey_bytes)})",
         )
+    # Audit fix ANO-V2-REG-002: extract first 32 bytes as Ed25519 public key
+    ed25519_pubkey = pubkey_bytes[:32]
 
     # Validate timestamp skew (defense against replay attacks).
     try:
@@ -152,7 +154,7 @@ def _verify_node_signature(
     # Verify the signature.
     try:
         signature = base64.b64decode(signature_b64)
-        public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+        public_key = ed25519.Ed25519PublicKey.from_public_bytes(ed25519_pubkey)
         message = f"{onion_address}|{timestamp}".encode("utf-8")
         public_key.verify(signature, message)
     except InvalidSignature:

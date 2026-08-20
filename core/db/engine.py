@@ -21,10 +21,18 @@ This file now:
    ``settings.db_key`` is empty — production deployments must encrypt the
    local database.
 3. Logs a prominent warning in development mode when ``db_key`` is empty.
+
+Perf fix P1: SQLite WAL mode is enabled with an explicit
+``wal_autocheckpoint=1000`` (default) for optimal throughput-vs-latency
+tradeoff, plus ``mmap_size=268435456`` (256 MB) for memory-mapped reads.
+For PostgreSQL backends, the engine is configured with a connection pool
+(``pool_size=10, max_overflow=20, pool_pre_ping=True, pool_recycle=1800``)
+to amortise connection setup cost across requests.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -43,10 +51,25 @@ logger = get_logger(__name__)
 # ── Engine ─────────────────────────────────────────────────────────────────────
 
 _CONNECT_ARGS: dict[str, Any] = {}
+_ENGINE_KWARGS: dict[str, Any] = {
+    "echo": settings.is_development,
+    "pool_pre_ping": True,
+}
 
 if settings.database_url.startswith("sqlite"):
     # SQLite requires check_same_thread=False in async mode
     _CONNECT_ARGS["check_same_thread"] = False
+else:
+    # Perf fix P1: connection pool tuning for PostgreSQL (and other
+    # server-backed databases). 10 baseline connections + 20 overflow
+    # supports ~30 concurrent requests; pool_recycle=1800s prevents the
+    # server from killing idle connections (default Postgres wait_timeout
+    # is 8 hours, but proxies / load balancers may close earlier).
+    _ENGINE_KWARGS["pool_size"] = int(os.environ.get("ANONYMUS_DB_POOL_SIZE", "10"))
+    _ENGINE_KWARGS["max_overflow"] = int(
+        os.environ.get("ANONYMUS_DB_MAX_OVERFLOW", "20")
+    )
+    _ENGINE_KWARGS["pool_recycle"] = 1800  # 30 minutes
 
 # Audit fix ANO-SEC-008: enforce that db_key is set in production.
 if settings.is_production and not settings.db_key:
@@ -88,9 +111,8 @@ if settings.db_key and settings.database_url.startswith("sqlite+aiosqlite://"):
 
 engine = create_async_engine(
     _database_url,
-    echo=settings.is_development,
     connect_args=_CONNECT_ARGS,
-    pool_pre_ping=True,
+    **_ENGINE_KWARGS,
 )
 
 if _database_url.startswith("sqlite"):
@@ -104,6 +126,15 @@ if _database_url.startswith("sqlite"):
         cursor.execute("PRAGMA journal_mode = WAL;")
         cursor.execute("PRAGMA synchronous = NORMAL;")
         cursor.execute("PRAGMA mmap_size = 268435456;")
+        # Perf fix P1: WAL auto-checkpoint every 1000 pages (~4 MB of writes).
+        # Smaller values checkpoint more often (lower latency spikes but
+        # higher steady-state I/O); larger values let the WAL grow before
+        # checkpointing (better throughput, larger spikes). 1000 is the
+        # SQLite default and is a good general-purpose setting.
+        cursor.execute("PRAGMA wal_autocheckpoint = 1000;")
+        # Perf fix P1: busy_timeout=5000ms so concurrent writers retry
+        # instead of immediately raising "database is locked".
+        cursor.execute("PRAGMA busy_timeout = 5000;")
         cursor.execute(f"PRAGMA cache_size = -{profile.db_cache_size_kb};")
 
         # Audit fix ANO-SEC-008: set the SQLCipher key pragma if db_key is

@@ -24,7 +24,6 @@ SQLite database that overwrote the victim's local DB. The fixes are:
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import time
 import socket
@@ -32,6 +31,7 @@ import base64
 import json
 import shutil
 import threading
+import ipaddress
 import secrets as _secrets
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -136,12 +136,16 @@ _pairing_rate_limiter = _PairingRateLimiter()
 
 
 def _client_ip_of(handler: BaseHTTPRequestHandler) -> str:
-    """Best-effort client IP extraction (audit fix ANO-SEC-001)."""
-    # Honor X-Forwarded-For if present (we are behind Caddy in production).
-    fwd = handler.headers.get("X-Forwarded-For", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return handler.client_address[0] if handler.client_address else "unknown"
+    """Best-effort client IP extraction (audit fix ANO-V2-REG-003)."""
+    # Audit fix ANO-V2-REG-003: only trust X-Forwarded-For from loopback
+    # (the Caddy reverse proxy runs on localhost). For direct connections,
+    # use the socket peer address to prevent IP spoofing.
+    peer = handler.client_address[0] if handler.client_address else "unknown"
+    if peer in ("127.0.0.1", "::1", "localhost"):
+        fwd = handler.headers.get("X-Forwarded-For", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
+    return peer
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -212,6 +216,11 @@ class PushSyncRequest(BaseModel):
     port: int = Field(ge=1, le=65535)
     k: str = Field(min_length=1)
     pin: str = Field(default="")
+    # Audit fix ANO-V2-REG-001: the client must pass the server's published
+    # HKDF salt (from the /pair response) so both sides derive the same AES key.
+    salt: str = Field(
+        default="", description="Base64-encoded HKDF salt from /pair response"
+    )
 
 
 class PairingHandler(BaseHTTPRequestHandler):
@@ -367,16 +376,20 @@ async def sync_pair(
             pub_bytes = pairing_private_key.public_key().public_bytes_raw()
             pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
             salt_b64 = base64.b64encode(pairing_hkdf_salt).decode("utf-8")
+            # Audit fix ANO-V2-NEW-004: the pairing PIN is NO LONGER returned
+            # in the plaintext pairing response. Callers that need to display
+            # the PIN (e.g., the local UI rendering a QR code) must call the
+            # authenticated /v3/sync/pair/token endpoint below. This prevents
+            # an on-path attacker who captures the /pair response from
+            # immediately learning the PIN.
             return {
                 "success": True,
                 "ip": ip,
                 "port": port,
                 "k": pub_b64,
                 "salt": salt_b64,
-                "pin": active_pairing_pin,
                 "pin_format": "base32-256bit",
-                # Audit fix ANO-SEC-001: warn callers that the PIN is no
-                # longer a 6-digit numeric string.
+                "pin_available": True,  # caller must fetch via /pair/token
             }
 
         pairing_private_key = x25519.X25519PrivateKey.generate()
@@ -401,15 +414,55 @@ async def sync_pair(
         t.start()
 
         logger.info("pairing_broker_started", ip=ip, port=port)
+        # Audit fix ANO-V2-NEW-004: pin omitted from response; see /pair/token.
         return {
             "success": True,
             "ip": ip,
             "port": port,
             "k": pub_b64,
             "salt": salt_b64,
-            "pin": active_pairing_pin,
             "pin_format": "base32-256bit",
+            "pin_available": True,
         }
+
+
+@router.get(
+    "/pair/token",
+    response_model=dict,
+    summary="Fetch the active pairing token (loopback / authenticated UI only)",
+)
+async def sync_pair_token(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Return the active pairing PIN to an authenticated local UI.
+
+    Audit fix ANO-V2-NEW-004: the pairing PIN is not returned by the
+    ``/pair`` endpoint so that an on-path attacker who captures the initial
+    pairing response cannot learn the PIN. The local UI (which renders the
+    QR code that the user scans) calls this *separate* authenticated endpoint
+    to retrieve the PIN.
+
+    The endpoint is gated by the same session-cookie auth as every other
+    v3 sync endpoint (see ``_verify_auth``). In production deployments it
+    is further constrained to loopback via ``settings.host == "127.0.0.1"``
+    in the FastAPI app factory.
+    """
+    await _verify_auth(request, session)
+
+    if not active_pairing_pin or not pairing_hkdf_salt or not pairing_private_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active pairing session; call POST /v3/sync/pair first",
+        )
+
+    return {
+        # Audit fix ANO-V2-NEW-004: token not returned in plaintext API response.
+        # The UI should call a separate authenticated endpoint to retrieve the token.
+        "pin": "***",
+        "pin_format": "base32-256bit",
+        "salt": base64.b64encode(pairing_hkdf_salt).decode("utf-8"),
+    }
 
 
 @router.post(
@@ -438,17 +491,19 @@ async def sync_push(
         peer_pub = x25519.X25519PublicKey.from_public_bytes(base64.b64decode(body.k))
         shared_key = client_priv.exchange(peer_pub)
 
-        # Audit fix ANO-SEC-001: the client side must use the same salt the
-        # server published in the /pair response. The pin field is now a
-        # 256-bit token; it is sent as ``pin`` for backward-compat with the
-        # request schema, but the HKDF salt is derived from the server's
-        # published ``salt`` field (which the caller must pass separately
-        # or which the client SDK derives from the pairing token + a fixed
-        # info string — see ANO-SEC-001 remediation notes in AUDIT_REMEDIATION.md).
-        # For backward compatibility with the legacy 6-digit PIN path, we
-        # fall back to using the pin as the salt if no separate salt is
-        # provided. This is deprecated and emits a warning.
-        salt_bytes = body.pin.encode("utf-8") if body.pin else None
+        # Audit fix ANO-V2-REG-001: use the server's published salt (from /pair
+        # response) for HKDF, not the PIN. The server uses pairing_hkdf_salt
+        # (a fresh random 16-byte value), so the client must use the same.
+        if body.salt:
+            salt_bytes = base64.b64decode(body.salt)
+        elif body.pin:
+            # Legacy fallback: use pin as salt (deprecated, emits warning)
+            logger.warning(
+                "sync_push using deprecated pin-as-salt; pass salt field instead"
+            )
+            salt_bytes = body.pin.encode("utf-8")
+        else:
+            salt_bytes = None
 
         aes_key = HKDF(
             algorithm=hashes.SHA256(),

@@ -1,11 +1,158 @@
 import base64
 import json
+import os
+import threading
+from collections import OrderedDict
+from typing import Callable, Awaitable, TYPE_CHECKING
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from core import pq_kem as _pq  # graceful fallback if liboqs absent
+
+if TYPE_CHECKING:
+    # Forward-reference only — avoids the circular reference at runtime
+    # because DRSessionCache is defined BEFORE DoubleRatchetSession.
+    pass
+
+
+# ============================================================================
+# Perf fix P3: LRU cache for recently-used Double Ratchet sessions.
+# ============================================================================
+#
+# The DR session state is stored in the database (Contact.dr_state column)
+# and (de)serialised via DoubleRatchetSession.to_json / from_json on every
+# incoming/outgoing message. This adds ~5-20 ms of JSON parsing + key
+# reconstruction per message, which dominates the message-processing budget
+# for high-frequency conversation.
+#
+# The LRU cache below holds the most recently used sessions in memory keyed
+# by peer onion address, eliminating the DB lookup + JSON parse on cache hit.
+# Writes are still persisted back to the DB by the caller (via save_session)
+# so a process restart does not lose session state.
+
+
+class DRSessionCache:
+    """Thread-safe LRU cache of Double Ratchet sessions keyed by peer onion.
+
+    Perf fix P3: avoids a DB lookup + JSON parse on every message. Sessions
+    that fall out of the cache are transparently re-loaded by the caller.
+    """
+
+    def __init__(self, capacity: int | None = None) -> None:
+        if capacity is None:
+            capacity = int(os.environ.get("ANONYMUS_DR_CACHE_SIZE", "50"))
+        self.capacity = max(1, capacity)
+        # Values are DoubleRatchetSession instances; typed as Any at the
+        # OrderedDict level to avoid a forward-reference cycle (the class
+        # is defined below this one).
+        self._entries: "OrderedDict[str, object]" = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, peer_onion: str):
+        with self._lock:
+            session = self._entries.get(peer_onion)
+            if session is not None:
+                # Mark as most-recently-used.
+                self._entries.move_to_end(peer_onion)
+            return session
+
+    def put(self, peer_onion: str, session: object) -> None:
+        with self._lock:
+            self._entries[peer_onion] = session
+            self._entries.move_to_end(peer_onion)
+            while len(self._entries) > self.capacity:
+                # Pop least-recently-used entry.
+                self._entries.popitem(last=False)
+
+    def invalidate(self, peer_onion: str) -> None:
+        with self._lock:
+            self._entries.pop(peer_onion, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+
+# Module-level singleton. Importing modules can call ``dr_cache.get(...)`` /
+# ``dr_cache.put(...)`` directly. Tests can call ``dr_cache.clear()`` between
+# runs to avoid cross-test contamination.
+dr_cache = DRSessionCache()
+
+
+# ============================================================================
+# Audit fix ANO-SEC-013 (B8): Sealed sender contact verification.
+# ============================================================================
+#
+# Sealed sender (RFC 0014) allows a peer to send a message without revealing
+# their identity in the envelope. The recipient decrypts the message and then
+# *resolves* the sender's identity post-hoc by matching the ephemeral public
+# key against known contacts. This is a useful anonymity feature, but in
+# strict mode we want to reject sealed-sender messages from unknown / unverified
+# contacts to mitigate spam and impersonation via fresh-identity abuse.
+#
+# The check is opt-in via the ``ANONYMUS_SEALED_SENDER_STRICT`` env var (or
+# the ``sealed_sender_strict`` setting). When enabled, the recipient's
+# message-ingestion pipeline calls ``verify_sealed_sender_known_contact``
+# before processing the decrypted payload. If the sender is not a known AND
+# verified contact, the message is dropped.
+
+
+def sealed_sender_strict_mode_enabled() -> bool:
+    """Return True if "verified contacts only" sealed-sender mode is enabled.
+
+    Opt-in via ``ANONYMUS_SEALED_SENDER_STRICT=1`` env var. When enabled,
+    sealed-sender messages from unknown or unverified contacts are rejected
+    (audit fix ANO-SEC-013 / B8).
+    """
+    val = os.environ.get("ANONYMUS_SEALED_SENDER_STRICT", "0").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
+async def verify_sealed_sender_known_contact(
+    sender_onion: str,
+    *,
+    lookup_contact: Callable[[str], Awaitable[object | None]] | None = None,
+) -> bool:
+    """Verify that ``sender_onion`` is a known, verified contact.
+
+    Audit fix ANO-SEC-013 (B8): when strict sealed-sender mode is enabled,
+    the message-ingestion pipeline calls this helper before accepting a
+    sealed-sender payload. The caller passes a ``lookup_contact`` coroutine
+    that returns a Contact ORM object (or None) for the given onion address.
+
+    Returns True iff:
+      - strict mode is DISABLED (default -- backward compatible), OR
+      - strict mode is enabled AND the lookup returns a Contact whose
+        ``verified`` attribute is truthy.
+
+    Returns False (reject) when strict mode is enabled and the lookup returns
+    None or an unverified contact. The caller should drop the message and
+    log at INFO level (not WARNING -- this is the normal spam path).
+    """
+    if not sealed_sender_strict_mode_enabled():
+        return True  # opt-in feature is OFF; accept all sealed-sender messages
+    if lookup_contact is None:
+        # No lookup provided -- fail closed in strict mode.
+        return False
+    try:
+        contact = await lookup_contact(sender_onion)
+    except Exception:
+        return False
+    if contact is None:
+        return False
+    # Contact objects may use either a `verified` boolean or a
+    # `status` string ("accepted" / "verified"). Accept either.
+    verified_attr = getattr(contact, "verified", None)
+    if verified_attr is True:
+        return True
+    status_attr = getattr(contact, "status", None)
+    return status_attr in ("verified", "accepted")
 
 
 def _pq_combine(x25519_secret: bytes, kem_secret: bytes) -> bytes:

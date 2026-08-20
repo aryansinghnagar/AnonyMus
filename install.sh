@@ -2,13 +2,13 @@
 # =============================================================================
 # AnonyMus Relay — One-Command Install Script
 # Supports: Ubuntu 22.04 / 24.04 (x86_64, arm64)
-# Usage:    curl -fsSL https://raw.githubusercontent.com/your-org/AnonyMus/main/install.sh | bash
+# Usage:    curl -fsSL https://raw.githubusercontent.com/aryansinghnagar/AnonyMus/main/install.sh | bash
 # Or:       bash install.sh [--onion-only] [--domain example.com] [--port 5001]
 # =============================================================================
 
 set -euo pipefail
 
-REPO_URL="https://github.com/your-org/AnonyMus"
+REPO_URL="https://github.com/aryansinghnagar/AnonyMus"
 INSTALL_DIR="/opt/anonymus-relay"
 SERVICE_NAME="anonymus-relay"
 RELAY_USER="anonymus"

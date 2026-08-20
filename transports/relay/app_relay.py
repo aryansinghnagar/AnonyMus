@@ -68,7 +68,10 @@ def create_relay_app() -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Relay is public — any Tor client can register
+        allow_origins=[
+            "http://localhost:5001",
+            "http://127.0.0.1:5001",
+        ],  # Audit fix ANO-V2-NEW-005
         allow_credentials=False,
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],

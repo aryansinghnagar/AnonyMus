@@ -1,5 +1,6 @@
 import os
 import sys
+import secrets as _secrets
 
 try:
     import eventlet
@@ -50,15 +51,9 @@ assert_single_worker()
 
 
 def is_authorized_admin():
-    # 1. Allow if from localhost
-    remote_ip = request.remote_addr
-    if remote_ip in ("127.0.0.1", "::1", "localhost"):
-        return True
-    # 2. Allow if matching admin secret (constant-time comparison).
-    # Audit fix ANO-SEC-024: previously used ``==`` which is vulnerable to
-    # timing attacks. ``secrets.compare_digest`` is constant-time.
-    import secrets as _secrets
-
+    # Audit fix ANO-V2-NEW-008: removed loopback bypass — the admin secret
+    # must be presented even from localhost, otherwise any local process can
+    # call /api/mode without knowing the secret.
     admin_secret = os.environ.get("ANONYMUS_ADMIN_SECRET")
     provided = request.headers.get("X-Admin-Secret", "")
     if admin_secret and provided and _secrets.compare_digest(provided, admin_secret):

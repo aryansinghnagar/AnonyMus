@@ -255,6 +255,44 @@ async def fetch_bundle(
     if remaining < 5:
         logger.warning("opk_pool_low", onion=onion[:12], remaining=remaining)
 
+    # Perf fix P8: if the DB OPK pool is running low, schedule a refill
+    # from the in-memory pre-key pool. The in-memory pool is pre-populated
+    # at startup (100 keys) and refilled in the background when it drops
+    # below 20 (see core.prekey_pool). The refill appends new public keys
+    # to the bundle's one_time_prekeys_json so future /fetch_bundle calls
+    # see a fresh OPK without waiting for the client to re-publish.
+    if remaining < 20:
+        try:
+            from core.prekey_pool import (
+                take_one_time_prekey,
+                schedule_refill_if_low,
+                pool_size_for,
+            )
+
+            # Append up to 20 fresh OPKs from the in-memory pool.
+            added = 0
+            for _ in range(20 - remaining):
+                pair = take_one_time_prekey(onion)
+                if pair is None:
+                    break
+                pub_b64, _priv_b64 = pair
+                opk_list.append(pub_b64)
+                added += 1
+            if added:
+                bundle.one_time_prekeys = opk_list
+                await session.commit()
+                logger.info(
+                    "opk_pool_refilled_from_mem",
+                    onion=onion[:12],
+                    added=added,
+                    new_size=len(opk_list),
+                )
+            # If the in-memory pool itself is low, schedule a background refill.
+            if pool_size_for(onion) < 20:
+                schedule_refill_if_low(onion)
+        except Exception as e:
+            logger.warning("opk_pool_refill_failed", onion=onion[:12], error=str(e))
+
     return PreKeyBundleResponse(
         onion_address=bundle.onion_address,
         identity_key=bundle.identity_key,

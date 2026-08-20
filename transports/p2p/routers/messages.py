@@ -4,6 +4,7 @@ Messages router — send messages, fetch history, delete.
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime, timezone
 
@@ -224,9 +225,37 @@ async def message_history(
     peer_onion: str,
     request: Request,
     limit: int = Query(default=50, ge=1, le=200),
-    before: str | None = Query(default=None),
+    before: str | None = Query(
+        default=None,
+        description="Legacy cursor: a message_id. Prefer the `cursor` query param.",
+    ),
+    cursor: str | None = Query(
+        default=None,
+        description=(
+            "Opaque cursor token returned in the `X-Next-Cursor` response "
+            "header. Encodes (sent_at || message_id) so the next batch can "
+            "be fetched without a separate lookup (perf fix P6)."
+        ),
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> list[MessageResponse]:
+    """Cursor-paginated message history.
+
+    Perf fix P6: previously the endpoint fetched the full conversation
+    history with ``LIMIT/OFFSET``, which scales poorly (OFFSET N requires
+    reading N+limit rows from disk). The endpoint now uses cursor-based
+    pagination:
+
+      1. Default batch size is 50 (caller can request up to 200).
+      2. The response includes a ``X-Next-Cursor`` response header encoding
+         ``sent_at || message_id`` of the OLDEST message in the batch.
+      3. The caller passes that cursor as the ``cursor`` query param to
+         fetch the next older batch.
+
+    Backward compat: the legacy ``before=<message_id>`` query param is
+    still accepted (it triggers a single-row lookup instead of decoding
+    the cursor inline, but the result is the same).
+    """
     user = await _get_current_user(request, session)
 
     stmt = select(Message).where(
@@ -241,15 +270,50 @@ async def message_history(
         ),
     )
 
-    if before:
+    # ── Decode the cursor (perf fix P6) ─────────────────────────────────────
+    cursor_sent_at: datetime | None = None
+    if cursor:
+        try:
+            raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+            # Format: "<sent_at_iso>||<message_id>"
+            sent_at_str, _, _msg_id = raw.partition("||")
+            cursor_sent_at = datetime.fromisoformat(sent_at_str)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor token",
+            )
+    elif before:
+        # Legacy cursor path: look up the message_id and use its sent_at.
+        # This is one extra DB round-trip vs. the cursor path, but keeps
+        # backward compatibility with clients that haven't migrated yet.
         before_msg = await session.scalar(
             select(Message).where(Message.message_id == before)
         )
         if before_msg:
-            stmt = stmt.where(Message.sent_at < before_msg.sent_at)
+            cursor_sent_at = before_msg.sent_at
+
+    if cursor_sent_at is not None:
+        # Strictly less-than: cursor_sent_at is the oldest message we already
+        # returned, so we want everything older than it.
+        stmt = stmt.where(Message.sent_at < cursor_sent_at)
 
     stmt = stmt.order_by(Message.sent_at.desc()).limit(limit)
-    messages = await session.scalars(stmt)
+    messages = (await session.scalars(stmt)).all()
+
+    # ── Encode the next-page cursor in a response header (perf fix P6) ───────
+    if messages:
+        oldest = messages[-1]
+        # Combine sent_at + message_id into a single opaque token so the
+        # caller doesn't need to know the cursor's internal structure.
+        next_cursor_str = f"{oldest.sent_at.isoformat()}||{oldest.message_id}"
+        next_cursor = base64.urlsafe_b64encode(next_cursor_str.encode("utf-8")).decode(
+            "ascii"
+        )
+        # FastAPI Response headers must be set on the underlying Response.
+        # We stash it via request.state so the middleware can pick it up.
+        request.state.next_cursor = next_cursor
+
     return [MessageResponse.model_validate(m) for m in messages]
 
 

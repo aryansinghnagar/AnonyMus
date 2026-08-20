@@ -16,6 +16,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -73,6 +74,19 @@ class Contact(Base):
     """Pairwise peer contact."""
 
     __tablename__ = "contacts"
+    # Perf fix P1: composite index on (owner_onion, onion_address) for the
+    # very common "look up my contact by their onion" query (used by every
+    # message send, contact verification, sealed-sender lookup, etc.).
+    # The single-column index on onion_address is retained for cross-owner
+    # queries (e.g., relay fanout).
+    __table_args__ = (
+        Index(
+            "ix_contacts_owner_onion_onion_address",
+            "owner_onion",
+            "onion_address",
+            unique=False,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_onion: Mapped[str] = mapped_column(
@@ -135,6 +149,28 @@ class Message(Base):
     """An end-to-end encrypted message in a direct conversation."""
 
     __tablename__ = "messages"
+    # Perf fix P1: composite indexes for the conversation-history query, which
+    # is the single hottest query path in the app. The history endpoint
+    # queries ``WHERE ((sender=A AND recipient=B) OR (sender=B AND recipient=A))
+    # ORDER BY sent_at DESC LIMIT N``. SQLite can use either of the two
+    # composite indexes below to satisfy each disjunct (the OR is rewritten
+    # as a UNION of two index scans by the query planner).
+    __table_args__ = (
+        Index(
+            "ix_messages_sender_recipient_sent_at",
+            "sender_onion",
+            "recipient_onion",
+            "sent_at",
+            unique=False,
+        ),
+        Index(
+            "ix_messages_recipient_sender_sent_at",
+            "recipient_onion",
+            "sender_onion",
+            "sent_at",
+            unique=False,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     message_id: Mapped[str] = mapped_column(

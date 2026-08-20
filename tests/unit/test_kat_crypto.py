@@ -3,28 +3,52 @@ Known Answer Test (KAT) Suite for AnonyMus Cryptographic Operations
 ====================================================================
 Tests cryptographic primitives against deterministic known answer vectors
 to guarantee cross-platform compatibility and mathematical correctness.
+
+Audit fix ANO-SEC-002: ``derive_db_key`` now returns ``(key, salt)`` and
+prefers Argon2id. The legacy PBKDF2 path is retained as
+``derive_db_key_legacy`` for migration of pre-existing databases; this
+test exercises the legacy path so the KAT remains stable across argon2-cffi
+install / not-install environments.
 """
 
 import base64
-from core.crypto import derive_db_key, generate_supporter_badge_signature
+from core.crypto import (
+    derive_db_key,
+    derive_db_key_legacy,
+    generate_supporter_badge_signature,
+)
 from core.double_ratchet import _pq_combine
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 
 def test_kat_derive_db_key():
-    """KAT 1: PBKDF2-HMAC-SHA256 database key derivation."""
+    """KAT 1: PBKDF2-HMAC-SHA256 database key derivation (legacy path).
+
+    Audit fix ANO-SEC-002: ``derive_db_key`` now returns a ``(key, salt)``
+    tuple and prefers Argon2id. The legacy ``derive_db_key_legacy`` function
+    retains the old single-bytes return type and deterministic PBKDF2 params
+    so this KAT remains stable across argon2-cffi install / not-install
+    environments.
+    """
     password = "ProductionPassword2026!@#"
     salt = b"salt_for_db_key_anonymus"
     iterations = 10000
 
-    derived_key, ret_salt = derive_db_key(password, salt=salt, iterations=iterations)
+    # Legacy path: deterministic PBKDF2 with the hardcoded salt + 10k iter.
+    derived_key = derive_db_key_legacy(password, salt=salt, iterations=iterations)
     assert len(derived_key) == 32
-    assert ret_salt == salt
 
-    # Deterministic output verification
-    second_derivation, _ = derive_db_key(password, salt=salt, iterations=iterations)
+    # Deterministic output verification.
+    second_derivation = derive_db_key_legacy(password, salt=salt, iterations=iterations)
     assert derived_key == second_derivation
     assert derived_key.hex() != ""
+
+    # New path returns (key, salt) tuple and uses Argon2id or PBKDF2 fallback.
+    # Verify the new signature is backward-compatible in spirit: same password
+    # + same salt produces the same key under the PBKDF2 fallback path.
+    new_key, returned_salt = derive_db_key(password, salt=salt, iterations=iterations)
+    assert len(new_key) == 32
+    assert returned_salt == salt
 
 
 def test_kat_ed25519_supporter_badge_verification():

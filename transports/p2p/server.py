@@ -1977,205 +1977,50 @@ def api_active_profile():
     )
 
 
-active_pairing_broker = None
-pairing_private_key = None
-
-
-def get_local_ip():
-    import socket
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("10.255.255.255", 1))
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = "127.0.0.1"
-    finally:
-        s.close()
-    return ip
+# ============================================================================
+# Audit fix ANO-V2-NEW-003: legacy /api/sync/pairing and /api/sync/push Flask
+# routes have been REMOVED. They exposed a parallel pairing broker that
+# bypassed the hardened FastAPI v3 PairingHandler in
+# ``transports/p2p/routers/sync.py`` — specifically:
+#   - no per-IP rate limiting,
+#   - HKDF salt was None (none of the ANO-SEC-001 fixes applied),
+#   - no SQLite magic-byte validation (any attacker-supplied blob overwrote DB),
+#   - exception messages leaked to client (ANO-SEC-009 regression),
+#   - no SSRF protection on the target IP.
+# Callers MUST use the v3 endpoints instead:
+#   - POST /v3/sync/pair   (returns ip, port, salt, public key — pin omitted)
+#   - POST /v3/sync/push   (pushes encrypted DB to the paired peer)
+# The legacy routes are retained as explicit 410 Gone responses so that old
+# clients get a clear migration signal rather than silently hitting a 404.
+# ============================================================================
 
 
 @app.route("/api/sync/pair", methods=["POST"])
-def api_sync_pair():
-    if "username" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    global active_pairing_broker, pairing_private_key
-    import base64
-
-    from cryptography.hazmat.primitives.asymmetric import x25519
-
-    if active_pairing_broker is not None:
-        ip = get_local_ip()
-        pub_bytes = pairing_private_key.public_key().public_bytes_raw()
-        pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
-        return jsonify({"success": True, "ip": ip, "port": 8999, "k": pub_b64})
-
-    pairing_private_key = x25519.X25519PrivateKey.generate()
-    pub_bytes = pairing_private_key.public_key().public_bytes_raw()
-    pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
-    ip = get_local_ip()
-    port = 8999
-
-    import json
-    import threading
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-
-    class FlaskPairingHandler(BaseHTTPRequestHandler):
-        def do_POST(self):
-            if self.path == "/api/sync/pairing":
-                content_length = int(self.headers["Content-Length"])
-                post_data = self.rfile.read(content_length)
-                try:
-                    payload = json.loads(post_data.decode("utf-8"))
-                    client_pub_b64 = payload.get("client_public_key")
-                    ciphertext_b64 = payload.get("ciphertext")
-                    iv_b64 = payload.get("iv")
-
-                    peer_pub = x25519.X25519PublicKey.from_public_bytes(
-                        base64.b64decode(client_pub_b64)
-                    )
-                    shared_key = pairing_private_key.exchange(peer_pub)
-
-                    from cryptography.hazmat.primitives import hashes
-                    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-                    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-                    aes_key = HKDF(
-                        algorithm=hashes.SHA256(),
-                        length=32,
-                        salt=None,
-                        info=b"AnonyMus-Device-Sync-Key",
-                    ).derive(shared_key)
-
-                    aesgcm = AESGCM(aes_key)
-                    decrypted = aesgcm.decrypt(
-                        base64.b64decode(iv_b64), base64.b64decode(ciphertext_b64), None
-                    )
-
-                    db_path = database.DB_FILE
-                    if os.path.exists(db_path):
-                        import shutil
-
-                        shutil.copyfile(db_path, db_path + ".bak")
-
-                    with open(db_path, "wb") as f:
-                        f.write(decrypted)
-
-                    self.send_response(200)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(b'{"success": true}')
-                except Exception as e:
-                    self.send_response(400)
-                    self.end_headers()
-                    self.wfile.write(str(e).encode())
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-    def run_server():
-        global active_pairing_broker
-        try:
-            active_pairing_broker = HTTPServer((ip, port), FlaskPairingHandler)
-            active_pairing_broker.serve_forever()
-        except Exception:
-            pass
-
-    t = threading.Thread(target=run_server, daemon=True)
-    t.start()
-
-    return jsonify({"success": True, "ip": ip, "port": port, "k": pub_b64})
+def api_sync_pair_deprecated():
+    # Audit fix ANO-V2-NEW-003: legacy endpoint removed; redirect to v3.
+    return (
+        jsonify(
+            {
+                "error": "Endpoint deprecated (audit fix ANO-V2-NEW-003)",
+                "migration": "Use POST /v3/sync/pair instead",
+            }
+        ),
+        410,
+    )
 
 
 @app.route("/api/sync/push", methods=["POST"])
-def api_sync_push():
-    if "username" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    import base64
-
-    from cryptography.hazmat.primitives.asymmetric import x25519
-
-    data = request.get_json() or {}
-    desktop_ip = data.get("ip")
-    desktop_port = data.get("port")
-    desktop_key_b64 = data.get("k")
-
-    if not desktop_ip or not desktop_port or not desktop_key_b64:
-        return jsonify({"error": "Missing pairing credentials"}), 400
-
-    try:
-        db_path = database.DB_FILE
-        with open(db_path, "rb") as f:
-            db_bytes = f.read()
-
-        client_priv = x25519.X25519PrivateKey.generate()
-        client_pub = client_priv.public_key()
-
-        peer_pub = x25519.X25519PublicKey.from_public_bytes(
-            base64.b64decode(desktop_key_b64)
-        )
-        shared_key = client_priv.exchange(peer_pub)
-
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-        aes_key = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=None,
-            info=b"AnonyMus-Device-Sync-Key",
-        ).derive(shared_key)
-
-        iv = os.urandom(12)
-        aesgcm = AESGCM(aes_key)
-        ciphertext = aesgcm.encrypt(iv, db_bytes, None)
-
-        import ipaddress
-        import urllib.parse
-        import requests
-
-        try:
-            parsed_ip = ipaddress.ip_address(desktop_ip)
-        except ValueError:
-            return jsonify({"error": "Invalid desktop IP address"}), 400
-
-        try:
-            port_num = int(desktop_port)
-            if not (1 <= port_num <= 65535):
-                raise ValueError()
-        except ValueError:
-            return jsonify({"error": "Invalid desktop port number"}), 400
-
-        target_url = urllib.parse.urlunparse(
-            ("http", f"{parsed_ip}:{port_num}", "/api/sync/pairing", "", "", "")
-        )
-
-        res = requests.post(
-            target_url,
-            json={
-                "client_public_key": base64.b64encode(
-                    client_pub.public_bytes_raw()
-                ).decode("utf-8"),
-                "iv": base64.b64encode(iv).decode("utf-8"),
-                "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
-            },
-            timeout=15,
-        )
-
-        if res.status_code == 200:
-            return jsonify(
-                {"success": True, "message": "Database backup successfully fanned out!"}
-            )
-        else:
-            return jsonify(
-                {"error": "Broker request failed with non-200 status code"}
-            ), 400
-    except Exception as e:
-        logger.error(f"Pairing sync failed: {e}", exc_info=True)
-        return jsonify({"error": "Internal synchronization error"}), 500
+def api_sync_push_deprecated():
+    # Audit fix ANO-V2-NEW-003: legacy endpoint removed; redirect to v3.
+    return (
+        jsonify(
+            {
+                "error": "Endpoint deprecated (audit fix ANO-V2-NEW-003)",
+                "migration": "Use POST /v3/sync/push instead",
+            }
+        ),
+        410,
+    )
 
 
 def run_legacy_migration():

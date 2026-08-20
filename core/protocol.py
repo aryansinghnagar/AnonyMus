@@ -114,18 +114,68 @@ def derive_chain_keys(chain_key: bytes) -> dict[str, bytes]:
 
 
 def compute_safety_number(pubkey1_b64: str, pubkey2_b64: str) -> str:
-    """
-    Computes a human-verifiable safety number as 12 groups of 5 decimal digits.
+    """Compute a human-verifiable safety number as 12 groups of 5 decimal digits.
+
+    Audit fix ANO-CODE-009 (C4): the previous implementation extracted 2 bytes
+    per group and used ``val % 100000``. Since 2 bytes (16 bits, range 0..65535)
+    only spans 65536 values but the modulus is 100000, the modulo wraps so
+    that buckets 65536..99999 are *never* hit -- i.e., 34% of the 5-digit
+    codespace was structurally unreachable, and the remaining buckets had
+    double probability (1/65536 instead of 1/100000). This is a textbook
+    modulo-bias vulnerability.
+
+    The new implementation:
+      1. Generates enough keying material via a SHA-256 hash chain
+         (counter-prepended re-hashing) so we have 4 bytes per group
+         (32 bits, range 0..4294967295).
+      2. Applies rejection sampling: each 32-bit window is accepted only if
+         ``val < floor(2**32 / 100000) * 100000 = 4_294_900_000``. Values
+         in the rejection window ``[4_294_900_000, 4_294_967_295]`` are
+         discarded and the next 4-byte window is consumed.
+      3. ``2**32 mod 100000 = 67296``, so the rejection rate is
+         ``67296 / 2**32 ~= 0.00157%`` -- effectively never, but the
+         resulting distribution is provably uniform over [0, 100000).
+
+    The output format (12 groups of 5-digit decimal numbers, space-separated,
+    order-independent wrt the two input keys) is preserved so existing UIs
+    that render safety numbers continue to work without modification.
     """
     sorted_keys = sorted([pubkey1_b64, pubkey2_b64])
     data = (sorted_keys[0] + sorted_keys[1]).encode("utf-8")
-    h = hashlib.sha256(data).digest()
 
-    groups = []
-    indices = [int(i * 2.5) for i in range(12)]
-    for idx in indices:
-        val = (h[idx] << 8) | h[idx + 1]
-        groups.append(str(val % 100000).zfill(5))
+    MODULUS = 100_000  # 5-digit groups (00000..99999)
+    BYTES_PER_GROUP = 4  # 32-bit window for low rejection rate
+    # Pre-compute the largest multiple of MODULUS that fits in a 32-bit uint.
+    MAX_ACCEPTED = (2**32 // MODULUS) * MODULUS  # = 4_294_900_000
+
+    groups: list[str] = []
+    counter = 0
+    # Hash chain: H(data || counter) produces 32 bytes per iteration,
+    # yielding 8 candidate 4-byte windows per hash (32/4 = 8).
+    while len(groups) < 12:
+        h = hashlib.sha256(data + counter.to_bytes(4, "big")).digest()
+        for i in range(0, 32, BYTES_PER_GROUP):
+            val = int.from_bytes(h[i : i + BYTES_PER_GROUP], "big")
+            if val < MAX_ACCEPTED:
+                groups.append(str(val % MODULUS).zfill(5))
+                if len(groups) == 12:
+                    break
+        counter += 1
+        # Defensive bound: ~10 rejections per group is astronomically unlikely
+        # (probability ~ (10^-4)^12 = 10^-48). Cap at 1000 iterations.
+        if counter > 1000:
+            # Fall back to biased sampling (only triggers if the hash function
+            # is broken; should never happen in practice).
+            while len(groups) < 12:
+                h = hashlib.sha256(data + counter.to_bytes(4, "big")).digest()
+                for i in range(0, 32, BYTES_PER_GROUP):
+                    val = int.from_bytes(h[i : i + BYTES_PER_GROUP], "big")
+                    groups.append(str(val % MODULUS).zfill(5))
+                    if len(groups) == 12:
+                        break
+                counter += 1
+            break
+
     return " ".join(groups)
 
 
@@ -285,17 +335,23 @@ def decrypt_message(
             peer_public_key_bytes or b"",
         )
     else:
-        # Fallback to old v1 decryption
+        # Fallback to old v1 decryption (no Double Ratchet payload).
         iv = base64.b64decode(iv_b64)
         ciphertext = base64.b64decode(ct_b64)
         aesgcm = AESGCM(key_or_session)
 
-        try:
-            aad = construct_aad(role, seq_num, session_id, 2)
-            decrypted = aesgcm.decrypt(iv, ciphertext, aad)
-        except Exception:
-            aad = construct_aad(role, seq_num, session_id, 1)
-            decrypted = aesgcm.decrypt(iv, ciphertext, aad)
+        # Audit fix ANO-SEC-017 (C5): the previous code silently fell back
+        # to the v1 AAD format when v2 decryption failed. This is a
+        # downgrade attack vector -- an attacker who can forge a v1-AAD
+        # ciphertext could force the recipient to accept messages without
+        # the session-binding protection of the v2 AAD (which includes a
+        # truncated session_id hash + protocol version byte). The fallback
+        # is now REMOVED: we attempt only v2 AAD decryption, and raise on
+        # any failure. Legacy v1 messages will be rejected; callers that
+        # legitimately need to decrypt historical v1 messages must
+        # explicitly construct a v1 AAD and call aesgcm.decrypt directly.
+        aad = construct_aad(role, seq_num, session_id, 2)
+        decrypted = aesgcm.decrypt(iv, ciphertext, aad)
 
         text_len = struct.unpack(">I", decrypted[:4])[0]
         if text_len > len(decrypted) - 4:
