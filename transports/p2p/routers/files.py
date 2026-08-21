@@ -76,9 +76,33 @@ def _uploader_dir(sender_onion: str) -> Path:
         )
     # Use a hash of the onion so the directory name is filesystem-safe.
     safe = hashlib.sha256(sender_onion.encode("utf-8")).hexdigest()[:32]
-    d = XFTP_CHUNK_DIR / safe
+    base_dir = XFTP_CHUNK_DIR.resolve()
+    d = (base_dir / safe).resolve()
+    try:
+        d.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid uploader directory path")
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _sanitize_chunk_id(chunk_id: str) -> str:
+    if not _CHUNK_ID_RE.match(chunk_id):
+        raise HTTPException(status_code=400, detail="Invalid chunk identifier format")
+    return chunk_id
+
+
+def _safe_chunk_path(target_dir: Path, chunk_id: str) -> Path:
+    """Return a verified Path inside target_dir for chunk_id, preventing path traversal."""
+    clean_id = _sanitize_chunk_id(chunk_id)
+    safe_name = Path(clean_id).name
+    base_dir = target_dir.resolve()
+    target = (base_dir / f"{safe_name}.chunk").resolve()
+    try:
+        target.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chunk path")
+    return target
 
 
 # ── Per-uploader rate limiter (audit fix ANO-SEC-004) ─────────────────────────
@@ -116,12 +140,6 @@ class _P2PUploadRateLimiter:
 
 
 _p2p_rate_limiter = _P2PUploadRateLimiter()
-
-
-def _sanitize_chunk_id(chunk_id: str) -> str:
-    if not _CHUNK_ID_RE.match(chunk_id):
-        raise HTTPException(status_code=400, detail="Invalid chunk identifier format")
-    return chunk_id
 
 
 def _prune_expired_chunks():
@@ -302,7 +320,6 @@ async def _save_chunk(
 
     Perf fix P5: uses ``aiofiles`` for non-blocking I/O.
     """
-    _sanitize_chunk_id(chunk_id)
     # Prune in a worker thread to avoid blocking the event loop.
     await asyncio.to_thread(_prune_expired_chunks)
 
@@ -310,7 +327,7 @@ async def _save_chunk(
         target_dir = _uploader_dir(sender_onion)
     else:
         target_dir = XFTP_CHUNK_DIR
-    target = target_dir / f"{chunk_id}.chunk"
+    target = _safe_chunk_path(target_dir, chunk_id)
 
     # Look up the contact's shared secret for per-chunk key derivation.
     shared_secret = None
@@ -346,12 +363,11 @@ async def _load_chunk(
     session: AsyncSession | None = None,
 ) -> bytes | None:
     """Load and decrypt a chunk. Returns None if not found or decryption fails."""
-    _sanitize_chunk_id(chunk_id)
     if sender_onion:
         target_dir = _uploader_dir(sender_onion)
     else:
         target_dir = XFTP_CHUNK_DIR
-    target = target_dir / f"{chunk_id}.chunk"
+    target = _safe_chunk_path(target_dir, chunk_id)
     if not target.exists():
         return None
     try:

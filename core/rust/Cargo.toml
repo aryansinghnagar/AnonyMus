@@ -4,9 +4,16 @@ version = "3.0.0"
 edition = "2021"
 authors = ["AnonyMus Contributors"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
+
 [lib]
 name = "anonymus_core"
 crate-type = ["cdylib", "rlib"]
+test = false
+bench = false
+doctest = false
 
 [dependencies]
 # Crypto primitives

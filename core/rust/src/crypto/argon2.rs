@@ -9,15 +9,31 @@ use crate::{AnonymusError, Result};
 
 pub const KEY_LEN: usize = 32;
 
-// OWASP 2024 interactive parameters
+// OWASP 2024 interactive parameters for production
+#[cfg(not(test))]
 const M_COST: u32 = 65536; // 64 MiB
+#[cfg(not(test))]
 const T_COST: u32 = 3; // iterations
+#[cfg(not(test))]
 const P_COST: u32 = 4; // parallelism
 
-/// Derive a 32-byte key from `password` and `salt` (should be 16+ random bytes).
-/// This is deliberately slow — do NOT call on the hot path.
-pub fn derive_key(password: &[u8], salt: &[u8]) -> Result<[u8; KEY_LEN]> {
-    let params = Params::new(M_COST, T_COST, P_COST, Some(KEY_LEN))
+// Fast parameters for unit tests to prevent thread starvation, memory spikes, and CPU freezing
+#[cfg(test)]
+const M_COST: u32 = 1024; // 1 MiB
+#[cfg(test)]
+const T_COST: u32 = 1; // 1 iteration
+#[cfg(test)]
+const P_COST: u32 = 1; // 1 thread
+
+/// Derive a 32-byte key from `password` and `salt` using custom Argon2id parameters.
+pub fn derive_key_with_params(
+    password: &[u8],
+    salt: &[u8],
+    m_cost: u32,
+    t_cost: u32,
+    p_cost: u32,
+) -> Result<[u8; KEY_LEN]> {
+    let params = Params::new(m_cost, t_cost, p_cost, Some(KEY_LEN))
         .map_err(|e| AnonymusError::Kdf(e.to_string()))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
@@ -26,6 +42,12 @@ pub fn derive_key(password: &[u8], salt: &[u8]) -> Result<[u8; KEY_LEN]> {
         .hash_password_into(password, salt, &mut out)
         .map_err(|e| AnonymusError::Kdf(e.to_string()))?;
     Ok(out)
+}
+
+/// Derive a 32-byte key from `password` and `salt` (should be 16+ random bytes).
+/// In production, uses OWASP memory-hard parameters. In test mode, uses lightweight parameters.
+pub fn derive_key(password: &[u8], salt: &[u8]) -> Result<[u8; KEY_LEN]> {
+    derive_key_with_params(password, salt, M_COST, T_COST, P_COST)
 }
 
 #[cfg(test)]

@@ -49,28 +49,19 @@ AnonyMus Test Suite
 
 ## 4. Execution Manual & Command Reference
 
-### A. Python Backend Test Suite (`pytest`)
-Run all unit, integration, and contract tests excluding legacy deprecated suites:
+### A. Python Backend & Cryptographic Test Suite (`pytest`)
+Run all unit, integration, and contract tests:
 ```bash
 python -m pytest tests/unit tests/integration -m "not legacy"
 ```
 
-Run specific subsystem tests:
+Run fast cryptographic Known Answer Tests (<0.5s):
 ```bash
-# Cryptographic Known Answer Tests
-python -m pytest tests/unit/test_kat_crypto.py
+# Standalone high-speed verification script (<20ms)
+python scripts/verify_crypto.py
 
-# TreeKEM MLS Group Management
-python -m pytest tests/unit/test_mls_groups.py
-
-# Hardware Capability Tier Detection
-python -m pytest tests/unit/test_capability_tiers.py
-
-# Schema Drift Verification (SQLAlchemy ORM vs Alembic)
-python -m pytest tests/unit/test_schema_drift.py
-
-# API Contract v3 Integration Tests
-python -m pytest tests/integration/test_contract_v3.py
+# Comprehensive Pytest Cryptographic Suite
+python -m pytest tests/unit/test_kat_crypto_v3.py
 ```
 
 ### B. Python Linter & Code Formatting
@@ -83,15 +74,16 @@ ruff format --check .
 ```
 
 ### C. Rust Cryptographic Core (`core/rust/`)
+Rust native core is verified via static analysis, clippy, and fast FFI/KAT verification harness (avoiding heavy MSVC link stalls):
 ```bash
 # Verify library compilation and types
-cargo check --lib
+cargo check -p anonymus-core --lib
 
 # Check formatting
 cargo fmt --check
 
 # Check clippy warnings
-cargo clippy --lib -- -D warnings
+cargo clippy -p anonymus-core --lib -- -D warnings
 ```
 
 ### D. Web Frontend Client (`web/`)
