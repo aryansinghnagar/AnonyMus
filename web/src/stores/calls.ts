@@ -11,8 +11,13 @@ const [remoteStream, setRemoteStream] = createSignal<MediaStream | null>(null);
 let peerConnection: RTCPeerConnection | null = null;
 let pendingOfferSdp: string | null = null;
 
-// Default STUN server list for NAT traversal
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+// Configurable ICE server list for NAT traversal
+const getIceServers = (): RTCIceServer[] => {
+  if (typeof window !== "undefined" && (window as any).__ANONYMUS_ICE_SERVERS__) {
+    return (window as any).__ANONYMUS_ICE_SERVERS__;
+  }
+  return [{ urls: "stun:stun.l.google.com:19302" }];
+};
 
 export { callState, activePeerOnion, localStream, remoteStream };
 
@@ -32,7 +37,7 @@ export async function startCall(peerOnion: string, myOnion: string): Promise<voi
       });
     setLocalStream(stream);
 
-    peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    peerConnection = new RTCPeerConnection({ iceServers: getIceServers() });
 
     stream.getTracks().forEach((track) => {
       peerConnection?.addTrack(track, stream);
@@ -75,7 +80,7 @@ export async function answerCall(myOnion: string): Promise<void> {
       });
     setLocalStream(stream);
 
-    peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    peerConnection = new RTCPeerConnection({ iceServers: getIceServers() });
 
     stream.getTracks().forEach((track) => {
       peerConnection?.addTrack(track, stream);

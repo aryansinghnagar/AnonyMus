@@ -254,6 +254,10 @@ export class DoubleRatchetSession {
       }
       const peerB64 = toBase64(this.dhRemotePublicKey);
       const skipKey = `${peerB64}_${this.seqRecv}`;
+      const existingKeys = Object.keys(this.skippedMessageKeys);
+      if (existingKeys.length >= 1000) {
+        delete this.skippedMessageKeys[existingKeys[0]];
+      }
       this.skippedMessageKeys[skipKey] = toHex(msgKey);
       this.seqRecv += 1;
     }

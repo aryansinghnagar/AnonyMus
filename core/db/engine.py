@@ -123,6 +123,7 @@ if _database_url.startswith("sqlite"):
 
         profile = detect_capability_tier()
         cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
         cursor.execute("PRAGMA journal_mode = WAL;")
         cursor.execute("PRAGMA synchronous = NORMAL;")
         cursor.execute("PRAGMA mmap_size = 268435456;")

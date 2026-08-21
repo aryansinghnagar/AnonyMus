@@ -15,7 +15,8 @@ x-relay-env: &relay-env
   RELAY_AS_ONION: ${RELAY_AS_ONION:-false}
   REDIS_URL: redis://redis:6379/0
   ENVIRONMENT: ${ENVIRONMENT:-production}
-  DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/anonymus.db}
+  DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/anonymus.db}
+
 
 services:
   # ── AnonyMus Pairwise Relay ──────────────────────────────────────────────────
