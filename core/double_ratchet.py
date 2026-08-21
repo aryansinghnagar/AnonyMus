@@ -477,5 +477,9 @@ class DoubleRatchetSession:
             )
             peer_b64 = base64.b64encode(peer_pub_bytes).decode("utf-8")
             skip_key = f"{peer_b64}_{self.seq_recv}"
+            if len(self.skipped_message_keys) >= 1000:
+                # Evict oldest skipped message key to bound memory footprint (Signal spec 2.6)
+                oldest_key = next(iter(self.skipped_message_keys))
+                del self.skipped_message_keys[oldest_key]
             self.skipped_message_keys[skip_key] = msg_key.hex()
             self.seq_recv += 1

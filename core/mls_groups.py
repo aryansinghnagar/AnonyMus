@@ -80,6 +80,53 @@ class MLSGroupContext:
         }
         return commit_payload
 
+    def remove_member(self, member_id: str) -> dict:
+        """
+        Removes a member from the MLS group context.
+        Advances epoch, rotates epoch secret, and derives a fresh application key.
+        """
+        if member_id in self.members:
+            self.members.remove(member_id)
+
+        self.epoch += 1
+        fresh_entropy = os.urandom(32)
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self.epoch_secret,
+            info=b"AnonyMus-MLS-RemoveMember",
+        )
+        self.epoch_secret = hkdf.derive(fresh_entropy)
+        self.app_secret = self._derive_app_secret()
+
+        return {
+            "group_id": self.group_id,
+            "epoch": self.epoch,
+            "removed_client_id": member_id,
+            "members": list(self.members),
+        }
+
+    def rotate_epoch(self) -> dict:
+        """
+        Performs proactive self-update / epoch ratchet for Post-Compromise Security (PCS).
+        """
+        self.epoch += 1
+        fresh_entropy = os.urandom(32)
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self.epoch_secret,
+            info=b"AnonyMus-MLS-EpochRatchet",
+        )
+        self.epoch_secret = hkdf.derive(fresh_entropy)
+        self.app_secret = self._derive_app_secret()
+
+        return {
+            "group_id": self.group_id,
+            "epoch": self.epoch,
+            "members": list(self.members),
+        }
+
     def process_commit(self, commit_payload: dict, new_epoch_secret: bytes):
         """Processes an epoch commit payload from another group member."""
         self.epoch = commit_payload["epoch"]

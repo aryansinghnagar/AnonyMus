@@ -52,3 +52,30 @@ def test_mls_epoch_mismatch_rejection():
 
     with pytest.raises(ValueError, match="Epoch mismatch"):
         group.decrypt_group_message(payload)
+
+
+def test_mls_remove_member_and_epoch_ratchet():
+    group = MLSGroupContext(group_id="test-group-5", creator_id="alice.onion")
+    bob_pkg = MLSKeyPackage(
+        client_id="bob.onion",
+        public_key_b64=base64.b64encode(b"bob_pub_key_32bytes").decode("utf-8"),
+    )
+    group.add_member(bob_pkg)
+    assert group.members == ["alice.onion", "bob.onion"]
+    assert group.epoch == 1
+
+    # Remove member
+    remove_commit = group.remove_member("bob.onion")
+    assert group.epoch == 2
+    assert "bob.onion" not in group.members
+    assert remove_commit["removed_client_id"] == "bob.onion"
+
+    # Proactive epoch rotation
+    rotate_commit = group.rotate_epoch()
+    assert group.epoch == 3
+    assert rotate_commit["epoch"] == 3
+
+    # Encrypt and decrypt in new epoch
+    msg = "Post-compromise secure group message"
+    ct = group.encrypt_group_message(msg)
+    assert group.decrypt_group_message(ct) == msg
